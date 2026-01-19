@@ -1,0 +1,61 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  name: corporate-dns
+  namespace: default
+spec:
+  name: "Corporate DNS Policy"
+
+  # Reference to Secret containing NextDNS API key
+  credentialsRef:
+    name: nextdns-credentials
+    key: api-key
+
+  # Reference shared lists
+  allowlistRefs:
+    - name: corporate-allowlist
+
+  denylistRefs:
+    - name: security-denylist
+
+  tldListRefs:
+    - name: high-risk-tlds
+
+  # Inline entries (profile-specific)
+  allowlist:
+    - domain: "internal.mycompany.com"
+      reason: "Internal portal"
+
+  # Security settings
+  security:
+    aiThreatDetection: true
+    googleSafeBrowsing: true
+    cryptojacking: true
+    dnsRebinding: true
+    idnHomographs: true
+    typosquatting: true
+    dga: true
+    nrd: false
+    ddns: false
+    parking: true
+    csam: true
+
+  # Privacy settings
+  privacy:
+    blocklists:
+      - id: nextdns-recommended
+      - id: oisd
+    disguisedTrackers: true
+    allowAffiliate: false
+
+  # General settings
+  settings:
+    logs:
+      enabled: true
+      retention: "30d"
+    blockPage:
+      enabled: true
+    performance:
+      ecs: true
+      cacheBoost: true
+      cnameFlattening: true

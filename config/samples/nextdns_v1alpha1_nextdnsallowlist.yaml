@@ -1,0 +1,18 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSAllowlist
+metadata:
+  name: corporate-allowlist
+  namespace: default
+spec:
+  description: "Essential business services that must always resolve"
+  domains:
+    - domain: "*.microsoft.com"
+      reason: "Microsoft services"
+    - domain: "*.office365.com"
+      reason: "Office 365"
+    - domain: "*.salesforce.com"
+      reason: "CRM platform"
+    - domain: "zoom.us"
+      reason: "Video conferencing"
+    - domain: "*.slack.com"
+      reason: "Team communication"
