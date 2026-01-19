@@ -19,7 +19,7 @@ This document outlines the architecture and implementation plan for a Kubernetes
 |-----------|--------|-----------|
 | **Language** | Go | Kubernetes-native, strong typing, excellent k8s libraries |
 | **Framework** | Kubebuilder | Official k8s-sigs project, generates scaffolding, well-documented |
-| **NextDNS Client** | `github.com/amalucelli/nextdns-go` | Full API coverage, MIT licensed, actively maintained |
+| **NextDNS Client** | `github.com/jacaudi/nextdns-go` | Full API coverage, MIT licensed |
 | **K8s Libraries** | controller-runtime | Standard for operators, handles reconciliation loops |
 
 ---
@@ -1674,7 +1674,7 @@ module github.com/yourusername/nextdns-operator
 go 1.22
 
 require (
-    github.com/amalucelli/nextdns-go v0.5.0
+    github.com/jacaudi/nextdns-go v0.5.0
     k8s.io/apimachinery v0.30.0
     k8s.io/client-go v0.30.0
     sigs.k8s.io/controller-runtime v0.18.0
@@ -1686,7 +1686,7 @@ require (
 ## References
 
 - [NextDNS API Documentation](https://nextdns.github.io/api/)
-- [nextdns-go Client Library](https://github.com/amalucelli/nextdns-go)
+- [nextdns-go Client Library](https://github.com/jacaudi/nextdns-go)
 - [Kubebuilder Book](https://book.kubebuilder.io/)
 - [Controller Runtime](https://github.com/kubernetes-sigs/controller-runtime)
 - [Kubernetes API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
