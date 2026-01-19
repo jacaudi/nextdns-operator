@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+	"github.com/jacaudi/nextdns-operator/internal/nextdns"
 )
 
 const (
@@ -152,8 +155,30 @@ func (r *NextDNSProfileReconciler) handleDeletion(ctx context.Context, profile *
 	if controllerutil.ContainsFinalizer(profile, FinalizerName) {
 		logger.Info("Handling deletion of NextDNSProfile")
 
-		// TODO: Delete profile from NextDNS API if it was created by us
-		// For now, we just remove the finalizer
+		// Only delete the profile from NextDNS if we created it (no profileID was specified in spec)
+		// and we have a profile ID in status
+		if profile.Spec.ProfileID == "" && profile.Status.ProfileID != "" {
+			// Get API credentials
+			apiKey, err := r.getAPIKey(ctx, profile)
+			if err != nil {
+				logger.Error(err, "Failed to get API credentials for deletion, proceeding with finalizer removal")
+			} else {
+				// Create NextDNS client and delete the profile
+				client, err := nextdns.NewClient(apiKey)
+				if err != nil {
+					logger.Error(err, "Failed to create NextDNS client for deletion")
+				} else {
+					if err := client.DeleteProfile(ctx, profile.Status.ProfileID); err != nil {
+						logger.Error(err, "Failed to delete profile from NextDNS", "profileID", profile.Status.ProfileID)
+						// Continue with finalizer removal even if deletion fails
+					} else {
+						logger.Info("Deleted NextDNS profile", "profileID", profile.Status.ProfileID)
+					}
+				}
+			}
+		} else if profile.Spec.ProfileID != "" {
+			logger.Info("Skipping NextDNS profile deletion (profile was adopted, not created)", "profileID", profile.Status.ProfileID)
+		}
 
 		// Remove finalizer
 		controllerutil.RemoveFinalizer(profile, FinalizerName)
@@ -315,27 +340,207 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile, apiKey string, lists *ResolvedLists) error {
 	logger := log.FromContext(ctx)
 
-	// TODO: Implement actual NextDNS API sync using github.com/jacaudi/nextdns-go
-	// For now, this is a placeholder that simulates the sync
+	// Create NextDNS client
+	client, err := nextdns.NewClient(apiKey)
+	if err != nil {
+		return fmt.Errorf("failed to create NextDNS client: %w", err)
+	}
 
 	logger.Info("Syncing with NextDNS API",
 		"profileName", profile.Spec.Name,
 		"profileID", profile.Spec.ProfileID)
 
-	// If no profile ID is set, we would create a new profile
+	// If no profile ID is set, create a new profile or adopt existing one
 	if profile.Status.ProfileID == "" {
 		if profile.Spec.ProfileID != "" {
-			// Adopt existing profile
+			// Adopt existing profile - verify it exists
+			_, err := client.GetProfile(ctx, profile.Spec.ProfileID)
+			if err != nil {
+				return fmt.Errorf("failed to get existing profile %s: %w", profile.Spec.ProfileID, err)
+			}
 			profile.Status.ProfileID = profile.Spec.ProfileID
 		} else {
-			// TODO: Create new profile via API
-			// For now, generate a placeholder ID
-			profile.Status.ProfileID = "placeholder-id"
+			// Create new profile via API
+			newProfileID, err := client.CreateProfile(ctx, profile.Spec.Name)
+			if err != nil {
+				return fmt.Errorf("failed to create profile: %w", err)
+			}
+			profile.Status.ProfileID = newProfileID
+			logger.Info("Created new NextDNS profile", "profileID", newProfileID)
 		}
 		profile.Status.Fingerprint = profile.Status.ProfileID + ".dns.nextdns.io"
 	}
 
+	profileID := profile.Status.ProfileID
+
+	// Update profile name if needed
+	if err := client.UpdateProfile(ctx, profileID, profile.Spec.Name); err != nil {
+		return fmt.Errorf("failed to update profile name: %w", err)
+	}
+
+	// Sync security settings
+	if profile.Spec.Security != nil {
+		securityConfig := &nextdns.SecurityConfig{
+			AIThreatDetection:  boolValue(profile.Spec.Security.AIThreatDetection, true),
+			GoogleSafeBrowsing: boolValue(profile.Spec.Security.GoogleSafeBrowsing, true),
+			Cryptojacking:      boolValue(profile.Spec.Security.Cryptojacking, true),
+			DNSRebinding:       boolValue(profile.Spec.Security.DNSRebinding, true),
+			IDNHomographs:      boolValue(profile.Spec.Security.IDNHomographs, true),
+			Typosquatting:      boolValue(profile.Spec.Security.Typosquatting, true),
+			DGA:                boolValue(profile.Spec.Security.DGA, true),
+			NRD:                boolValue(profile.Spec.Security.NRD, false),
+			DDNS:               boolValue(profile.Spec.Security.DDNS, false),
+			Parking:            boolValue(profile.Spec.Security.Parking, true),
+			CSAM:               boolValue(profile.Spec.Security.CSAM, true),
+		}
+		if err := client.UpdateSecurity(ctx, profileID, securityConfig); err != nil {
+			return fmt.Errorf("failed to update security settings: %w", err)
+		}
+	}
+
+	// Sync privacy settings
+	if profile.Spec.Privacy != nil {
+		privacyConfig := &nextdns.PrivacyConfig{
+			DisguisedTrackers: boolValue(profile.Spec.Privacy.DisguisedTrackers, true),
+			AllowAffiliate:    boolValue(profile.Spec.Privacy.AllowAffiliate, false),
+		}
+		if err := client.UpdatePrivacy(ctx, profileID, privacyConfig); err != nil {
+			return fmt.Errorf("failed to update privacy settings: %w", err)
+		}
+
+		// Sync blocklists
+		if len(profile.Spec.Privacy.Blocklists) > 0 {
+			blocklists := make([]string, 0, len(profile.Spec.Privacy.Blocklists))
+			for _, bl := range profile.Spec.Privacy.Blocklists {
+				if bl.Active == nil || *bl.Active {
+					blocklists = append(blocklists, bl.ID)
+				}
+			}
+			if err := client.SyncPrivacyBlocklists(ctx, profileID, blocklists); err != nil {
+				return fmt.Errorf("failed to sync privacy blocklists: %w", err)
+			}
+		}
+
+		// Sync native tracking protection
+		if len(profile.Spec.Privacy.Natives) > 0 {
+			natives := make([]string, 0, len(profile.Spec.Privacy.Natives))
+			for _, n := range profile.Spec.Privacy.Natives {
+				if n.Active == nil || *n.Active {
+					natives = append(natives, n.ID)
+				}
+			}
+			if err := client.SyncPrivacyNatives(ctx, profileID, natives); err != nil {
+				return fmt.Errorf("failed to sync privacy natives: %w", err)
+			}
+		}
+	}
+
+	// Sync parental control settings
+	if profile.Spec.ParentalControl != nil {
+		categories := make([]string, 0)
+		for _, c := range profile.Spec.ParentalControl.Categories {
+			if c.Active == nil || *c.Active {
+				categories = append(categories, c.ID)
+			}
+		}
+		services := make([]string, 0)
+		for _, s := range profile.Spec.ParentalControl.Services {
+			if s.Active == nil || *s.Active {
+				services = append(services, s.ID)
+			}
+		}
+
+		pcConfig := &nextdns.ParentalControlConfig{
+			Categories:            categories,
+			Services:              services,
+			SafeSearch:            boolValue(profile.Spec.ParentalControl.SafeSearch, false),
+			YouTubeRestrictedMode: boolValue(profile.Spec.ParentalControl.YouTubeRestrictedMode, false),
+		}
+		if err := client.UpdateParentalControl(ctx, profileID, pcConfig); err != nil {
+			return fmt.Errorf("failed to update parental control settings: %w", err)
+		}
+	}
+
+	// Sync settings (logs, block page)
+	if profile.Spec.Settings != nil {
+		settingsConfig := &nextdns.SettingsConfig{
+			LogsEnabled:     true,
+			BlockPageEnable: true,
+		}
+		if profile.Spec.Settings.Logs != nil {
+			settingsConfig.LogsEnabled = boolValue(profile.Spec.Settings.Logs.Enabled, true)
+			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
+		}
+		if profile.Spec.Settings.BlockPage != nil {
+			settingsConfig.BlockPageEnable = boolValue(profile.Spec.Settings.BlockPage.Enabled, true)
+		}
+		if err := client.UpdateSettings(ctx, profileID, settingsConfig); err != nil {
+			return fmt.Errorf("failed to update settings: %w", err)
+		}
+	}
+
+	// Sync denylist
+	if len(lists.Denylist) > 0 {
+		if err := client.SyncDenylist(ctx, profileID, lists.Denylist); err != nil {
+			return fmt.Errorf("failed to sync denylist: %w", err)
+		}
+	}
+
+	// Sync allowlist
+	if len(lists.Allowlist) > 0 {
+		if err := client.SyncAllowlist(ctx, profileID, lists.Allowlist); err != nil {
+			return fmt.Errorf("failed to sync allowlist: %w", err)
+		}
+	}
+
+	// Sync TLDs
+	if len(lists.TLDs) > 0 {
+		if err := client.SyncSecurityTLDs(ctx, profileID, lists.TLDs); err != nil {
+			return fmt.Errorf("failed to sync TLDs: %w", err)
+		}
+	}
+
+	logger.Info("Successfully synced with NextDNS API", "profileID", profileID)
 	return nil
+}
+
+// boolValue returns the value of a bool pointer, or the default if nil
+func boolValue(ptr *bool, defaultValue bool) bool {
+	if ptr == nil {
+		return defaultValue
+	}
+	return *ptr
+}
+
+// parseRetentionDays parses a retention string (e.g., "7d", "30d") and returns days as int
+func parseRetentionDays(retention string) int {
+	if retention == "" {
+		return 7 // default 7 days
+	}
+
+	retention = strings.TrimSpace(strings.ToLower(retention))
+
+	// Handle special cases
+	switch retention {
+	case "1h":
+		return 0 // Less than a day
+	case "6h":
+		return 0
+	case "1y":
+		return 365
+	case "2y":
+		return 730
+	}
+
+	// Parse numeric values with 'd' suffix
+	if strings.HasSuffix(retention, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(retention, "d"))
+		if err == nil {
+			return days
+		}
+	}
+
+	return 7 // default
 }
 
 // setCondition sets a condition on the profile

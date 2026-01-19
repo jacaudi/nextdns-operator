@@ -5,11 +5,15 @@ go 1.22.0
 toolchain go1.24.7
 
 require (
+	github.com/amalucelli/nextdns-go v0.0.0-00010101000000-000000000000
 	k8s.io/api v0.30.0
 	k8s.io/apimachinery v0.30.0
 	k8s.io/client-go v0.30.0
 	sigs.k8s.io/controller-runtime v0.18.0
 )
+
+// Use jacaudi's fork of nextdns-go
+replace github.com/amalucelli/nextdns-go => github.com/jacaudi/nextdns-go v0.0.0-20230309124417-a7b99249b1ae
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -30,6 +34,7 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
