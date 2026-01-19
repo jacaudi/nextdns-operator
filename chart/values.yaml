@@ -1,118 +1,49 @@
 # NextDNS Operator Helm Chart
 # Based on bjw-s app-template
 
-controllers:
-  main:
-    type: deployment
-    replicas: 1
-    strategy: Recreate
+# -- Global values
+global: {}
 
-    containers:
-      main:
-        image:
-          repository: ghcr.io/jacaudi/nextdns-operator
-          tag: latest
-          pullPolicy: IfNotPresent
+# -- Container image configuration
+image:
+  repository: ghcr.io/jacaudi/nextdns-operator
+  tag: latest
+  pullPolicy: IfNotPresent
 
-        args:
-          - --leader-elect
-          - --health-probe-bind-address=:8081
-          - --metrics-bind-address=:8080
+# -- Controller/Deployment configuration
+controller:
+  replicas: 1
+  strategy: Recreate
 
-        env:
-          TZ: UTC
+# -- Timezone for the container
+timezone: UTC
 
-        resources:
-          requests:
-            cpu: 10m
-            memory: 64Mi
-          limits:
-            cpu: 500m
-            memory: 128Mi
+# -- Resource limits and requests
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
 
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-              - ALL
-
-        probes:
-          liveness:
-            enabled: true
-            custom: true
-            spec:
-              httpGet:
-                path: /healthz
-                port: 8081
-              initialDelaySeconds: 15
-              periodSeconds: 20
-          readiness:
-            enabled: true
-            custom: true
-            spec:
-              httpGet:
-                path: /readyz
-                port: 8081
-              initialDelaySeconds: 5
-              periodSeconds: 10
-
-    pod:
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-
+# -- Service account configuration
 serviceAccount:
   create: true
-  name: nextdns-operator
+  name: ""
+  annotations: {}
 
-service:
-  main:
-    controller: main
-    ports:
-      metrics:
-        port: 8080
-        protocol: TCP
-
-# Prometheus ServiceMonitor (requires prometheus-operator)
-serviceMonitor:
-  main:
-    enabled: false
-    serviceName: main
-    endpoints:
-      - port: metrics
-        scheme: http
-        path: /metrics
-        interval: 30s
-        scrapeTimeout: 10s
-
-# RBAC configuration
+# -- RBAC configuration
 rbac:
+  # -- Enable RBAC resources
   enabled: true
-  rules:
-    # NextDNS CRD permissions
-    - apiGroups: ["nextdns.io"]
-      resources: ["nextdnsprofiles"]
-      verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-    - apiGroups: ["nextdns.io"]
-      resources: ["nextdnsprofiles/status"]
-      verbs: ["get", "patch", "update"]
-    - apiGroups: ["nextdns.io"]
-      resources: ["nextdnsprofiles/finalizers"]
-      verbs: ["update"]
-    - apiGroups: ["nextdns.io"]
-      resources: ["nextdnsallowlists", "nextdnsdenylists", "nextdnstldlists"]
-      verbs: ["get", "list", "watch"]
-    # Secret access for credentials
-    - apiGroups: [""]
-      resources: ["secrets"]
-      verbs: ["get", "list", "watch"]
-    # Events for status reporting
-    - apiGroups: [""]
-      resources: ["events"]
-      verbs: ["create", "patch"]
-    # Leader election
-    - apiGroups: ["coordination.k8s.io"]
-      resources: ["leases"]
-      verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+
+# -- Metrics and monitoring configuration
+metrics:
+  serviceMonitor:
+    # -- Enable ServiceMonitor for Prometheus Operator
+    enabled: false
+    # -- Scrape interval
+    interval: 30s
+    # -- Scrape timeout
+    scrapeTimeout: 10s
