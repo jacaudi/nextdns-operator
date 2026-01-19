@@ -13,8 +13,14 @@ image:
 
 # -- Controller/Deployment configuration
 controller:
+  # -- Number of replicas (for HA, use 2+ with leader election)
   replicas: 1
   strategy: Recreate
+
+# -- Leader election for HA (active-passive)
+# When enabled with multiple replicas, only one instance processes resources
+leaderElection:
+  enabled: true
 
 # -- Timezone for the container
 timezone: UTC

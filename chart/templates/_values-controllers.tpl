@@ -14,7 +14,9 @@ controllers:
           tag: {{ .Values.image.tag | default .Chart.AppVersion }}
           pullPolicy: {{ .Values.image.pullPolicy }}
         args:
+          {{- if .Values.leaderElection.enabled }}
           - --leader-elect
+          {{- end }}
           - --health-probe-bind-address=:8081
           - --metrics-bind-address=:8080
         env:
