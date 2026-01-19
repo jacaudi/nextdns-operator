@@ -38,10 +38,19 @@ const (
 	ConditionTypeReferencesResolved = "ReferencesResolved"
 )
 
+// ClientFactory is a function that creates a NextDNS client
+type ClientFactory func(apiKey string) (nextdns.ClientInterface, error)
+
+// DefaultClientFactory creates a real NextDNS client
+func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
+	return nextdns.NewClient(apiKey)
+}
+
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	ClientFactory ClientFactory
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -163,8 +172,12 @@ func (r *NextDNSProfileReconciler) handleDeletion(ctx context.Context, profile *
 			if err != nil {
 				logger.Error(err, "Failed to get API credentials for deletion, proceeding with finalizer removal")
 			} else {
-				// Create NextDNS client and delete the profile
-				client, err := nextdns.NewClient(apiKey)
+				// Create NextDNS client using factory
+				factory := r.ClientFactory
+				if factory == nil {
+					factory = DefaultClientFactory
+				}
+				client, err := factory(apiKey)
 				if err != nil {
 					logger.Error(err, "Failed to create NextDNS client for deletion")
 				} else {
@@ -340,8 +353,12 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile, apiKey string, lists *ResolvedLists) error {
 	logger := log.FromContext(ctx)
 
-	// Create NextDNS client
-	client, err := nextdns.NewClient(apiKey)
+	// Create NextDNS client using factory
+	factory := r.ClientFactory
+	if factory == nil {
+		factory = DefaultClientFactory
+	}
+	client, err := factory(apiKey)
 	if err != nil {
 		return fmt.Errorf("failed to create NextDNS client: %w", err)
 	}
