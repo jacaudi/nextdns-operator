@@ -11,7 +11,7 @@ controllers:
       main:
         image:
           repository: {{ .Values.image.repository }}
-          tag: {{ .Values.image.tag }}
+          tag: {{ .Values.image.tag | default .Chart.AppVersion }}
           pullPolicy: {{ .Values.image.pullPolicy }}
         args:
           - --leader-elect
