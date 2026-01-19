@@ -3,8 +3,10 @@ package nextdns
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/amalucelli/nextdns-go/nextdns"
+	"github.com/jacaudi/nextdns-operator/internal/metrics"
 )
 
 // Client wraps the NextDNS API client
@@ -80,11 +82,15 @@ type SettingsConfig struct {
 
 // CreateProfile creates a new NextDNS profile and returns the profile ID
 func (c *Client) CreateProfile(ctx context.Context, name string) (string, error) {
+	start := time.Now()
 	request := &nextdns.CreateProfileRequest{
 		Name: name,
 	}
 
 	profileID, err := c.client.Profiles.Create(ctx, request)
+	duration := time.Since(start).Seconds()
+	metrics.RecordAPIRequest("CreateProfile", duration, err == nil)
+
 	if err != nil {
 		return "", fmt.Errorf("failed to create profile: %w", err)
 	}
@@ -94,11 +100,14 @@ func (c *Client) CreateProfile(ctx context.Context, name string) (string, error)
 
 // GetProfile retrieves a NextDNS profile by ID
 func (c *Client) GetProfile(ctx context.Context, profileID string) (*nextdns.Profile, error) {
+	start := time.Now()
 	request := &nextdns.GetProfileRequest{
 		ProfileID: profileID,
 	}
 
 	profile, err := c.client.Profiles.Get(ctx, request)
+	metrics.RecordAPIRequest("GetProfile", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get profile: %w", err)
 	}
@@ -108,6 +117,7 @@ func (c *Client) GetProfile(ctx context.Context, profileID string) (*nextdns.Pro
 
 // UpdateProfile updates a NextDNS profile name
 func (c *Client) UpdateProfile(ctx context.Context, profileID, name string) error {
+	start := time.Now()
 	request := &nextdns.UpdateProfileRequest{
 		ProfileID: profileID,
 		Profile: &nextdns.Profile{
@@ -116,6 +126,8 @@ func (c *Client) UpdateProfile(ctx context.Context, profileID, name string) erro
 	}
 
 	err := c.client.Profiles.Update(ctx, request)
+	metrics.RecordAPIRequest("UpdateProfile", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return fmt.Errorf("failed to update profile: %w", err)
 	}
@@ -125,11 +137,14 @@ func (c *Client) UpdateProfile(ctx context.Context, profileID, name string) erro
 
 // DeleteProfile deletes a NextDNS profile
 func (c *Client) DeleteProfile(ctx context.Context, profileID string) error {
+	start := time.Now()
 	request := &nextdns.DeleteProfileRequest{
 		ProfileID: profileID,
 	}
 
 	err := c.client.Profiles.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteProfile", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return fmt.Errorf("failed to delete profile: %w", err)
 	}
@@ -143,6 +158,7 @@ func (c *Client) UpdateSecurity(ctx context.Context, profileID string, config *S
 		return nil
 	}
 
+	start := time.Now()
 	request := &nextdns.UpdateSecurityRequest{
 		ProfileID: profileID,
 		Security: &nextdns.Security{
@@ -162,6 +178,8 @@ func (c *Client) UpdateSecurity(ctx context.Context, profileID string, config *S
 	}
 
 	err := c.client.Security.Update(ctx, request)
+	metrics.RecordAPIRequest("UpdateSecurity", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return fmt.Errorf("failed to update security settings: %w", err)
 	}
@@ -175,6 +193,7 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 		return nil
 	}
 
+	start := time.Now()
 	request := &nextdns.UpdatePrivacyRequest{
 		ProfileID: profileID,
 		Privacy: &nextdns.Privacy{
@@ -184,6 +203,8 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 	}
 
 	err := c.client.Privacy.Update(ctx, request)
+	metrics.RecordAPIRequest("UpdatePrivacy", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return fmt.Errorf("failed to update privacy settings: %w", err)
 	}
@@ -193,6 +214,8 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 
 // SyncDenylist synchronizes the denylist for a profile
 func (c *Client) SyncDenylist(ctx context.Context, profileID string, domains []string) error {
+	start := time.Now()
+
 	// Get current denylist
 	listRequest := &nextdns.ListDenylistRequest{
 		ProfileID: profileID,
@@ -200,6 +223,7 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, domains []s
 
 	currentList, err := c.client.Denylist.List(ctx, listRequest)
 	if err != nil {
+		metrics.RecordAPIRequest("SyncDenylist", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to get current denylist: %w", err)
 	}
 
@@ -224,14 +248,18 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, domains []s
 		Denylist:  denylist,
 	}
 	if err := c.client.Denylist.Create(ctx, createRequest); err != nil {
+		metrics.RecordAPIRequest("SyncDenylist", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to sync denylist: %w", err)
 	}
 
+	metrics.RecordAPIRequest("SyncDenylist", time.Since(start).Seconds(), true)
 	return nil
 }
 
 // SyncAllowlist synchronizes the allowlist for a profile
 func (c *Client) SyncAllowlist(ctx context.Context, profileID string, domains []string) error {
+	start := time.Now()
+
 	// Build the desired allowlist
 	var allowlist []*nextdns.Allowlist
 	for _, domain := range domains {
@@ -247,9 +275,11 @@ func (c *Client) SyncAllowlist(ctx context.Context, profileID string, domains []
 		Allowlist: allowlist,
 	}
 	if err := c.client.Allowlist.Create(ctx, createRequest); err != nil {
+		metrics.RecordAPIRequest("SyncAllowlist", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to sync allowlist: %w", err)
 	}
 
+	metrics.RecordAPIRequest("SyncAllowlist", time.Since(start).Seconds(), true)
 	return nil
 }
 
@@ -258,6 +288,8 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 	if config == nil {
 		return nil
 	}
+
+	start := time.Now()
 
 	// Update logs settings
 	logsRequest := &nextdns.UpdateSettingsLogsRequest{
@@ -270,6 +302,7 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 
 	err := c.client.SettingsLogs.Update(ctx, logsRequest)
 	if err != nil {
+		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to update logs settings: %w", err)
 	}
 
@@ -283,14 +316,18 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 
 	err = c.client.SettingsBlockPage.Update(ctx, blockPageRequest)
 	if err != nil {
+		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to update block page settings: %w", err)
 	}
 
+	metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), true)
 	return nil
 }
 
 // SyncSecurityTLDs synchronizes blocked TLDs for a profile
 func (c *Client) SyncSecurityTLDs(ctx context.Context, profileID string, tlds []string) error {
+	start := time.Now()
+
 	// Build the desired TLD list
 	var securityTlds []*nextdns.SecurityTlds
 	for _, tld := range tlds {
@@ -305,9 +342,11 @@ func (c *Client) SyncSecurityTLDs(ctx context.Context, profileID string, tlds []
 		SecurityTlds: securityTlds,
 	}
 	if err := c.client.SecurityTlds.Create(ctx, createRequest); err != nil {
+		metrics.RecordAPIRequest("SyncSecurityTLDs", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to sync security TLDs: %w", err)
 	}
 
+	metrics.RecordAPIRequest("SyncSecurityTLDs", time.Since(start).Seconds(), true)
 	return nil
 }
 
@@ -317,6 +356,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 		return nil
 	}
 
+	start := time.Now()
 	request := &nextdns.UpdateParentalControlRequest{
 		ProfileID: profileID,
 		ParentalControl: &nextdns.ParentalControl{
@@ -327,6 +367,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 
 	err := c.client.ParentalControl.Update(ctx, request)
 	if err != nil {
+		metrics.RecordAPIRequest("UpdateParentalControl", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to update parental control settings: %w", err)
 	}
 
@@ -344,6 +385,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 			ParentalControlCategories: categories,
 		}
 		if err := c.client.ParentalControlCategories.Create(ctx, catRequest); err != nil {
+			metrics.RecordAPIRequest("UpdateParentalControl", time.Since(start).Seconds(), false)
 			return fmt.Errorf("failed to sync parental control categories: %w", err)
 		}
 	}
@@ -362,15 +404,18 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 			ParentalControlServices: services,
 		}
 		if err := c.client.ParentalControlServices.Create(ctx, svcRequest); err != nil {
+			metrics.RecordAPIRequest("UpdateParentalControl", time.Since(start).Seconds(), false)
 			return fmt.Errorf("failed to sync parental control services: %w", err)
 		}
 	}
 
+	metrics.RecordAPIRequest("UpdateParentalControl", time.Since(start).Seconds(), true)
 	return nil
 }
 
 // SyncPrivacyBlocklists synchronizes privacy blocklists for a profile
 func (c *Client) SyncPrivacyBlocklists(ctx context.Context, profileID string, blocklists []string) error {
+	start := time.Now()
 	var privacyBlocklists []*nextdns.PrivacyBlocklists
 	for _, blocklist := range blocklists {
 		privacyBlocklists = append(privacyBlocklists, &nextdns.PrivacyBlocklists{
@@ -383,14 +428,17 @@ func (c *Client) SyncPrivacyBlocklists(ctx context.Context, profileID string, bl
 		PrivacyBlocklists: privacyBlocklists,
 	}
 	if err := c.client.PrivacyBlocklists.Create(ctx, request); err != nil {
+		metrics.RecordAPIRequest("SyncPrivacyBlocklists", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to sync privacy blocklists: %w", err)
 	}
 
+	metrics.RecordAPIRequest("SyncPrivacyBlocklists", time.Since(start).Seconds(), true)
 	return nil
 }
 
 // SyncPrivacyNatives synchronizes native tracker blocking for a profile
 func (c *Client) SyncPrivacyNatives(ctx context.Context, profileID string, natives []string) error {
+	start := time.Now()
 	var privacyNatives []*nextdns.PrivacyNatives
 	for _, native := range natives {
 		privacyNatives = append(privacyNatives, &nextdns.PrivacyNatives{
@@ -403,19 +451,24 @@ func (c *Client) SyncPrivacyNatives(ctx context.Context, profileID string, nativ
 		PrivacyNatives: privacyNatives,
 	}
 	if err := c.client.PrivacyNatives.Create(ctx, request); err != nil {
+		metrics.RecordAPIRequest("SyncPrivacyNatives", time.Since(start).Seconds(), false)
 		return fmt.Errorf("failed to sync privacy natives: %w", err)
 	}
 
+	metrics.RecordAPIRequest("SyncPrivacyNatives", time.Since(start).Seconds(), true)
 	return nil
 }
 
 // GetDenylist retrieves the current denylist for a profile
 func (c *Client) GetDenylist(ctx context.Context, profileID string) ([]*nextdns.Denylist, error) {
+	start := time.Now()
 	request := &nextdns.ListDenylistRequest{
 		ProfileID: profileID,
 	}
 
 	list, err := c.client.Denylist.List(ctx, request)
+	metrics.RecordAPIRequest("GetDenylist", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get denylist: %w", err)
 	}
@@ -425,11 +478,14 @@ func (c *Client) GetDenylist(ctx context.Context, profileID string) ([]*nextdns.
 
 // GetAllowlist retrieves the current allowlist for a profile
 func (c *Client) GetAllowlist(ctx context.Context, profileID string) ([]*nextdns.Allowlist, error) {
+	start := time.Now()
 	request := &nextdns.ListAllowlistRequest{
 		ProfileID: profileID,
 	}
 
 	list, err := c.client.Allowlist.List(ctx, request)
+	metrics.RecordAPIRequest("GetAllowlist", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get allowlist: %w", err)
 	}
@@ -439,11 +495,14 @@ func (c *Client) GetAllowlist(ctx context.Context, profileID string) ([]*nextdns
 
 // GetSecurityTLDs retrieves the current blocked TLDs for a profile
 func (c *Client) GetSecurityTLDs(ctx context.Context, profileID string) ([]*nextdns.SecurityTlds, error) {
+	start := time.Now()
 	request := &nextdns.ListSecurityTldsRequest{
 		ProfileID: profileID,
 	}
 
 	list, err := c.client.SecurityTlds.List(ctx, request)
+	metrics.RecordAPIRequest("GetSecurityTLDs", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get security TLDs: %w", err)
 	}
@@ -453,11 +512,14 @@ func (c *Client) GetSecurityTLDs(ctx context.Context, profileID string) ([]*next
 
 // GetSecurity retrieves the current security settings for a profile
 func (c *Client) GetSecurity(ctx context.Context, profileID string) (*nextdns.Security, error) {
+	start := time.Now()
 	request := &nextdns.GetSecurityRequest{
 		ProfileID: profileID,
 	}
 
 	security, err := c.client.Security.Get(ctx, request)
+	metrics.RecordAPIRequest("GetSecurity", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get security settings: %w", err)
 	}
@@ -467,11 +529,14 @@ func (c *Client) GetSecurity(ctx context.Context, profileID string) (*nextdns.Se
 
 // GetPrivacy retrieves the current privacy settings for a profile
 func (c *Client) GetPrivacy(ctx context.Context, profileID string) (*nextdns.Privacy, error) {
+	start := time.Now()
 	request := &nextdns.GetPrivacyRequest{
 		ProfileID: profileID,
 	}
 
 	privacy, err := c.client.Privacy.Get(ctx, request)
+	metrics.RecordAPIRequest("GetPrivacy", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get privacy settings: %w", err)
 	}
@@ -481,11 +546,14 @@ func (c *Client) GetPrivacy(ctx context.Context, profileID string) (*nextdns.Pri
 
 // GetParentalControl retrieves the current parental control settings for a profile
 func (c *Client) GetParentalControl(ctx context.Context, profileID string) (*nextdns.ParentalControl, error) {
+	start := time.Now()
 	request := &nextdns.GetParentalControlRequest{
 		ProfileID: profileID,
 	}
 
 	pc, err := c.client.ParentalControl.Get(ctx, request)
+	metrics.RecordAPIRequest("GetParentalControl", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parental control settings: %w", err)
 	}

@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+	"github.com/jacaudi/nextdns-operator/internal/metrics"
 	"github.com/jacaudi/nextdns-operator/internal/nextdns"
 )
 
@@ -65,6 +66,9 @@ type NextDNSProfileReconciler struct {
 func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	// Update resource count metrics
+	r.updateResourceMetrics(ctx)
+
 	// Fetch the NextDNSProfile instance
 	profile := &nextdnsv1alpha1.NextDNSProfile{}
 	if err := r.Get(ctx, req.NamespacedName, profile); err != nil {
@@ -96,6 +100,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	apiKey, err := r.getAPIKey(ctx, profile)
 	if err != nil {
 		logger.Error(err, "Failed to get API credentials")
+		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "CredentialsNotFound")
 		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "CredentialsNotFound", err.Error())
 		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
 			logger.Error(updateErr, "Failed to update status")
@@ -107,6 +112,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	resolvedLists, err := r.resolveListReferences(ctx, profile)
 	if err != nil {
 		logger.Error(err, "Failed to resolve list references")
+		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ReferencesNotResolved")
 		r.setCondition(profile, ConditionTypeReferencesResolved, metav1.ConditionFalse, "ResolutionFailed", err.Error())
 		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ReferencesNotResolved", "Failed to resolve list references")
 		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
@@ -121,6 +127,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Sync with NextDNS API
 	if err := r.syncWithNextDNS(ctx, profile, apiKey, resolvedLists); err != nil {
 		logger.Error(err, "Failed to sync with NextDNS")
+		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "SyncFailed")
 		r.setCondition(profile, ConditionTypeSynced, metav1.ConditionFalse, "SyncFailed", err.Error())
 		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "SyncFailed", "Failed to sync with NextDNS API")
 		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
@@ -128,6 +135,9 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
+
+	// Record successful sync
+	metrics.RecordProfileSync(profile.Name, profile.Namespace)
 
 	// Update status
 	now := metav1.Now()
@@ -695,6 +705,33 @@ func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, ob
 		}
 	}
 	return requests
+}
+
+// updateResourceMetrics updates the gauge metrics for resource counts
+func (r *NextDNSProfileReconciler) updateResourceMetrics(ctx context.Context) {
+	// Count profiles
+	var profiles nextdnsv1alpha1.NextDNSProfileList
+	if err := r.List(ctx, &profiles); err == nil {
+		metrics.ProfilesTotal.Set(float64(len(profiles.Items)))
+	}
+
+	// Count allowlists
+	var allowlists nextdnsv1alpha1.NextDNSAllowlistList
+	if err := r.List(ctx, &allowlists); err == nil {
+		metrics.AllowlistsTotal.Set(float64(len(allowlists.Items)))
+	}
+
+	// Count denylists
+	var denylists nextdnsv1alpha1.NextDNSDenylistList
+	if err := r.List(ctx, &denylists); err == nil {
+		metrics.DenylistsTotal.Set(float64(len(denylists.Items)))
+	}
+
+	// Count TLD lists
+	var tldlists nextdnsv1alpha1.NextDNSTLDListList
+	if err := r.List(ctx, &tldlists); err == nil {
+		metrics.TLDListsTotal.Set(float64(len(tldlists.Items)))
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager
