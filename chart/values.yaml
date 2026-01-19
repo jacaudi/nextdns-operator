@@ -1,0 +1,118 @@
+# NextDNS Operator Helm Chart
+# Based on bjw-s app-template
+
+controllers:
+  main:
+    type: deployment
+    replicas: 1
+    strategy: Recreate
+
+    containers:
+      main:
+        image:
+          repository: ghcr.io/jacaudi/nextdns-operator
+          tag: latest
+          pullPolicy: IfNotPresent
+
+        args:
+          - --leader-elect
+          - --health-probe-bind-address=:8081
+          - --metrics-bind-address=:8080
+
+        env:
+          TZ: UTC
+
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 128Mi
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+
+        probes:
+          liveness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /healthz
+                port: 8081
+              initialDelaySeconds: 15
+              periodSeconds: 20
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /readyz
+                port: 8081
+              initialDelaySeconds: 5
+              periodSeconds: 10
+
+    pod:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+serviceAccount:
+  create: true
+  name: nextdns-operator
+
+service:
+  main:
+    controller: main
+    ports:
+      metrics:
+        port: 8080
+        protocol: TCP
+
+# Prometheus ServiceMonitor (requires prometheus-operator)
+serviceMonitor:
+  main:
+    enabled: false
+    serviceName: main
+    endpoints:
+      - port: metrics
+        scheme: http
+        path: /metrics
+        interval: 30s
+        scrapeTimeout: 10s
+
+# RBAC configuration
+rbac:
+  enabled: true
+  rules:
+    # NextDNS CRD permissions
+    - apiGroups: ["nextdns.io"]
+      resources: ["nextdnsprofiles"]
+      verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+    - apiGroups: ["nextdns.io"]
+      resources: ["nextdnsprofiles/status"]
+      verbs: ["get", "patch", "update"]
+    - apiGroups: ["nextdns.io"]
+      resources: ["nextdnsprofiles/finalizers"]
+      verbs: ["update"]
+    - apiGroups: ["nextdns.io"]
+      resources: ["nextdnsallowlists", "nextdnsdenylists", "nextdnstldlists"]
+      verbs: ["get", "list", "watch"]
+    # Secret access for credentials
+    - apiGroups: [""]
+      resources: ["secrets"]
+      verbs: ["get", "list", "watch"]
+    # Events for status reporting
+    - apiGroups: [""]
+      resources: ["events"]
+      verbs: ["create", "patch"]
+    # Leader election
+    - apiGroups: ["coordination.k8s.io"]
+      resources: ["leases"]
+      verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]

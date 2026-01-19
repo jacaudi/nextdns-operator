@@ -59,6 +59,20 @@ See the [config/samples](config/samples/) directory for complete examples:
 
 ## Installation
 
+### Helm (Recommended)
+
+The chart is based on the [bjw-s app-template](https://bjw-s-labs.github.io/helm-charts/docs/app-template/).
+
+```bash
+# Add the bjw-s Helm repository (required dependency)
+helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
+
+# Install with Helm
+helm install nextdns-operator ./chart
+```
+
+### Manual
+
 ```bash
 # Install CRDs
 make install

@@ -1,0 +1,32 @@
+NextDNS Operator has been deployed!
+
+{{- if .Values.rbac.enabled }}
+RBAC has been configured for the operator.
+{{- end }}
+
+To verify the deployment:
+  kubectl get pods -l app.kubernetes.io/name={{ include "bjw-s.common.lib.chart.names.name" . }}
+
+Before creating NextDNSProfile resources, ensure you have:
+1. Installed the CRDs:
+   kubectl apply -f https://raw.githubusercontent.com/jacaudi/nextdns-operator/main/config/crd/bases/
+
+2. Created a Secret with your NextDNS API key:
+   kubectl create secret generic nextdns-credentials \
+     --from-literal=api-key=YOUR_API_KEY
+
+Example NextDNSProfile:
+  apiVersion: nextdns.io/v1alpha1
+  kind: NextDNSProfile
+  metadata:
+    name: my-profile
+  spec:
+    name: "My DNS Profile"
+    credentialsRef:
+      name: nextdns-credentials
+    security:
+      aiThreatDetection: true
+      googleSafeBrowsing: true
+
+For more examples, see:
+  https://github.com/jacaudi/nextdns-operator/tree/main/config/samples

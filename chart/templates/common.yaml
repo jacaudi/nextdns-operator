@@ -1,0 +1,2 @@
+{{/* Render all resources from the common library */}}
+{{ include "bjw-s.common.loader.all" . }}
