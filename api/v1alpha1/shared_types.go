@@ -38,6 +38,8 @@ type DomainEntry struct {
 	// Domain is the domain name (supports wildcards like *.example.com)
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`
 	Domain string `json:"domain"`
 
 	// Active indicates if this entry is enabled

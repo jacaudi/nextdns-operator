@@ -6,11 +6,12 @@ import (
 
 // TLDEntry represents a TLD in the block list
 type TLDEntry struct {
-	// TLD is the top-level domain (without the dot, e.g., "tk", "xyz")
+	// TLD is the top-level domain (without the dot)
+	// Examples: "com", "net", "co.uk"
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z][a-zA-Z0-9]*$`
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$`
 	TLD string `json:"tld"`
 
 	// Active indicates if this TLD is blocked
