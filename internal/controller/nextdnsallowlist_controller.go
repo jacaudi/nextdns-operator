@@ -49,3 +49,34 @@ func (r *NextDNSAllowlistReconciler) countActiveDomains(domains []nextdnsv1alpha
 	}
 	return count
 }
+
+// findProfileReferences finds all profiles that reference this allowlist
+func (r *NextDNSAllowlistReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSAllowlist) ([]nextdnsv1alpha1.ResourceReference, error) {
+	var profiles nextdnsv1alpha1.NextDNSProfileList
+	if err := r.List(ctx, &profiles); err != nil {
+		return nil, err
+	}
+
+	var refs []nextdnsv1alpha1.ResourceReference
+
+	for _, profile := range profiles.Items {
+		for _, ref := range profile.Spec.AllowlistRefs {
+			// Determine the namespace of the referenced list
+			namespace := ref.Namespace
+			if namespace == "" {
+				namespace = profile.Namespace
+			}
+
+			// Check if this profile references our list
+			if ref.Name == list.Name && namespace == list.Namespace {
+				refs = append(refs, nextdnsv1alpha1.ResourceReference{
+					Name:      profile.Name,
+					Namespace: profile.Namespace,
+				})
+				break
+			}
+		}
+	}
+
+	return refs, nil
+}
