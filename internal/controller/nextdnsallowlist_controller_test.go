@@ -8,6 +8,11 @@ import (
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
 
+// boolPtr is a test helper that returns a pointer to a bool value
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func TestCountActiveDomains(t *testing.T) {
 	tests := []struct {
 		name     string
