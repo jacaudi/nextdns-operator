@@ -1004,11 +1004,6 @@ func TestFindProfilesForAllowlist_MultipleProfiles(t *testing.T) {
 	assert.Contains(t, names, "profile-2")
 }
 
-// Helper function
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 // Test for handling deletion scenarios
 func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	scheme := newTestScheme()
