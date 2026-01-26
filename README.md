@@ -8,6 +8,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - **Multi-CRD Architecture**: Separate resources for allowlists, denylists, and TLD lists that can be shared across profiles
 - **Full NextDNS API Coverage**: Security, privacy, parental control, and settings configuration
 - **Profile Lifecycle Management**: Create new profiles or adopt existing ones; operator-created profiles are deleted on resource removal
+- **Drift Detection**: Automatic periodic reconciliation (default: 1 hour) catches manual changes made outside the operator
 
 ## Custom Resources
 
@@ -80,6 +81,35 @@ make install
 # Run the operator
 make run
 ```
+
+## Configuration
+
+### Drift Detection
+
+The operator periodically reconciles all resources to detect and correct drift from manual changes made outside Kubernetes.
+
+**Configure via environment variable:**
+```bash
+SYNC_PERIOD=30m ./nextdns-operator
+```
+
+**Configure via command-line flag:**
+```bash
+./nextdns-operator --sync-period=30m
+```
+
+**Disable periodic syncing:**
+```bash
+SYNC_PERIOD=0 ./nextdns-operator
+```
+
+**Default:** `1h` (60 minutes)
+
+**Behavior:**
+- Syncs include ±10% jitter to prevent all resources from hitting the API simultaneously
+- Each profile makes ~1 API call per sync period
+- List resources (allowlist, denylist, tldlist) sync status but don't call the NextDNS API directly
+- Setting to `0` disables periodic syncing (event-driven only)
 
 ## Development
 
