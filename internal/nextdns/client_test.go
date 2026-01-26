@@ -1,6 +1,7 @@
 package nextdns
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -148,13 +149,13 @@ func TestProfileConfig(t *testing.T) {
 func TestMockClient_CreateProfile(t *testing.T) {
 	mock := NewMockClient()
 
-	profileID, err := mock.CreateProfile(nil, "Test Profile")
+	profileID, err := mock.CreateProfile(context.TODO(), "Test Profile")
 	require.NoError(t, err)
 	assert.Equal(t, "mock-1", profileID)
 	assert.True(t, mock.WasMethodCalled("CreateProfile"))
 
 	// Create another profile
-	profileID2, err := mock.CreateProfile(nil, "Test Profile 2")
+	profileID2, err := mock.CreateProfile(context.TODO(), "Test Profile 2")
 	require.NoError(t, err)
 	assert.Equal(t, "mock-2", profileID2)
 	assert.Equal(t, 2, mock.GetCallCount("CreateProfile"))
@@ -164,16 +165,16 @@ func TestMockClient_GetProfile(t *testing.T) {
 	mock := NewMockClient()
 
 	// First create a profile
-	profileID, err := mock.CreateProfile(nil, "Test Profile")
+	profileID, err := mock.CreateProfile(context.TODO(), "Test Profile")
 	require.NoError(t, err)
 
 	// Then get it
-	profile, err := mock.GetProfile(nil, profileID)
+	profile, err := mock.GetProfile(context.Background(), profileID)
 	require.NoError(t, err)
 	assert.Equal(t, "Test Profile", profile.Name)
 
 	// Get non-existent profile
-	_, err = mock.GetProfile(nil, "non-existent")
+	_, err = mock.GetProfile(context.Background(), "non-existent")
 	assert.Error(t, err)
 }
 
@@ -181,13 +182,13 @@ func TestMockClient_UpdateProfile(t *testing.T) {
 	mock := NewMockClient()
 
 	// Create and update a profile
-	profileID, err := mock.CreateProfile(nil, "Original Name")
+	profileID, err := mock.CreateProfile(context.Background(), "Original Name")
 	require.NoError(t, err)
 
-	err = mock.UpdateProfile(nil, profileID, "Updated Name")
+	err = mock.UpdateProfile(context.Background(), profileID, "Updated Name")
 	require.NoError(t, err)
 
-	profile, err := mock.GetProfile(nil, profileID)
+	profile, err := mock.GetProfile(context.Background(), profileID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Name", profile.Name)
 }
@@ -196,15 +197,15 @@ func TestMockClient_DeleteProfile(t *testing.T) {
 	mock := NewMockClient()
 
 	// Create a profile
-	profileID, err := mock.CreateProfile(nil, "To Delete")
+	profileID, err := mock.CreateProfile(context.Background(), "To Delete")
 	require.NoError(t, err)
 
 	// Delete it
-	err = mock.DeleteProfile(nil, profileID)
+	err = mock.DeleteProfile(context.Background(), profileID)
 	require.NoError(t, err)
 
 	// Verify it's gone
-	_, err = mock.GetProfile(nil, profileID)
+	_, err = mock.GetProfile(context.Background(), profileID)
 	assert.Error(t, err)
 }
 
@@ -217,10 +218,10 @@ func TestMockClient_UpdateSecurity(t *testing.T) {
 		Cryptojacking:      false,
 	}
 
-	err := mock.UpdateSecurity(nil, "profile-1", config)
+	err := mock.UpdateSecurity(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
-	security, err := mock.GetSecurity(nil, "profile-1")
+	security, err := mock.GetSecurity(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, security.AiThreatDetection)
 	assert.True(t, security.GoogleSafeBrowsing)
@@ -230,7 +231,7 @@ func TestMockClient_UpdateSecurity(t *testing.T) {
 func TestMockClient_UpdateSecurity_NilConfig(t *testing.T) {
 	mock := NewMockClient()
 
-	err := mock.UpdateSecurity(nil, "profile-1", nil)
+	err := mock.UpdateSecurity(context.Background(), "profile-1", nil)
 	require.NoError(t, err)
 }
 
@@ -242,10 +243,10 @@ func TestMockClient_UpdatePrivacy(t *testing.T) {
 		AllowAffiliate:    false,
 	}
 
-	err := mock.UpdatePrivacy(nil, "profile-1", config)
+	err := mock.UpdatePrivacy(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
-	privacy, err := mock.GetPrivacy(nil, "profile-1")
+	privacy, err := mock.GetPrivacy(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, privacy.DisguisedTrackers)
 	assert.False(t, privacy.AllowAffiliate)
@@ -255,10 +256,10 @@ func TestMockClient_SyncDenylist(t *testing.T) {
 	mock := NewMockClient()
 
 	domains := []string{"bad1.com", "bad2.com", "bad3.com"}
-	err := mock.SyncDenylist(nil, "profile-1", domains)
+	err := mock.SyncDenylist(context.Background(), "profile-1", domains)
 	require.NoError(t, err)
 
-	denylist, err := mock.GetDenylist(nil, "profile-1")
+	denylist, err := mock.GetDenylist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(denylist))
 }
@@ -267,10 +268,10 @@ func TestMockClient_SyncAllowlist(t *testing.T) {
 	mock := NewMockClient()
 
 	domains := []string{"good1.com", "good2.com"}
-	err := mock.SyncAllowlist(nil, "profile-1", domains)
+	err := mock.SyncAllowlist(context.Background(), "profile-1", domains)
 	require.NoError(t, err)
 
-	allowlist, err := mock.GetAllowlist(nil, "profile-1")
+	allowlist, err := mock.GetAllowlist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(allowlist))
 }
@@ -279,10 +280,10 @@ func TestMockClient_SyncSecurityTLDs(t *testing.T) {
 	mock := NewMockClient()
 
 	tlds := []string{"xyz", "tk", "ml"}
-	err := mock.SyncSecurityTLDs(nil, "profile-1", tlds)
+	err := mock.SyncSecurityTLDs(context.Background(), "profile-1", tlds)
 	require.NoError(t, err)
 
-	securityTLDs, err := mock.GetSecurityTLDs(nil, "profile-1")
+	securityTLDs, err := mock.GetSecurityTLDs(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(securityTLDs))
 }
@@ -297,10 +298,10 @@ func TestMockClient_UpdateParentalControl(t *testing.T) {
 		YouTubeRestrictedMode: false,
 	}
 
-	err := mock.UpdateParentalControl(nil, "profile-1", config)
+	err := mock.UpdateParentalControl(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
-	pc, err := mock.GetParentalControl(nil, "profile-1")
+	pc, err := mock.GetParentalControl(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, pc.SafeSearch)
 	assert.False(t, pc.YoutubeRestrictedMode)
@@ -314,7 +315,7 @@ func TestMockClient_SyncPrivacyBlocklists(t *testing.T) {
 	mock := NewMockClient()
 
 	blocklists := []string{"nextdns-recommended", "oisd"}
-	err := mock.SyncPrivacyBlocklists(nil, "profile-1", blocklists)
+	err := mock.SyncPrivacyBlocklists(context.Background(), "profile-1", blocklists)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, len(mock.PrivacyBlocklists["profile-1"]))
@@ -324,7 +325,7 @@ func TestMockClient_SyncPrivacyNatives(t *testing.T) {
 	mock := NewMockClient()
 
 	natives := []string{"apple", "windows", "samsung"}
-	err := mock.SyncPrivacyNatives(nil, "profile-1", natives)
+	err := mock.SyncPrivacyNatives(context.Background(), "profile-1", natives)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, len(mock.PrivacyNatives["profile-1"]))
@@ -339,7 +340,7 @@ func TestMockClient_UpdateSettings(t *testing.T) {
 		BlockPageEnable: true,
 	}
 
-	err := mock.UpdateSettings(nil, "profile-1", config)
+	err := mock.UpdateSettings(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
 	assert.True(t, mock.SettingsLogs["profile-1"].Enabled)
@@ -352,22 +353,22 @@ func TestMockClient_ErrorInjection(t *testing.T) {
 
 	// Test error injection for CreateProfile
 	mock.CreateProfileError = assert.AnError
-	_, err := mock.CreateProfile(nil, "Test")
+	_, err := mock.CreateProfile(context.Background(), "Test")
 	assert.Error(t, err)
 
 	// Test error injection for GetProfile
 	mock.GetProfileError = assert.AnError
-	_, err = mock.GetProfile(nil, "profile-1")
+	_, err = mock.GetProfile(context.Background(), "profile-1")
 	assert.Error(t, err)
 
 	// Test error injection for UpdateSecurity
 	mock.UpdateSecurityError = assert.AnError
-	err = mock.UpdateSecurity(nil, "profile-1", &SecurityConfig{})
+	err = mock.UpdateSecurity(context.Background(), "profile-1", &SecurityConfig{})
 	assert.Error(t, err)
 
 	// Test error injection for SyncDenylist
 	mock.SyncDenylistError = assert.AnError
-	err = mock.SyncDenylist(nil, "profile-1", []string{"bad.com"})
+	err = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
 	assert.Error(t, err)
 }
 
@@ -375,8 +376,8 @@ func TestMockClient_Reset(t *testing.T) {
 	mock := NewMockClient()
 
 	// Create some data
-	mock.CreateProfile(nil, "Test")
-	mock.SyncDenylist(nil, "profile-1", []string{"bad.com"})
+	_, _ = mock.CreateProfile(context.Background(), "Test")
+	_ = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
 	mock.CreateProfileError = assert.AnError
 
 	// Reset
@@ -393,10 +394,10 @@ func TestMockClient_Reset(t *testing.T) {
 func TestMockClient_CallTracking(t *testing.T) {
 	mock := NewMockClient()
 
-	mock.CreateProfile(nil, "Test1")
-	mock.CreateProfile(nil, "Test2")
-	mock.GetProfile(nil, "mock-1")
-	mock.UpdateProfile(nil, "mock-1", "Updated")
+	_, _ = mock.CreateProfile(context.Background(), "Test1")
+	_, _ = mock.CreateProfile(context.Background(), "Test2")
+	_, _ = mock.GetProfile(context.Background(), "mock-1")
+	_ = mock.UpdateProfile(context.Background(), "mock-1", "Updated")
 
 	assert.Equal(t, 2, mock.GetCallCount("CreateProfile"))
 	assert.Equal(t, 1, mock.GetCallCount("GetProfile"))
@@ -416,8 +417,8 @@ func TestMockClient_ThreadSafety(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
-			mock.CreateProfile(nil, "Test")
-			mock.SyncDenylist(nil, "profile-1", []string{"bad.com"})
+			_, _ = mock.CreateProfile(context.Background(), "Test")
+			_ = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
 			mock.GetCallCount("CreateProfile")
 			done <- true
 		}(i)
@@ -436,7 +437,7 @@ func TestMockClient_GetSecurity(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting security when none exists
-	security, err := mock.GetSecurity(nil, "profile-1")
+	security, err := mock.GetSecurity(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.NotNil(t, security)
 
@@ -445,18 +446,18 @@ func TestMockClient_GetSecurity(t *testing.T) {
 		AIThreatDetection:  true,
 		GoogleSafeBrowsing: true,
 	}
-	err = mock.UpdateSecurity(nil, "profile-1", config)
+	err = mock.UpdateSecurity(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
 	// Now get it
-	security, err = mock.GetSecurity(nil, "profile-1")
+	security, err = mock.GetSecurity(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, security.AiThreatDetection)
 	assert.True(t, security.GoogleSafeBrowsing)
 
 	// Test error injection
 	mock.GetSecurityError = assert.AnError
-	_, err = mock.GetSecurity(nil, "profile-1")
+	_, err = mock.GetSecurity(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -464,7 +465,7 @@ func TestMockClient_GetPrivacy(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting privacy when none exists
-	privacy, err := mock.GetPrivacy(nil, "profile-1")
+	privacy, err := mock.GetPrivacy(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.NotNil(t, privacy)
 
@@ -473,18 +474,18 @@ func TestMockClient_GetPrivacy(t *testing.T) {
 		DisguisedTrackers: true,
 		AllowAffiliate:    false,
 	}
-	err = mock.UpdatePrivacy(nil, "profile-1", config)
+	err = mock.UpdatePrivacy(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
 	// Now get it
-	privacy, err = mock.GetPrivacy(nil, "profile-1")
+	privacy, err = mock.GetPrivacy(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, privacy.DisguisedTrackers)
 	assert.False(t, privacy.AllowAffiliate)
 
 	// Test error injection
 	mock.GetPrivacyError = assert.AnError
-	_, err = mock.GetPrivacy(nil, "profile-1")
+	_, err = mock.GetPrivacy(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -492,7 +493,7 @@ func TestMockClient_GetParentalControl(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting parental control when none exists
-	pc, err := mock.GetParentalControl(nil, "profile-1")
+	pc, err := mock.GetParentalControl(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.NotNil(t, pc)
 
@@ -503,18 +504,18 @@ func TestMockClient_GetParentalControl(t *testing.T) {
 		Categories:            []string{"adult"},
 		Services:              []string{"tiktok"},
 	}
-	err = mock.UpdateParentalControl(nil, "profile-1", config)
+	err = mock.UpdateParentalControl(context.Background(), "profile-1", config)
 	require.NoError(t, err)
 
 	// Now get it
-	pc, err = mock.GetParentalControl(nil, "profile-1")
+	pc, err = mock.GetParentalControl(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.True(t, pc.SafeSearch)
 	assert.True(t, pc.YoutubeRestrictedMode)
 
 	// Test error injection
 	mock.GetParentalControlError = assert.AnError
-	_, err = mock.GetParentalControl(nil, "profile-1")
+	_, err = mock.GetParentalControl(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -522,22 +523,22 @@ func TestMockClient_GetDenylist(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting denylist when empty
-	denylist, err := mock.GetDenylist(nil, "profile-1")
+	denylist, err := mock.GetDenylist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Nil(t, denylist)
 
 	// Sync some domains
-	err = mock.SyncDenylist(nil, "profile-1", []string{"bad.com", "evil.com"})
+	err = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com", "evil.com"})
 	require.NoError(t, err)
 
 	// Now get it
-	denylist, err = mock.GetDenylist(nil, "profile-1")
+	denylist, err = mock.GetDenylist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(denylist))
 
 	// Test error injection
 	mock.GetDenylistError = assert.AnError
-	_, err = mock.GetDenylist(nil, "profile-1")
+	_, err = mock.GetDenylist(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -545,22 +546,22 @@ func TestMockClient_GetAllowlist(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting allowlist when empty
-	allowlist, err := mock.GetAllowlist(nil, "profile-1")
+	allowlist, err := mock.GetAllowlist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Nil(t, allowlist)
 
 	// Sync some domains
-	err = mock.SyncAllowlist(nil, "profile-1", []string{"good.com", "trusted.com"})
+	err = mock.SyncAllowlist(context.Background(), "profile-1", []string{"good.com", "trusted.com"})
 	require.NoError(t, err)
 
 	// Now get it
-	allowlist, err = mock.GetAllowlist(nil, "profile-1")
+	allowlist, err = mock.GetAllowlist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(allowlist))
 
 	// Test error injection
 	mock.GetAllowlistError = assert.AnError
-	_, err = mock.GetAllowlist(nil, "profile-1")
+	_, err = mock.GetAllowlist(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -568,22 +569,22 @@ func TestMockClient_GetSecurityTLDs(t *testing.T) {
 	mock := NewMockClient()
 
 	// Test getting security TLDs when empty
-	tlds, err := mock.GetSecurityTLDs(nil, "profile-1")
+	tlds, err := mock.GetSecurityTLDs(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Nil(t, tlds)
 
 	// Sync some TLDs
-	err = mock.SyncSecurityTLDs(nil, "profile-1", []string{"xyz", "tk"})
+	err = mock.SyncSecurityTLDs(context.Background(), "profile-1", []string{"xyz", "tk"})
 	require.NoError(t, err)
 
 	// Now get them
-	tlds, err = mock.GetSecurityTLDs(nil, "profile-1")
+	tlds, err = mock.GetSecurityTLDs(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(tlds))
 
 	// Test error injection
 	mock.GetSecurityTLDsError = assert.AnError
-	_, err = mock.GetSecurityTLDs(nil, "profile-1")
+	_, err = mock.GetSecurityTLDs(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
@@ -591,11 +592,11 @@ func TestMockClient_UpdateProfile_NonExistent(t *testing.T) {
 	mock := NewMockClient()
 
 	// Update a profile that doesn't exist - should create it
-	err := mock.UpdateProfile(nil, "non-existent", "New Name")
+	err := mock.UpdateProfile(context.Background(), "non-existent", "New Name")
 	require.NoError(t, err)
 
 	// Verify it was created
-	profile, err := mock.GetProfile(nil, "non-existent")
+	profile, err := mock.GetProfile(context.Background(), "non-existent")
 	require.NoError(t, err)
 	assert.Equal(t, "New Name", profile.Name)
 }
@@ -604,15 +605,15 @@ func TestMockClient_UpdateProfile_Existing(t *testing.T) {
 	mock := NewMockClient()
 
 	// Create a profile first
-	profileID, err := mock.CreateProfile(nil, "Original Name")
+	profileID, err := mock.CreateProfile(context.Background(), "Original Name")
 	require.NoError(t, err)
 
 	// Update it
-	err = mock.UpdateProfile(nil, profileID, "Updated Name")
+	err = mock.UpdateProfile(context.Background(), profileID, "Updated Name")
 	require.NoError(t, err)
 
 	// Verify it was updated
-	profile, err := mock.GetProfile(nil, profileID)
+	profile, err := mock.GetProfile(context.Background(), profileID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Name", profile.Name)
 }
@@ -621,7 +622,7 @@ func TestMockClient_UpdateProfile_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.UpdateProfileError = assert.AnError
 
-	err := mock.UpdateProfile(nil, "profile-1", "Name")
+	err := mock.UpdateProfile(context.Background(), "profile-1", "Name")
 	assert.Error(t, err)
 }
 
@@ -629,14 +630,14 @@ func TestMockClient_DeleteProfile_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.DeleteProfileError = assert.AnError
 
-	err := mock.DeleteProfile(nil, "profile-1")
+	err := mock.DeleteProfile(context.Background(), "profile-1")
 	assert.Error(t, err)
 }
 
 func TestMockClient_UpdatePrivacy_NilConfig(t *testing.T) {
 	mock := NewMockClient()
 
-	err := mock.UpdatePrivacy(nil, "profile-1", nil)
+	err := mock.UpdatePrivacy(context.Background(), "profile-1", nil)
 	require.NoError(t, err)
 }
 
@@ -644,14 +645,14 @@ func TestMockClient_UpdatePrivacy_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.UpdatePrivacyError = assert.AnError
 
-	err := mock.UpdatePrivacy(nil, "profile-1", &PrivacyConfig{})
+	err := mock.UpdatePrivacy(context.Background(), "profile-1", &PrivacyConfig{})
 	assert.Error(t, err)
 }
 
 func TestMockClient_UpdateParentalControl_NilConfig(t *testing.T) {
 	mock := NewMockClient()
 
-	err := mock.UpdateParentalControl(nil, "profile-1", nil)
+	err := mock.UpdateParentalControl(context.Background(), "profile-1", nil)
 	require.NoError(t, err)
 }
 
@@ -659,14 +660,14 @@ func TestMockClient_UpdateParentalControl_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.UpdateParentalControlError = assert.AnError
 
-	err := mock.UpdateParentalControl(nil, "profile-1", &ParentalControlConfig{})
+	err := mock.UpdateParentalControl(context.Background(), "profile-1", &ParentalControlConfig{})
 	assert.Error(t, err)
 }
 
 func TestMockClient_UpdateSettings_NilConfig(t *testing.T) {
 	mock := NewMockClient()
 
-	err := mock.UpdateSettings(nil, "profile-1", nil)
+	err := mock.UpdateSettings(context.Background(), "profile-1", nil)
 	require.NoError(t, err)
 }
 
@@ -674,7 +675,7 @@ func TestMockClient_UpdateSettings_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.UpdateSettingsError = assert.AnError
 
-	err := mock.UpdateSettings(nil, "profile-1", &SettingsConfig{})
+	err := mock.UpdateSettings(context.Background(), "profile-1", &SettingsConfig{})
 	assert.Error(t, err)
 }
 
@@ -682,7 +683,7 @@ func TestMockClient_SyncAllowlist_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.SyncAllowlistError = assert.AnError
 
-	err := mock.SyncAllowlist(nil, "profile-1", []string{"good.com"})
+	err := mock.SyncAllowlist(context.Background(), "profile-1", []string{"good.com"})
 	assert.Error(t, err)
 }
 
@@ -690,7 +691,7 @@ func TestMockClient_SyncSecurityTLDs_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.SyncSecurityTLDsError = assert.AnError
 
-	err := mock.SyncSecurityTLDs(nil, "profile-1", []string{"xyz"})
+	err := mock.SyncSecurityTLDs(context.Background(), "profile-1", []string{"xyz"})
 	assert.Error(t, err)
 }
 
@@ -698,7 +699,7 @@ func TestMockClient_SyncPrivacyBlocklists_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.SyncPrivacyBlocklistsError = assert.AnError
 
-	err := mock.SyncPrivacyBlocklists(nil, "profile-1", []string{"blocklist"})
+	err := mock.SyncPrivacyBlocklists(context.Background(), "profile-1", []string{"blocklist"})
 	assert.Error(t, err)
 }
 
@@ -706,7 +707,7 @@ func TestMockClient_SyncPrivacyNatives_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.SyncPrivacyNativesError = assert.AnError
 
-	err := mock.SyncPrivacyNatives(nil, "profile-1", []string{"apple"})
+	err := mock.SyncPrivacyNatives(context.Background(), "profile-1", []string{"apple"})
 	assert.Error(t, err)
 }
 
@@ -714,18 +715,18 @@ func TestMockClient_EmptyListsSync(t *testing.T) {
 	mock := NewMockClient()
 
 	// Sync empty lists - should not panic
-	err := mock.SyncDenylist(nil, "profile-1", []string{})
+	err := mock.SyncDenylist(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 
-	err = mock.SyncAllowlist(nil, "profile-1", []string{})
+	err = mock.SyncAllowlist(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 
-	err = mock.SyncSecurityTLDs(nil, "profile-1", []string{})
+	err = mock.SyncSecurityTLDs(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 
-	err = mock.SyncPrivacyBlocklists(nil, "profile-1", []string{})
+	err = mock.SyncPrivacyBlocklists(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 
-	err = mock.SyncPrivacyNatives(nil, "profile-1", []string{})
+	err = mock.SyncPrivacyNatives(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 }
