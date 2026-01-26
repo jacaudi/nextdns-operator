@@ -9,10 +9,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
@@ -88,7 +91,36 @@ func (r *NextDNSAllowlistReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *NextDNSAllowlistReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&nextdnsv1alpha1.NextDNSAllowlist{}).
+		Watches(
+			&nextdnsv1alpha1.NextDNSProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.findAllowlistsForProfile),
+		).
 		Complete(r)
+}
+
+// findAllowlistsForProfile returns reconcile requests for all allowlists referenced by a profile
+func (r *NextDNSAllowlistReconciler) findAllowlistsForProfile(ctx context.Context, obj client.Object) []reconcile.Request {
+	profile, ok := obj.(*nextdnsv1alpha1.NextDNSProfile)
+	if !ok {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, ref := range profile.Spec.AllowlistRefs {
+		namespace := ref.Namespace
+		if namespace == "" {
+			namespace = profile.Namespace
+		}
+
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      ref.Name,
+				Namespace: namespace,
+			},
+		})
+	}
+
+	return requests
 }
 
 // countActiveDomains counts the number of domains where Active is nil or true

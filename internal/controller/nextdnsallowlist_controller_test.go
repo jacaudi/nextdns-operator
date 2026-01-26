@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
@@ -405,4 +406,55 @@ func TestNextDNSAllowlistReconciler_HandleDeletion(t *testing.T) {
 		assert.Error(t, err) // Resource should be gone
 		assert.True(t, client.IgnoreNotFound(err) == nil) // Should be NotFound error
 	})
+}
+
+func TestNextDNSAllowlistReconciler_findAllowlistsForProfile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = nextdnsv1alpha1.AddToScheme(scheme)
+
+	list1 := &nextdnsv1alpha1.NextDNSAllowlist{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "list1",
+			Namespace: "default",
+		},
+	}
+
+	list2 := &nextdnsv1alpha1.NextDNSAllowlist{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "list2",
+			Namespace: "other",
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			AllowlistRefs: []nextdnsv1alpha1.ListReference{
+				{Name: "list1"},              // Same namespace
+				{Name: "list2", Namespace: "other"}, // Cross-namespace
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(list1, list2, profile).
+		Build()
+
+	r := &NextDNSAllowlistReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	requests := r.findAllowlistsForProfile(context.Background(), profile)
+
+	expected := []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: "list1", Namespace: "default"}},
+		{NamespacedName: types.NamespacedName{Name: "list2", Namespace: "other"}},
+	}
+
+	assert.ElementsMatch(t, expected, requests)
 }
