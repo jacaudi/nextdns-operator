@@ -1,5 +1,5 @@
 # Pull Request Validation
-# Fast feedback on PRs: lint and test only
+# Fast feedback on PRs: lint, test, build, and scan
 name: PR Validation
 
 on:
@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   lint:
@@ -47,6 +48,21 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: nextdns-operator:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: nextdns-operator:pr-${{ github.event.pull_request.number }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
