@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/amalucelli/nextdns-go/nextdns"
+	"github.com/jacaudi/nextdns-go/nextdns"
 )
 
 // MockClient is a mock implementation of ClientInterface for testing
@@ -52,25 +52,25 @@ type MockClient struct {
 	ParentalControlServices map[string][]*nextdns.ParentalControlServices
 
 	// Error injection for testing error paths
-	CreateProfileError           error
-	GetProfileError              error
-	UpdateProfileError           error
-	DeleteProfileError           error
-	UpdateSecurityError          error
-	GetSecurityError             error
-	UpdatePrivacyError           error
-	GetPrivacyError              error
-	SyncPrivacyBlocklistsError   error
-	SyncPrivacyNativesError      error
-	UpdateParentalControlError   error
-	GetParentalControlError      error
-	SyncDenylistError            error
-	SyncAllowlistError           error
-	SyncSecurityTLDsError        error
-	GetDenylistError             error
-	GetAllowlistError            error
-	GetSecurityTLDsError         error
-	UpdateSettingsError          error
+	CreateProfileError         error
+	GetProfileError            error
+	UpdateProfileError         error
+	DeleteProfileError         error
+	UpdateSecurityError        error
+	GetSecurityError           error
+	UpdatePrivacyError         error
+	GetPrivacyError            error
+	SyncPrivacyBlocklistsError error
+	SyncPrivacyNativesError    error
+	UpdateParentalControlError error
+	GetParentalControlError    error
+	SyncDenylistError          error
+	SyncAllowlistError         error
+	SyncSecurityTLDsError      error
+	GetDenylistError           error
+	GetAllowlistError          error
+	GetSecurityTLDsError       error
+	UpdateSettingsError        error
 
 	// Call tracking
 	Calls []MockCall

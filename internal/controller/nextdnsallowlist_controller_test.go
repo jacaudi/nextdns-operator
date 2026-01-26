@@ -10,10 +10,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
@@ -403,7 +403,7 @@ func TestNextDNSAllowlistReconciler_HandleDeletion(t *testing.T) {
 		// Verify we can't find it anymore (simulates successful deletion)
 		var updatedList nextdnsv1alpha1.NextDNSAllowlist
 		err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
-		assert.Error(t, err) // Resource should be gone
+		assert.Error(t, err)                              // Resource should be gone
 		assert.True(t, client.IgnoreNotFound(err) == nil) // Should be NotFound error
 	})
 }
@@ -433,7 +433,7 @@ func TestNextDNSAllowlistReconciler_findAllowlistsForProfile(t *testing.T) {
 		},
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			AllowlistRefs: []nextdnsv1alpha1.ListReference{
-				{Name: "list1"},              // Same namespace
+				{Name: "list1"},                     // Same namespace
 				{Name: "list2", Namespace: "other"}, // Cross-namespace
 			},
 		},

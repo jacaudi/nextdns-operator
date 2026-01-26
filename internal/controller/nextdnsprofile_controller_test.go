@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	sdknextdns "github.com/amalucelli/nextdns-go/nextdns"
+	sdknextdns "github.com/jacaudi/nextdns-go/nextdns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -1738,29 +1738,29 @@ func TestDefaultClientFactory(t *testing.T) {
 // mockNextDNSClient is a test mock for the NextDNS client
 type mockNextDNSClient struct {
 	// Call tracking
-	createProfileCalled          bool
-	getProfileCalled             bool
-	updateProfileCalled          bool
-	deleteProfileCalled          bool
-	updateSecurityCalled         bool
-	updatePrivacyCalled          bool
-	updateParentalControlCalled  bool
-	updateSettingsCalled         bool
-	syncDenylistCalled           bool
-	syncAllowlistCalled          bool
-	syncSecurityTLDsCalled       bool
-	syncPrivacyBlocklistsCalled  bool
-	syncPrivacyNativesCalled     bool
+	createProfileCalled         bool
+	getProfileCalled            bool
+	updateProfileCalled         bool
+	deleteProfileCalled         bool
+	updateSecurityCalled        bool
+	updatePrivacyCalled         bool
+	updateParentalControlCalled bool
+	updateSettingsCalled        bool
+	syncDenylistCalled          bool
+	syncAllowlistCalled         bool
+	syncSecurityTLDsCalled      bool
+	syncPrivacyBlocklistsCalled bool
+	syncPrivacyNativesCalled    bool
 
 	// Captured values
-	createdProfileName      string
-	deletedProfileID        string
-	securityConfig          *nextdns.SecurityConfig
-	privacyConfig           *nextdns.PrivacyConfig
-	parentalControlConfig   *nextdns.ParentalControlConfig
-	settingsConfig          *nextdns.SettingsConfig
-	blocklists              []string
-	natives                 []string
+	createdProfileName    string
+	deletedProfileID      string
+	securityConfig        *nextdns.SecurityConfig
+	privacyConfig         *nextdns.PrivacyConfig
+	parentalControlConfig *nextdns.ParentalControlConfig
+	settingsConfig        *nextdns.SettingsConfig
+	blocklists            []string
+	natives               []string
 
 	// Error injection
 	createProfileError error

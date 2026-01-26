@@ -3,7 +3,7 @@ package nextdns
 import (
 	"context"
 
-	"github.com/amalucelli/nextdns-go/nextdns"
+	"github.com/jacaudi/nextdns-go/nextdns"
 )
 
 // ClientInterface defines the interface for NextDNS operations

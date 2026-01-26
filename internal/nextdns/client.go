@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/amalucelli/nextdns-go/nextdns"
+	"github.com/jacaudi/nextdns-go/nextdns"
 	"github.com/jacaudi/nextdns-operator/internal/metrics"
 )
 
