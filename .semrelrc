@@ -1,0 +1,11 @@
+# Semantic Release Configuration
+# Uses go-semantic-release with Conventional Commits
+hooks:
+  post-changelog:
+    - |
+      # Update Helm chart version
+      if [ -f "chart/Chart.yaml" ]; then
+        sed -i "s/^version:.*/version: ${RELEASE_VERSION}/" chart/Chart.yaml
+        sed -i "s/^appVersion:.*/appVersion: \"${RELEASE_VERSION}\"/" chart/Chart.yaml
+        git add chart/Chart.yaml
+      fi

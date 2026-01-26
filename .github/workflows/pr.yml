@@ -1,0 +1,52 @@
+# Pull Request Validation
+# Fast feedback on PRs: lint and test only
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint:
+    name: Lint Code
+    uses: jacaudi/github-actions/.github/workflows/lint.yml@main
+    with:
+      yaml: true
+      helm: true
+      go: true
+      go-version: '1.23'
+      helm-chart-path: 'chart'
+
+  test:
+    name: Run Tests
+    uses: jacaudi/github-actions/.github/workflows/test.yml@main
+    with:
+      test-framework: 'go'
+      go-version: '1.23'
+      coverage: true
+      coverage-threshold: 80
+      test-args: './...'
+
+  # Verify Docker build works (but don't push)
+  docker-build-check:
+    name: Verify Container Builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: nextdns-operator:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
