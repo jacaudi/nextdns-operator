@@ -19,7 +19,7 @@ jobs:
       yaml: true
       helm: true
       go: true
-      go-version: '1.23'
+      go-version: '1.25'
       helm-chart-path: 'chart'
 
   test:
@@ -27,7 +27,7 @@ jobs:
     uses: jacaudi/github-actions/.github/workflows/test.yml@main
     with:
       test-framework: 'go'
-      go-version: '1.23'
+      go-version: '1.25'
       coverage: true
       coverage-threshold: 70
       test-packages: './internal/controller/... ./internal/nextdns/...'
@@ -78,3 +78,11 @@ jobs:
           else
             echo "No vulnerabilities found or scan failed" >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: trivy-results.txt
+          if-no-files-found: ignore
