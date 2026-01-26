@@ -104,8 +104,10 @@ func (r *NextDNSAllowlistReconciler) countActiveDomains(domains []nextdnsv1alpha
 }
 
 // findProfileReferences finds all profiles that reference this allowlist
+// Note: Searches cluster-wide to support cross-namespace references
 func (r *NextDNSAllowlistReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSAllowlist) ([]nextdnsv1alpha1.ResourceReference, error) {
 	var profiles nextdnsv1alpha1.NextDNSProfileList
+	// List all profiles cluster-wide to support cross-namespace references
 	if err := r.List(ctx, &profiles); err != nil {
 		return nil, err
 	}
@@ -147,7 +149,7 @@ func (r *NextDNSAllowlistReconciler) handleDeletion(ctx context.Context, list *n
 			Type:    "DeletionBlocked",
 			Status:  metav1.ConditionTrue,
 			Reason:  "InUseByProfiles",
-			Message: fmt.Sprintf("Cannot delete: used by profiles %v. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
+			Message: fmt.Sprintf("Cannot delete: used by profiles %s. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
 		})
 
 		// Update status and requeue

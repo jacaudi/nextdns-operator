@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -289,4 +290,119 @@ func TestNextDNSAllowlistReconciler_Reconcile(t *testing.T) {
 	inUseCond := meta.FindStatusCondition(updatedList.Status.Conditions, "InUse")
 	assert.NotNil(t, inUseCond)
 	assert.Equal(t, metav1.ConditionTrue, inUseCond.Status)
+}
+
+func TestNextDNSAllowlistReconciler_HandleDeletion(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = nextdnsv1alpha1.AddToScheme(scheme)
+
+	t.Run("deletion blocked when profiles reference list", func(t *testing.T) {
+		now := metav1.Now()
+		list := &nextdnsv1alpha1.NextDNSAllowlist{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "test-list",
+				Namespace:         "default",
+				Finalizers:        []string{AllowlistFinalizerName},
+				DeletionTimestamp: &now,
+			},
+			Spec: nextdnsv1alpha1.NextDNSAllowlistSpec{
+				Domains: []nextdnsv1alpha1.DomainEntry{
+					{Domain: "example.com"},
+				},
+			},
+			Status: nextdnsv1alpha1.NextDNSAllowlistStatus{
+				ProfileRefs: []nextdnsv1alpha1.ResourceReference{
+					{Name: "profile1", Namespace: "default"},
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(list).
+			WithStatusSubresource(&nextdnsv1alpha1.NextDNSAllowlist{}).
+			Build()
+
+		r := &NextDNSAllowlistReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+		}
+
+		req := ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "test-list",
+				Namespace: "default",
+			},
+		}
+
+		// Reconcile should block deletion
+		result, err := r.Reconcile(context.Background(), req)
+		assert.NoError(t, err)
+		assert.Equal(t, 30*time.Second, result.RequeueAfter)
+
+		// Verify DeletionBlocked condition is set
+		var updatedList nextdnsv1alpha1.NextDNSAllowlist
+		err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
+		assert.NoError(t, err)
+
+		deletionBlockedCond := meta.FindStatusCondition(updatedList.Status.Conditions, "DeletionBlocked")
+		assert.NotNil(t, deletionBlockedCond)
+		assert.Equal(t, metav1.ConditionTrue, deletionBlockedCond.Status)
+		assert.Equal(t, "InUseByProfiles", deletionBlockedCond.Reason)
+		assert.Contains(t, deletionBlockedCond.Message, "profile1")
+
+		// Finalizer should still be present
+		assert.Contains(t, updatedList.Finalizers, AllowlistFinalizerName)
+	})
+
+	t.Run("deletion allowed when no profiles reference list", func(t *testing.T) {
+		now := metav1.Now()
+		list := &nextdnsv1alpha1.NextDNSAllowlist{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "test-list",
+				Namespace:         "default",
+				Finalizers:        []string{AllowlistFinalizerName},
+				DeletionTimestamp: &now,
+			},
+			Spec: nextdnsv1alpha1.NextDNSAllowlistSpec{
+				Domains: []nextdnsv1alpha1.DomainEntry{
+					{Domain: "example.com"},
+				},
+			},
+			Status: nextdnsv1alpha1.NextDNSAllowlistStatus{
+				ProfileRefs: []nextdnsv1alpha1.ResourceReference{}, // No references
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(list).
+			WithStatusSubresource(&nextdnsv1alpha1.NextDNSAllowlist{}).
+			Build()
+
+		r := &NextDNSAllowlistReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+		}
+
+		req := ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "test-list",
+				Namespace: "default",
+			},
+		}
+
+		// Reconcile should allow deletion by removing finalizer
+		result, err := r.Reconcile(context.Background(), req)
+		assert.NoError(t, err)
+		assert.False(t, result.Requeue)
+		assert.Equal(t, time.Duration(0), result.RequeueAfter)
+
+		// After finalizer is removed, the resource will be deleted
+		// Verify we can't find it anymore (simulates successful deletion)
+		var updatedList nextdnsv1alpha1.NextDNSAllowlist
+		err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
+		assert.Error(t, err) // Resource should be gone
+		assert.True(t, client.IgnoreNotFound(err) == nil) // Should be NotFound error
+	})
 }
