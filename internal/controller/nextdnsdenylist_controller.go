@@ -47,7 +47,7 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Handle deletion
-	if !list.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !list.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, &list)
 	}
 

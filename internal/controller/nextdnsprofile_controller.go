@@ -83,7 +83,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Check if the resource is being deleted
-	if !profile.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !profile.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, profile)
 	}
 
