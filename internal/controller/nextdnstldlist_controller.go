@@ -27,7 +27,8 @@ const (
 // NextDNSTLDListReconciler reconciles a NextDNSTLDList object
 type NextDNSTLDListReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme     *runtime.Scheme
+	SyncPeriod time.Duration
 }
 
 // +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnstldlists,verbs=get;list;watch;create;update;patch;delete
@@ -83,7 +84,9 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Schedule next sync with jitter for drift detection
+	syncInterval := CalculateSyncInterval(r.SyncPeriod)
+	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

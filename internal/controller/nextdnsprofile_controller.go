@@ -52,6 +52,7 @@ type NextDNSProfileReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ClientFactory ClientFactory
+	SyncPeriod    time.Duration
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -164,7 +165,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		"denylistCount", len(resolvedLists.Denylist),
 		"tldCount", len(resolvedLists.TLDs))
 
-	return ctrl.Result{}, nil
+	// Schedule next sync with jitter for drift detection
+	syncInterval := CalculateSyncInterval(r.SyncPeriod)
+	if syncInterval > 0 {
+		logger.V(1).Info("Scheduling next drift detection sync", "interval", syncInterval)
+	}
+
+	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
 // handleDeletion handles the deletion of a NextDNSProfile

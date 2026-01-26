@@ -27,7 +27,8 @@ const (
 // NextDNSDenylistReconciler reconciles a NextDNSDenylist object
 type NextDNSDenylistReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme     *runtime.Scheme
+	SyncPeriod time.Duration
 }
 
 // +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists,verbs=get;list;watch;create;update;patch;delete
@@ -83,7 +84,9 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Schedule next sync with jitter for drift detection
+	syncInterval := CalculateSyncInterval(r.SyncPeriod)
+	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
