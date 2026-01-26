@@ -1,8 +1,9 @@
+---
 # Pull Request Validation
 # Fast feedback on PRs: lint, test, build, and scan
 name: PR Validation
 
-on:
+"on":
   pull_request:
     types: [opened, synchronize, reopened]
 

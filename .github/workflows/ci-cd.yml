@@ -1,8 +1,9 @@
+---
 # CI/CD Pipeline for NextDNS Operator
 # Runs linting, testing, container builds, and Helm chart publishing
 name: CI/CD
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:
