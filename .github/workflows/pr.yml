@@ -35,6 +35,7 @@ jobs:
   # Verify Docker build works (but don't push)
   docker-build-check:
     name: Verify Container Builds
+    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
