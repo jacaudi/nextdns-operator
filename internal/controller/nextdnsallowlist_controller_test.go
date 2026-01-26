@@ -5,10 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
@@ -206,4 +209,84 @@ func TestNextDNSAllowlistReconciler_findProfileReferences(t *testing.T) {
 			assert.ElementsMatch(t, tt.expected, refs)
 		})
 	}
+}
+
+func TestNextDNSAllowlistReconciler_Reconcile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = nextdnsv1alpha1.AddToScheme(scheme)
+
+	list := &nextdnsv1alpha1.NextDNSAllowlist{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-list",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSAllowlistSpec{
+			Domains: []nextdnsv1alpha1.DomainEntry{
+				{Domain: "example.com"},
+				{Domain: "test.com", Active: boolPtr(false)},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			AllowlistRefs: []nextdnsv1alpha1.ListReference{
+				{Name: "test-list"},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(list, profile).
+		WithStatusSubresource(&nextdnsv1alpha1.NextDNSAllowlist{}).
+		Build()
+
+	r := &NextDNSAllowlistReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-list",
+			Namespace: "default",
+		},
+	}
+
+	// First reconcile - should add finalizer
+	result, err := r.Reconcile(context.Background(), req)
+	assert.NoError(t, err)
+	assert.True(t, result.Requeue)
+
+	// Get updated list
+	var updatedList nextdnsv1alpha1.NextDNSAllowlist
+	err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
+	assert.NoError(t, err)
+	assert.Contains(t, updatedList.Finalizers, AllowlistFinalizerName)
+
+	// Second reconcile - should update status
+	result, err = r.Reconcile(context.Background(), req)
+	assert.NoError(t, err)
+	assert.False(t, result.Requeue)
+
+	// Verify status
+	err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, updatedList.Status.DomainCount) // Only 1 active
+	assert.Len(t, updatedList.Status.ProfileRefs, 1)
+	assert.Equal(t, "test-profile", updatedList.Status.ProfileRefs[0].Name)
+
+	// Check conditions
+	validCond := meta.FindStatusCondition(updatedList.Status.Conditions, "Valid")
+	assert.NotNil(t, validCond)
+	assert.Equal(t, metav1.ConditionTrue, validCond.Status)
+
+	inUseCond := meta.FindStatusCondition(updatedList.Status.Conditions, "InUse")
+	assert.NotNil(t, inUseCond)
+	assert.Equal(t, metav1.ConditionTrue, inUseCond.Status)
 }
