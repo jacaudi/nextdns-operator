@@ -1,0 +1,16 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 80
+    level: error
+  document-start:
+    level: warning
+  truthy:
+    level: warning
+
+ignore: |
+  chart/crds/
+  chart/templates/
+  config/
