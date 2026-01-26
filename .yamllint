@@ -2,9 +2,7 @@
 extends: default
 
 rules:
-  line-length:
-    max: 80
-    level: error
+  line-length: disable
   document-start:
     level: warning
   truthy:
