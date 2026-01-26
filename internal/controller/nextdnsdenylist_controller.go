@@ -1,0 +1,234 @@
+package controller
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+)
+
+const (
+	// DenylistFinalizerName is the finalizer added to NextDNSDenylist resources
+	DenylistFinalizerName = "nextdns.jacaudi.com/denylist-finalizer"
+)
+
+// NextDNSDenylistReconciler reconciles a NextDNSDenylist object
+type NextDNSDenylistReconciler struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
+
+// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists/finalizers,verbs=update
+
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Fetch the denylist
+	var list nextdnsv1alpha1.NextDNSDenylist
+	if err := r.Get(ctx, req.NamespacedName, &list); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Handle deletion
+	if !list.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, &list)
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&list, DenylistFinalizerName) {
+		logger.Info("Adding finalizer to NextDNSDenylist")
+		controllerutil.AddFinalizer(&list, DenylistFinalizerName)
+		if err := r.Update(ctx, &list); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Count active domains
+	count := r.countActiveDomains(list.Spec.Domains)
+
+	// Find profile references
+	profileRefs, err := r.findProfileReferences(ctx, &list)
+	if err != nil {
+		logger.Error(err, "Failed to find profile references")
+		return ctrl.Result{}, err
+	}
+
+	// Update status
+	list.Status.DomainCount = count
+	list.Status.ProfileRefs = profileRefs
+
+	// Set conditions
+	r.setConditions(&list, count, len(profileRefs))
+
+	// Update status subresource
+	if err := r.Status().Update(ctx, &list); err != nil {
+		logger.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *NextDNSDenylistReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nextdnsv1alpha1.NextDNSDenylist{}).
+		Watches(
+			&nextdnsv1alpha1.NextDNSProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.findDenylistsForProfile),
+		).
+		Complete(r)
+}
+
+// findDenylistsForProfile returns reconcile requests for all denylists referenced by a profile
+func (r *NextDNSDenylistReconciler) findDenylistsForProfile(ctx context.Context, obj client.Object) []reconcile.Request {
+	profile, ok := obj.(*nextdnsv1alpha1.NextDNSProfile)
+	if !ok {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, ref := range profile.Spec.DenylistRefs {
+		namespace := ref.Namespace
+		if namespace == "" {
+			namespace = profile.Namespace
+		}
+
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      ref.Name,
+				Namespace: namespace,
+			},
+		})
+	}
+
+	return requests
+}
+
+// countActiveDomains counts the number of domains where Active is nil or true
+func (r *NextDNSDenylistReconciler) countActiveDomains(domains []nextdnsv1alpha1.DomainEntry) int {
+	count := 0
+	for _, domain := range domains {
+		// If Active is nil or true, the domain is active
+		if domain.Active == nil || *domain.Active {
+			count++
+		}
+	}
+	return count
+}
+
+// findProfileReferences finds all profiles that reference this denylist
+// Note: Searches cluster-wide to support cross-namespace references
+func (r *NextDNSDenylistReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSDenylist) ([]nextdnsv1alpha1.ResourceReference, error) {
+	var profiles nextdnsv1alpha1.NextDNSProfileList
+	// List all profiles cluster-wide to support cross-namespace references
+	if err := r.List(ctx, &profiles); err != nil {
+		return nil, err
+	}
+
+	var refs []nextdnsv1alpha1.ResourceReference
+
+	for _, profile := range profiles.Items {
+		for _, ref := range profile.Spec.DenylistRefs {
+			// Determine the namespace of the referenced list
+			namespace := ref.Namespace
+			if namespace == "" {
+				namespace = profile.Namespace
+			}
+
+			// Check if this profile references our list
+			if ref.Name == list.Name && namespace == list.Namespace {
+				refs = append(refs, nextdnsv1alpha1.ResourceReference{
+					Name:      profile.Name,
+					Namespace: profile.Namespace,
+				})
+				break
+			}
+		}
+	}
+
+	return refs, nil
+}
+
+// handleDeletion handles the deletion of an denylist
+func (r *NextDNSDenylistReconciler) handleDeletion(ctx context.Context, list *nextdnsv1alpha1.NextDNSDenylist) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Check if any profiles reference this list
+	if len(list.Status.ProfileRefs) > 0 {
+		logger.Info("Deletion blocked - list is in use", "profileRefs", list.Status.ProfileRefs)
+
+		// Set DeletionBlocked condition
+		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
+			Type:    "DeletionBlocked",
+			Status:  metav1.ConditionTrue,
+			Reason:  "InUseByProfiles",
+			Message: fmt.Sprintf("Cannot delete: used by profiles %s. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
+		})
+
+		// Update status and requeue
+		if err := r.Status().Update(ctx, list); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// No references - safe to delete
+	logger.Info("Removing finalizer from NextDNSDenylist")
+	controllerutil.RemoveFinalizer(list, DenylistFinalizerName)
+	if err := r.Update(ctx, list); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// setConditions sets status conditions based on current state
+func (r *NextDNSDenylistReconciler) setConditions(list *nextdnsv1alpha1.NextDNSDenylist, count, refCount int) {
+	// Valid condition
+	meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
+		Type:    "Valid",
+		Status:  metav1.ConditionTrue,
+		Reason:  "AllDomainsValid",
+		Message: fmt.Sprintf("All %d domains are valid", count),
+	})
+
+	// InUse condition
+	if refCount > 0 {
+		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
+			Type:    "InUse",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ReferencedByProfiles",
+			Message: fmt.Sprintf("Used by %d profile(s)", refCount),
+		})
+	} else {
+		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
+			Type:    "InUse",
+			Status:  metav1.ConditionFalse,
+			Reason:  "NotReferenced",
+			Message: "Not used by any profiles",
+		})
+	}
+
+	// Clear DeletionBlocked if it was set
+	if refCount == 0 {
+		meta.RemoveStatusCondition(&list.Status.Conditions, "DeletionBlocked")
+	}
+}
