@@ -19,7 +19,41 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 | `NextDNSDenylist` | Reusable list of blocked domains |
 | `NextDNSTLDList` | Reusable list of blocked TLDs |
 
+## Installation
+
+### Helm (Recommended)
+
+```bash
+# Install from OCI registry
+helm install nextdns-operator oci://ghcr.io/jacaudi/charts/nextdns-operator \
+  --version 0.1.0 \
+  --namespace nextdns-operator-system \
+  --create-namespace
+```
+
+### Kubectl
+
+```bash
+# Install CRDs
+kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/download/install.yaml
+
+# Deploy operator
+kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/download/operator.yaml
+```
+
+### Local Development
+
+```bash
+# Install CRDs
+make install
+
+# Run locally
+make run
+```
+
 ## Quick Start
+
+Once the operator is installed:
 
 1. **Create a Secret with your NextDNS API key:**
 
@@ -28,6 +62,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: nextdns-credentials
+  namespace: default
 type: Opaque
 stringData:
   api-key: "your-nextdns-api-key"
@@ -40,6 +75,7 @@ apiVersion: nextdns.io/v1alpha1
 kind: NextDNSProfile
 metadata:
   name: my-profile
+  namespace: default
 spec:
   name: "My DNS Profile"
   credentialsRef:
@@ -47,6 +83,19 @@ spec:
   security:
     aiThreatDetection: true
     googleSafeBrowsing: true
+```
+
+3. **Apply the resources:**
+
+```bash
+kubectl apply -f secret.yaml
+kubectl apply -f profile.yaml
+```
+
+4. **Check the status:**
+
+```bash
+kubectl get nextdnsprofile my-profile -o yaml
 ```
 
 ## Examples
@@ -57,30 +106,6 @@ See the [config/samples](config/samples/) directory for complete examples:
 - [NextDNSAllowlist](config/samples/nextdns_v1alpha1_nextdnsallowlist.yaml) - Shared allowlist for business services
 - [NextDNSDenylist](config/samples/nextdns_v1alpha1_nextdnsdenylist.yaml) - Shared denylist for malicious domains
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
-
-## Installation
-
-### Helm (Recommended)
-
-The chart is based on the [bjw-s app-template](https://bjw-s-labs.github.io/helm-charts/docs/app-template/).
-
-```bash
-# Add the bjw-s Helm repository (required dependency)
-helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
-
-# Install with Helm
-helm install nextdns-operator ./chart
-```
-
-### Manual
-
-```bash
-# Install CRDs
-make install
-
-# Run the operator
-make run
-```
 
 ## Configuration
 
