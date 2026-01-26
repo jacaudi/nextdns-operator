@@ -34,3 +34,6 @@ bin/
 
 # Planning documents
 docs/plans/
+
+# Journals
+.private-journal/**
