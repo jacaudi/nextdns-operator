@@ -62,13 +62,19 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: nextdns-operator:pr-${{ github.event.pull_request.number }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: 'table'
+          output: 'trivy-results.txt'
           severity: 'CRITICAL,HIGH'
 
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Output scan results to summary
         if: always()
-        continue-on-error: true
-        with:
-          sarif_file: 'trivy-results.sarif'
+        run: |
+          echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f trivy-results.txt ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat trivy-results.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No vulnerabilities found or scan failed" >> $GITHUB_STEP_SUMMARY
+          fi
