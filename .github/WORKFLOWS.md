@@ -21,6 +21,7 @@ Fast feedback on pull requests:
 - Linting (YAML, Helm, Go)
 - Testing with coverage
 - Docker build verification (no push)
+- Security scanning with Trivy (CRITICAL, HIGH vulnerabilities)
 
 ## Setup Requirements
 
