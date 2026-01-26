@@ -1,5 +1,5 @@
 # CI/CD Pipeline for NextDNS Operator
-# Runs linting, testing, builds containers, publishes Helm charts, and creates releases
+# Runs linting, testing, container builds, and Helm chart publishing
 name: CI/CD
 
 on:
@@ -66,7 +66,8 @@ jobs:
       image-name: ${{ github.repository }}
       platforms: 'linux/amd64,linux/arm64'
       tags: |
-        ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
+        ghcr.io/${{ github.repository }}:${{
+          needs.release.outputs.new-release-version }}
         ghcr.io/${{ github.repository }}:latest
 
   # Scan container image for vulnerabilities
@@ -78,7 +79,9 @@ jobs:
       contents: read
       security-events: write
     with:
-      image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
+      image-ref: >-
+        ghcr.io/${{ github.repository }}:${{
+          needs.release.outputs.new-release-version }}
       image-digest: ${{ needs.docker.outputs.digest }}
       severity: 'CRITICAL,HIGH'
       fail-on-issues: false
