@@ -1,0 +1,82 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - nextdns.io
+  resources:
+  - nextdnsallowlists
+  - nextdnsdenylists
+  - nextdnstldlists
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - nextdns.io
+  resources:
+  - nextdnsprofiles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - nextdns.io
+  resources:
+  - nextdnsprofiles/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - nextdns.io
+  resources:
+  - nextdnsprofiles/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - nextdns.jacaudi.com
+  resources:
+  - nextdnsallowlists
+  - nextdnsdenylists
+  - nextdnstldlists
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - nextdns.jacaudi.com
+  resources:
+  - nextdnsallowlists/finalizers
+  - nextdnsdenylists/finalizers
+  - nextdnstldlists/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - nextdns.jacaudi.com
+  resources:
+  - nextdnsallowlists/status
+  - nextdnsdenylists/status
+  - nextdnstldlists/status
+  verbs:
+  - get
+  - patch
+  - update
