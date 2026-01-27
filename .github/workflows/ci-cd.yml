@@ -1,0 +1,102 @@
+---
+# CI/CD Pipeline for NextDNS Operator
+# Runs linting, testing, container builds, and Helm chart publishing
+name: CI/CD
+
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # Lint YAML, Helm charts, and Go code
+  lint:
+    uses: jacaudi/github-actions/.github/workflows/lint.yml@main
+    permissions:
+      contents: read
+    with:
+      yaml: true
+      helm: true
+      go: true
+      go-version: '1.25'
+      helm-chart-path: 'chart'
+
+  # Run Go tests with coverage
+  test:
+    uses: jacaudi/github-actions/.github/workflows/test.yml@main
+    permissions:
+      contents: read
+    with:
+      test-framework: 'go'
+      go-version: '1.25'
+      coverage: true
+      coverage-threshold: 70
+      test-packages: './internal/controller/... ./internal/nextdns/...'
+
+  # Create semantic version and GitHub release (main branch only)
+  release:
+    needs: [lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: jacaudi/github-actions/.github/workflows/semantic-release.yml@main
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    with:
+      use-github-app: true
+      allow-initial-development-versions: true
+    secrets:
+      app-id: ${{ secrets.APP_ID }}
+      app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  # Build multi-arch container images
+  docker:
+    needs: [release]
+    if: needs.release.outputs.new-release-published == 'true'
+    uses: jacaudi/github-actions/.github/workflows/docker-build.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image-name: ${{ github.repository }}
+      platforms: 'linux/amd64,linux/arm64'
+      tags: |
+        ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
+        ghcr.io/${{ github.repository }}:latest
+
+  # Scan container image for vulnerabilities
+  scan:
+    needs: [release, docker]
+    if: needs.release.outputs.new-release-published == 'true'
+    uses: jacaudi/github-actions/.github/workflows/image-scan.yml@main
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
+      image-digest: ${{ needs.docker.outputs.digest }}
+      severity: 'CRITICAL,HIGH'
+      fail-on-issues: false
+
+  # Publish Helm chart to OCI registry
+  helm:
+    needs: [release, scan]
+    if: needs.release.outputs.new-release-published == 'true'
+    uses: jacaudi/github-actions/.github/workflows/helm-publish.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      chart-name: nextdns-operator
+      chart-path: chart
+      repository: ${{ github.repository_owner }}/charts
+      version: ${{ needs.release.outputs.new-release-version }}
+      app-version: ${{ needs.release.outputs.new-release-version }}
+      registry: ghcr.io
+      registry-username: ${{ github.repository_owner }}

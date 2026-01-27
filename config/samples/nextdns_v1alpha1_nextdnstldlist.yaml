@@ -1,0 +1,22 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSTLDList
+metadata:
+  name: high-risk-tlds
+  namespace: default
+spec:
+  description: "TLDs with high abuse rates"
+  tlds:
+    - tld: "tk"
+      reason: "Free TLD - high abuse rate"
+    - tld: "ml"
+      reason: "Free TLD - high abuse rate"
+    - tld: "ga"
+      reason: "Free TLD - high abuse rate"
+    - tld: "cf"
+      reason: "Free TLD - high abuse rate"
+    - tld: "gq"
+      reason: "Free TLD - high abuse rate"
+    - tld: "xyz"
+      reason: "Commonly used in phishing"
+    - tld: "top"
+      reason: "High spam/malware rate"

@@ -1,0 +1,18 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSDenylist
+metadata:
+  name: security-denylist
+  namespace: default
+spec:
+  description: "Known malicious and unwanted domains"
+  domains:
+    - domain: "malware.example.com"
+      reason: "Known malware distribution"
+    - domain: "*.phishing-site.net"
+      reason: "Phishing campaign"
+    - domain: "ads.trackernetwork.com"
+      reason: "Advertising tracker"
+    - domain: "cryptominer.bad.com"
+      reason: "Cryptomining scripts"
+    - domain: "*.malicious-cdn.com"
+      reason: "Malicious content delivery"
