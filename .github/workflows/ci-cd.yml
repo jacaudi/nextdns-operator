@@ -82,7 +82,7 @@ jobs:
       image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
       image-digest: ${{ needs.docker.outputs.digest }}
       severity: 'CRITICAL,HIGH'
-      fail-on-issues: false
+      exit-code: 0
 
   # Publish Helm chart to OCI registry
   helm:
