@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "post-changelog": [
+      "if [ -f \"chart/Chart.yaml\" ]; then\n  sed -i \"s/^version:.*/version: ${RELEASE_VERSION}/\" chart/Chart.yaml\n  sed -i \"s/^appVersion:.*/appVersion: \\\"${RELEASE_VERSION}\\\"/\" chart/Chart.yaml\n  git add chart/Chart.yaml\nfi"
+    ]
+  }
+}
