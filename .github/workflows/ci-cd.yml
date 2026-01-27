@@ -96,6 +96,5 @@ jobs:
       chart-path: chart
       repository: ${{ github.repository_owner }}/charts
       version: ${{ needs.release.outputs.new-release-version }}
-      app-version: ${{ needs.release.outputs.new-release-version }}
       registry: ghcr.io
       registry-username: ${{ github.repository_owner }}
