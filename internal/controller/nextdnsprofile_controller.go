@@ -246,17 +246,17 @@ func (r *NextDNSProfileReconciler) getAPIKey(ctx context.Context, profile *nextd
 
 // ResolvedLists contains the merged lists from all sources
 type ResolvedLists struct {
-	Allowlist      []string
-	Denylist       []string
-	TLDs           []string
+	Allowlist      []nextdns.DomainEntry
+	Denylist       []nextdns.DomainEntry
+	TLDs           []string // TLDs stay as strings - NextDNS API doesn't support active field for TLDs
 	ResourceStatus *nextdnsv1alpha1.ReferencedResources
 }
 
 // resolveListReferences resolves all list references and merges with inline lists
 func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile) (*ResolvedLists, error) {
 	resolved := &ResolvedLists{
-		Allowlist: make([]string, 0),
-		Denylist:  make([]string, 0),
+		Allowlist: make([]nextdns.DomainEntry, 0),
+		Denylist:  make([]nextdns.DomainEntry, 0),
 		TLDs:      make([]string, 0),
 		ResourceStatus: &nextdnsv1alpha1.ReferencedResources{
 			Allowlists: make([]nextdnsv1alpha1.ReferencedResourceStatus, 0),
@@ -279,8 +279,12 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 
 		count := 0
 		for _, entry := range allowlist.Spec.Domains {
-			if entry.Active == nil || *entry.Active {
-				resolved.Allowlist = append(resolved.Allowlist, entry.Domain)
+			active := entry.Active == nil || *entry.Active
+			resolved.Allowlist = append(resolved.Allowlist, nextdns.DomainEntry{
+				Domain: entry.Domain,
+				Active: active,
+			})
+			if active {
 				count++
 			}
 		}
@@ -295,9 +299,11 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 
 	// Add inline allowlist entries
 	for _, entry := range profile.Spec.Allowlist {
-		if entry.Active == nil || *entry.Active {
-			resolved.Allowlist = append(resolved.Allowlist, entry.Domain)
-		}
+		active := entry.Active == nil || *entry.Active
+		resolved.Allowlist = append(resolved.Allowlist, nextdns.DomainEntry{
+			Domain: entry.Domain,
+			Active: active,
+		})
 	}
 
 	// Resolve denylist references
@@ -314,8 +320,12 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 
 		count := 0
 		for _, entry := range denylist.Spec.Domains {
-			if entry.Active == nil || *entry.Active {
-				resolved.Denylist = append(resolved.Denylist, entry.Domain)
+			active := entry.Active == nil || *entry.Active
+			resolved.Denylist = append(resolved.Denylist, nextdns.DomainEntry{
+				Domain: entry.Domain,
+				Active: active,
+			})
+			if active {
 				count++
 			}
 		}
@@ -330,9 +340,11 @@ func (r *NextDNSProfileReconciler) resolveListReferences(ctx context.Context, pr
 
 	// Add inline denylist entries
 	for _, entry := range profile.Spec.Denylist {
-		if entry.Active == nil || *entry.Active {
-			resolved.Denylist = append(resolved.Denylist, entry.Domain)
-		}
+		active := entry.Active == nil || *entry.Active
+		resolved.Denylist = append(resolved.Denylist, nextdns.DomainEntry{
+			Domain: entry.Domain,
+			Active: active,
+		})
 	}
 
 	// Resolve TLD list references
@@ -515,26 +527,14 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 
 	// Sync denylist
 	if len(lists.Denylist) > 0 {
-		// Convert []string to []DomainEntry (all active by default)
-		// TODO: Task #6 will update ResolvedLists to use []DomainEntry directly
-		denylistEntries := make([]nextdns.DomainEntry, len(lists.Denylist))
-		for i, domain := range lists.Denylist {
-			denylistEntries[i] = nextdns.DomainEntry{Domain: domain, Active: true}
-		}
-		if err := client.SyncDenylist(ctx, profileID, denylistEntries); err != nil {
+		if err := client.SyncDenylist(ctx, profileID, lists.Denylist); err != nil {
 			return fmt.Errorf("failed to sync denylist: %w", err)
 		}
 	}
 
 	// Sync allowlist
 	if len(lists.Allowlist) > 0 {
-		// Convert []string to []DomainEntry (all active by default)
-		// TODO: Task #6 will update ResolvedLists to use []DomainEntry directly
-		allowlistEntries := make([]nextdns.DomainEntry, len(lists.Allowlist))
-		for i, domain := range lists.Allowlist {
-			allowlistEntries[i] = nextdns.DomainEntry{Domain: domain, Active: true}
-		}
-		if err := client.SyncAllowlist(ctx, profileID, allowlistEntries); err != nil {
+		if err := client.SyncAllowlist(ctx, profileID, lists.Allowlist); err != nil {
 			return fmt.Errorf("failed to sync allowlist: %w", err)
 		}
 	}
