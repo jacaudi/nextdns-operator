@@ -528,7 +528,13 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 
 	// Sync allowlist
 	if len(lists.Allowlist) > 0 {
-		if err := client.SyncAllowlist(ctx, profileID, lists.Allowlist); err != nil {
+		// Convert []string to []DomainEntry (all active by default)
+		// TODO: Task #6 will update ResolvedLists to use []DomainEntry directly
+		allowlistEntries := make([]nextdns.DomainEntry, len(lists.Allowlist))
+		for i, domain := range lists.Allowlist {
+			allowlistEntries[i] = nextdns.DomainEntry{Domain: domain, Active: true}
+		}
+		if err := client.SyncAllowlist(ctx, profileID, allowlistEntries); err != nil {
 			return fmt.Errorf("failed to sync allowlist: %w", err)
 		}
 	}

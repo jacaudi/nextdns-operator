@@ -31,7 +31,7 @@ type ClientInterface interface {
 
 	// List operations
 	SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error
-	SyncAllowlist(ctx context.Context, profileID string, domains []string) error
+	SyncAllowlist(ctx context.Context, profileID string, entries []DomainEntry) error
 	SyncSecurityTLDs(ctx context.Context, profileID string, tlds []string) error
 	GetDenylist(ctx context.Context, profileID string) ([]*nextdns.Denylist, error)
 	GetAllowlist(ctx context.Context, profileID string) ([]*nextdns.Allowlist, error)
