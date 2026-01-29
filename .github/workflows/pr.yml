@@ -33,15 +33,11 @@ jobs:
       coverage-threshold: 70
       test-packages: './internal/controller/... ./internal/nextdns/...'
 
-  # Verify Docker build works (but don't push)
-  docker-build-check:
-    name: Verify Container Builds
+  # Build multi-arch container images natively (no push)
+  docker-amd64:
+    name: Build Container (amd64)
     needs: [lint, test]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,32 +45,33 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build (no push)
+      - name: Build (amd64)
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64
           push: false
           load: true
-          tags: nextdns-operator:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: nextdns-operator:pr-${{ github.event.pull_request.number }}-amd64
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
 
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: nextdns-operator:pr-${{ github.event.pull_request.number }}
+          image-ref: nextdns-operator:pr-${{ github.event.pull_request.number }}-amd64
           format: 'table'
-          output: 'trivy-results.txt'
+          output: 'trivy-results-amd64.txt'
           severity: 'CRITICAL,HIGH'
 
       - name: Output scan results to summary
         if: always()
         run: |
-          echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Security Scan Results (amd64)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f trivy-results.txt ]; then
+          if [ -f trivy-results-amd64.txt ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat trivy-results.txt >> $GITHUB_STEP_SUMMARY
+            cat trivy-results-amd64.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           else
             echo "No vulnerabilities found or scan failed" >> $GITHUB_STEP_SUMMARY
@@ -84,6 +81,57 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-scan-results
-          path: trivy-results.txt
+          name: trivy-scan-results-amd64
+          path: trivy-results-amd64.txt
+          if-no-files-found: ignore
+
+  docker-arm64:
+    name: Build Container (arm64)
+    needs: [lint, test]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: nextdns-operator:pr-${{ github.event.pull_request.number }}-arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: nextdns-operator:pr-${{ github.event.pull_request.number }}-arm64
+          format: 'table'
+          output: 'trivy-results-arm64.txt'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Output scan results to summary
+        if: always()
+        run: |
+          echo "## Security Scan Results (arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f trivy-results-arm64.txt ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat trivy-results-arm64.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No vulnerabilities found or scan failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results-arm64
+          path: trivy-results-arm64.txt
           if-no-files-found: ignore
