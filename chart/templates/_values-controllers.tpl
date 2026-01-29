@@ -7,6 +7,8 @@ controllers:
     type: deployment
     replicas: {{ .Values.controller.replicas }}
     strategy: {{ .Values.controller.strategy }}
+    serviceAccount:
+      identifier: main
     containers:
       main:
         image:
