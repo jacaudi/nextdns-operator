@@ -364,8 +364,8 @@ func (m *MockClient) GetParentalControl(ctx context.Context, profileID string) (
 }
 
 // SyncDenylist syncs mock denylist
-func (m *MockClient) SyncDenylist(ctx context.Context, profileID string, domains []string) error {
-	m.recordCall("SyncDenylist", profileID, domains)
+func (m *MockClient) SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error {
+	m.recordCall("SyncDenylist", profileID, entries)
 	if m.SyncDenylistError != nil {
 		return m.SyncDenylistError
 	}
@@ -374,8 +374,8 @@ func (m *MockClient) SyncDenylist(ctx context.Context, profileID string, domains
 	defer m.mu.Unlock()
 
 	var denylist []*nextdns.Denylist
-	for _, d := range domains {
-		denylist = append(denylist, &nextdns.Denylist{ID: d, Active: true})
+	for _, entry := range entries {
+		denylist = append(denylist, &nextdns.Denylist{ID: entry.Domain, Active: entry.Active})
 	}
 	m.Denylists[profileID] = denylist
 

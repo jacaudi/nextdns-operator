@@ -515,7 +515,13 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 
 	// Sync denylist
 	if len(lists.Denylist) > 0 {
-		if err := client.SyncDenylist(ctx, profileID, lists.Denylist); err != nil {
+		// Convert []string to []DomainEntry (all active by default)
+		// TODO: Task #6 will update ResolvedLists to use []DomainEntry directly
+		denylistEntries := make([]nextdns.DomainEntry, len(lists.Denylist))
+		for i, domain := range lists.Denylist {
+			denylistEntries[i] = nextdns.DomainEntry{Domain: domain, Active: true}
+		}
+		if err := client.SyncDenylist(ctx, profileID, denylistEntries); err != nil {
 			return fmt.Errorf("failed to sync denylist: %w", err)
 		}
 	}

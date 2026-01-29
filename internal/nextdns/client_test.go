@@ -255,13 +255,26 @@ func TestMockClient_UpdatePrivacy(t *testing.T) {
 func TestMockClient_SyncDenylist(t *testing.T) {
 	mock := NewMockClient()
 
-	domains := []string{"bad1.com", "bad2.com", "bad3.com"}
-	err := mock.SyncDenylist(context.Background(), "profile-1", domains)
+	entries := []DomainEntry{
+		{Domain: "bad1.com", Active: true},
+		{Domain: "bad2.com", Active: true},
+		{Domain: "bad3.com", Active: false},
+	}
+	err := mock.SyncDenylist(context.Background(), "profile-1", entries)
 	require.NoError(t, err)
 
 	denylist, err := mock.GetDenylist(context.Background(), "profile-1")
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(denylist))
+
+	// Verify active states are preserved
+	activeCount := 0
+	for _, entry := range denylist {
+		if entry.Active {
+			activeCount++
+		}
+	}
+	assert.Equal(t, 2, activeCount)
 }
 
 func TestMockClient_SyncAllowlist(t *testing.T) {
@@ -368,7 +381,7 @@ func TestMockClient_ErrorInjection(t *testing.T) {
 
 	// Test error injection for SyncDenylist
 	mock.SyncDenylistError = assert.AnError
-	err = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
+	err = mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{{Domain: "bad.com", Active: true}})
 	assert.Error(t, err)
 }
 
@@ -377,7 +390,7 @@ func TestMockClient_Reset(t *testing.T) {
 
 	// Create some data
 	_, _ = mock.CreateProfile(context.Background(), "Test")
-	_ = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
+	_ = mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{{Domain: "bad.com", Active: true}})
 	mock.CreateProfileError = assert.AnError
 
 	// Reset
@@ -418,7 +431,7 @@ func TestMockClient_ThreadSafety(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
 			_, _ = mock.CreateProfile(context.Background(), "Test")
-			_ = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com"})
+			_ = mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{{Domain: "bad.com", Active: true}})
 			mock.GetCallCount("CreateProfile")
 			done <- true
 		}(i)
@@ -528,7 +541,10 @@ func TestMockClient_GetDenylist(t *testing.T) {
 	assert.Nil(t, denylist)
 
 	// Sync some domains
-	err = mock.SyncDenylist(context.Background(), "profile-1", []string{"bad.com", "evil.com"})
+	err = mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{
+		{Domain: "bad.com", Active: true},
+		{Domain: "evil.com", Active: true},
+	})
 	require.NoError(t, err)
 
 	// Now get it
@@ -715,7 +731,7 @@ func TestMockClient_EmptyListsSync(t *testing.T) {
 	mock := NewMockClient()
 
 	// Sync empty lists - should not panic
-	err := mock.SyncDenylist(context.Background(), "profile-1", []string{})
+	err := mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{})
 	require.NoError(t, err)
 
 	err = mock.SyncAllowlist(context.Background(), "profile-1", []string{})
