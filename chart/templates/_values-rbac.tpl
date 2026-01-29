@@ -19,10 +19,16 @@ rbac:
         - apiGroups: ["nextdns.io"]
           resources: ["nextdnsprofiles/finalizers"]
           verbs: ["update"]
-        # NextDNS List CRD permissions (read-only)
+        # NextDNS List CRD permissions
         - apiGroups: ["nextdns.io"]
           resources: ["nextdnsallowlists", "nextdnsdenylists", "nextdnstldlists"]
-          verbs: ["get", "list", "watch"]
+          verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+        - apiGroups: ["nextdns.io"]
+          resources: ["nextdnsallowlists/status", "nextdnsdenylists/status", "nextdnstldlists/status"]
+          verbs: ["get", "patch", "update"]
+        - apiGroups: ["nextdns.io"]
+          resources: ["nextdnsallowlists/finalizers", "nextdnsdenylists/finalizers", "nextdnstldlists/finalizers"]
+          verbs: ["update"]
         # Secret access for API credentials
         - apiGroups: [""]
           resources: ["secrets"]
