@@ -30,7 +30,7 @@ type ClientInterface interface {
 	GetParentalControl(ctx context.Context, profileID string) (*nextdns.ParentalControl, error)
 
 	// List operations
-	SyncDenylist(ctx context.Context, profileID string, domains []string) error
+	SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error
 	SyncAllowlist(ctx context.Context, profileID string, domains []string) error
 	SyncSecurityTLDs(ctx context.Context, profileID string, tlds []string) error
 	GetDenylist(ctx context.Context, profileID string) ([]*nextdns.Denylist, error)

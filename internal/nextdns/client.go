@@ -219,7 +219,7 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 }
 
 // SyncDenylist synchronizes the denylist for a profile
-func (c *Client) SyncDenylist(ctx context.Context, profileID string, domains []string) error {
+func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error {
 	start := time.Now()
 
 	// Get current denylist
@@ -241,10 +241,10 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, domains []s
 
 	// Build the desired denylist
 	var denylist []*nextdns.Denylist
-	for _, domain := range domains {
+	for _, entry := range entries {
 		denylist = append(denylist, &nextdns.Denylist{
-			ID:     domain,
-			Active: true,
+			ID:     entry.Domain,
+			Active: entry.Active,
 		})
 	}
 

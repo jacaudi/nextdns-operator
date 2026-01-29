@@ -1849,7 +1849,7 @@ func (m *mockNextDNSClient) GetParentalControl(ctx context.Context, profileID st
 	return &sdknextdns.ParentalControl{}, nil
 }
 
-func (m *mockNextDNSClient) SyncDenylist(ctx context.Context, profileID string, domains []string) error {
+func (m *mockNextDNSClient) SyncDenylist(ctx context.Context, profileID string, entries []nextdns.DomainEntry) error {
 	m.syncDenylistCalled = true
 	return nil
 }
