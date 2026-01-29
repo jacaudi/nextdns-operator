@@ -154,9 +154,15 @@ func TestParseRetentionDays(t *testing.T) {
 
 func TestResolvedLists(t *testing.T) {
 	resolved := &ResolvedLists{
-		Allowlist: []string{"good.com", "allowed.com"},
-		Denylist:  []string{"bad.com", "blocked.com"},
-		TLDs:      []string{"xyz", "tk"},
+		Allowlist: []nextdns.DomainEntry{
+			{Domain: "good.com", Active: true},
+			{Domain: "allowed.com", Active: true},
+		},
+		Denylist: []nextdns.DomainEntry{
+			{Domain: "bad.com", Active: true},
+			{Domain: "blocked.com", Active: true},
+		},
+		TLDs: []string{"xyz", "tk"},
 		ResourceStatus: &nextdnsv1alpha1.ReferencedResources{
 			Allowlists: []nextdnsv1alpha1.ReferencedResourceStatus{
 				{Name: "allowlist-1", Namespace: "default", Ready: true, Count: 2},
@@ -399,20 +405,20 @@ func TestResolveListReferences(t *testing.T) {
 	resolved, err := reconciler.resolveListReferences(ctx, profile)
 	require.NoError(t, err)
 
-	// Check allowlist (2 active from ref + 1 inline)
-	assert.Equal(t, 3, len(resolved.Allowlist))
-	assert.Contains(t, resolved.Allowlist, "allowed1.com")
-	assert.Contains(t, resolved.Allowlist, "allowed2.com")
-	assert.Contains(t, resolved.Allowlist, "inline-allowed.com")
-	assert.NotContains(t, resolved.Allowlist, "inactive.com")
+	// Check allowlist (3 from ref including inactive + 1 inline)
+	assert.Equal(t, 4, len(resolved.Allowlist))
+	assertContainsDomainEntry(t, resolved.Allowlist, "allowed1.com", true)
+	assertContainsDomainEntry(t, resolved.Allowlist, "allowed2.com", true)
+	assertContainsDomainEntry(t, resolved.Allowlist, "inactive.com", false)
+	assertContainsDomainEntry(t, resolved.Allowlist, "inline-allowed.com", true)
 
 	// Check denylist (2 from ref + 1 inline)
 	assert.Equal(t, 3, len(resolved.Denylist))
-	assert.Contains(t, resolved.Denylist, "blocked1.com")
-	assert.Contains(t, resolved.Denylist, "blocked2.com")
-	assert.Contains(t, resolved.Denylist, "inline-blocked.com")
+	assertContainsDomainEntry(t, resolved.Denylist, "blocked1.com", true)
+	assertContainsDomainEntry(t, resolved.Denylist, "blocked2.com", true)
+	assertContainsDomainEntry(t, resolved.Denylist, "inline-blocked.com", true)
 
-	// Check TLDs (2 active from ref)
+	// Check TLDs (TLDs stay as strings, only active ones are included since NextDNS API doesn't support active field for TLDs)
 	assert.Equal(t, 2, len(resolved.TLDs))
 	assert.Contains(t, resolved.TLDs, "xyz")
 	assert.Contains(t, resolved.TLDs, "tk")
@@ -505,7 +511,7 @@ func TestResolveListReferences_CrossNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(resolved.Allowlist))
-	assert.Contains(t, resolved.Allowlist, "shared.com")
+	assertContainsDomainEntry(t, resolved.Allowlist, "shared.com", true)
 	assert.Equal(t, "shared", resolved.ResourceStatus.Allowlists[0].Namespace)
 }
 
@@ -1063,8 +1069,8 @@ func TestSyncWithNextDNS_CreateNewProfile(t *testing.T) {
 	}
 
 	lists := &ResolvedLists{
-		Allowlist: []string{"allowed.com"},
-		Denylist:  []string{"blocked.com"},
+		Allowlist: []nextdns.DomainEntry{{Domain: "allowed.com", Active: true}},
+		Denylist:  []nextdns.DomainEntry{{Domain: "blocked.com", Active: true}},
 		TLDs:      []string{"xyz"},
 	}
 
@@ -1115,8 +1121,8 @@ func TestSyncWithNextDNS_AdoptExistingProfile(t *testing.T) {
 	}
 
 	lists := &ResolvedLists{
-		Allowlist: []string{},
-		Denylist:  []string{},
+		Allowlist: []nextdns.DomainEntry{},
+		Denylist:  []nextdns.DomainEntry{},
 		TLDs:      []string{},
 	}
 
