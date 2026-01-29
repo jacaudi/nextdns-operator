@@ -383,8 +383,8 @@ func (m *MockClient) SyncDenylist(ctx context.Context, profileID string, entries
 }
 
 // SyncAllowlist syncs mock allowlist
-func (m *MockClient) SyncAllowlist(ctx context.Context, profileID string, domains []string) error {
-	m.recordCall("SyncAllowlist", profileID, domains)
+func (m *MockClient) SyncAllowlist(ctx context.Context, profileID string, entries []DomainEntry) error {
+	m.recordCall("SyncAllowlist", profileID, entries)
 	if m.SyncAllowlistError != nil {
 		return m.SyncAllowlistError
 	}
@@ -393,8 +393,8 @@ func (m *MockClient) SyncAllowlist(ctx context.Context, profileID string, domain
 	defer m.mu.Unlock()
 
 	var allowlist []*nextdns.Allowlist
-	for _, d := range domains {
-		allowlist = append(allowlist, &nextdns.Allowlist{ID: d, Active: true})
+	for _, entry := range entries {
+		allowlist = append(allowlist, &nextdns.Allowlist{ID: entry.Domain, Active: entry.Active})
 	}
 	m.Allowlists[profileID] = allowlist
 

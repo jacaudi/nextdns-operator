@@ -263,15 +263,15 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []D
 }
 
 // SyncAllowlist synchronizes the allowlist for a profile
-func (c *Client) SyncAllowlist(ctx context.Context, profileID string, domains []string) error {
+func (c *Client) SyncAllowlist(ctx context.Context, profileID string, entries []DomainEntry) error {
 	start := time.Now()
 
 	// Build the desired allowlist
 	var allowlist []*nextdns.Allowlist
-	for _, domain := range domains {
+	for _, entry := range entries {
 		allowlist = append(allowlist, &nextdns.Allowlist{
-			ID:     domain,
-			Active: true,
+			ID:     entry.Domain,
+			Active: entry.Active,
 		})
 	}
 

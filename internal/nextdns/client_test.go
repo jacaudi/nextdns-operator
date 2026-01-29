@@ -280,13 +280,26 @@ func TestMockClient_SyncDenylist(t *testing.T) {
 func TestMockClient_SyncAllowlist(t *testing.T) {
 	mock := NewMockClient()
 
-	domains := []string{"good1.com", "good2.com"}
-	err := mock.SyncAllowlist(context.Background(), "profile-1", domains)
+	entries := []DomainEntry{
+		{Domain: "good1.com", Active: true},
+		{Domain: "good2.com", Active: true},
+		{Domain: "good3.com", Active: false},
+	}
+	err := mock.SyncAllowlist(context.Background(), "profile-1", entries)
 	require.NoError(t, err)
 
 	allowlist, err := mock.GetAllowlist(context.Background(), "profile-1")
 	require.NoError(t, err)
-	assert.Equal(t, 2, len(allowlist))
+	assert.Equal(t, 3, len(allowlist))
+
+	// Verify active states are preserved
+	activeCount := 0
+	for _, entry := range allowlist {
+		if entry.Active {
+			activeCount++
+		}
+	}
+	assert.Equal(t, 2, activeCount)
 }
 
 func TestMockClient_SyncSecurityTLDs(t *testing.T) {
@@ -567,7 +580,10 @@ func TestMockClient_GetAllowlist(t *testing.T) {
 	assert.Nil(t, allowlist)
 
 	// Sync some domains
-	err = mock.SyncAllowlist(context.Background(), "profile-1", []string{"good.com", "trusted.com"})
+	err = mock.SyncAllowlist(context.Background(), "profile-1", []DomainEntry{
+		{Domain: "good.com", Active: true},
+		{Domain: "trusted.com", Active: true},
+	})
 	require.NoError(t, err)
 
 	// Now get it
@@ -699,7 +715,7 @@ func TestMockClient_SyncAllowlist_Error(t *testing.T) {
 	mock := NewMockClient()
 	mock.SyncAllowlistError = assert.AnError
 
-	err := mock.SyncAllowlist(context.Background(), "profile-1", []string{"good.com"})
+	err := mock.SyncAllowlist(context.Background(), "profile-1", []DomainEntry{{Domain: "good.com", Active: true}})
 	assert.Error(t, err)
 }
 
@@ -734,7 +750,7 @@ func TestMockClient_EmptyListsSync(t *testing.T) {
 	err := mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{})
 	require.NoError(t, err)
 
-	err = mock.SyncAllowlist(context.Background(), "profile-1", []string{})
+	err = mock.SyncAllowlist(context.Background(), "profile-1", []DomainEntry{})
 	require.NoError(t, err)
 
 	err = mock.SyncSecurityTLDs(context.Background(), "profile-1", []string{})
