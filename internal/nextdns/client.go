@@ -80,6 +80,12 @@ type SettingsConfig struct {
 	Web3            bool
 }
 
+// DomainEntry represents a domain with its active state for syncing to NextDNS
+type DomainEntry struct {
+	Domain string
+	Active bool
+}
+
 // CreateProfile creates a new NextDNS profile and returns the profile ID
 func (c *Client) CreateProfile(ctx context.Context, name string) (string, error) {
 	start := time.Now()

@@ -730,3 +730,20 @@ func TestMockClient_EmptyListsSync(t *testing.T) {
 	err = mock.SyncPrivacyNatives(context.Background(), "profile-1", []string{})
 	require.NoError(t, err)
 }
+
+func TestDomainEntryType(t *testing.T) {
+	entry := DomainEntry{
+		Domain: "example.com",
+		Active: true,
+	}
+	assert.Equal(t, "example.com", entry.Domain)
+	assert.True(t, entry.Active)
+
+	// Test inactive entry
+	inactiveEntry := DomainEntry{
+		Domain: "blocked.com",
+		Active: false,
+	}
+	assert.Equal(t, "blocked.com", inactiveEntry.Domain)
+	assert.False(t, inactiveEntry.Active)
+}
