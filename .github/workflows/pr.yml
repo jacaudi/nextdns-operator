@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload scan results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: trivy-scan-results-amd64
           path: trivy-results-amd64.txt
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload scan results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: trivy-scan-results-arm64
           path: trivy-results-arm64.txt
