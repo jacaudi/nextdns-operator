@@ -8,7 +8,7 @@ require (
 	github.com/jacaudi/nextdns-go v0.2.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/stretchr/testify v1.8.4
-	k8s.io/api v0.30.0
+	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.30.0
 	k8s.io/client-go v0.30.0
 	sigs.k8s.io/controller-runtime v0.18.0
