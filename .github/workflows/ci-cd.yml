@@ -89,9 +89,58 @@ jobs:
       severity: 'CRITICAL,HIGH'
       exit-code: 0
 
+  # Validate chart and container version alignment before publishing
+  validate-versions:
+    name: Validate Version Alignment
+    needs: [release, docker]
+    if: needs.release.outputs.new-release-published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate version formats
+        env:
+          RELEASE_VERSION: ${{ needs.release.outputs.new-release-version }}
+        run: |
+          set -euo pipefail
+
+          echo "Release version: ${RELEASE_VERSION}"
+
+          # Verify no double v prefix
+          if [[ "${RELEASE_VERSION}" == vv* ]]; then
+            echo "::error::Double 'v' prefix detected: ${RELEASE_VERSION}"
+            exit 1
+          fi
+
+          # Container and chart should use the same version tag
+          echo "Container tag: ${RELEASE_VERSION}"
+          echo "Chart appVersion: ${RELEASE_VERSION}"
+
+          echo "Version validation passed"
+
+      - name: Verify container image exists
+        env:
+          RELEASE_VERSION: ${{ needs.release.outputs.new-release-version }}
+        run: |
+          set -euo pipefail
+
+          IMAGE="ghcr.io/${{ github.repository }}:${RELEASE_VERSION}"
+          echo "Checking for container image: ${IMAGE}"
+
+          if ! docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "::error::Container image not found: ${IMAGE}"
+            exit 1
+          fi
+
+          echo "Container image verified: ${IMAGE}"
+
   # Publish Helm chart to OCI registry
   helm:
-    needs: [release, scan]
+    needs: [release, scan, validate-versions]
     if: needs.release.outputs.new-release-published == 'true'
     uses: jacaudi/github-actions/.github/workflows/helm-publish.yml@v0.6.0
     permissions:
@@ -102,5 +151,6 @@ jobs:
       chart-path: chart
       repository: ${{ github.repository_owner }}/charts
       version: ${{ needs.release.outputs.new-release-version }}
+      app-version: ${{ needs.release.outputs.new-release-version }}
       registry: ghcr.io
       registry-username: ${{ github.repository_owner }}
