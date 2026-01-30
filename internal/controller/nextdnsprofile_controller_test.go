@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	sdknextdns "github.com/jacaudi/nextdns-go/nextdns"
 	"github.com/stretchr/testify/assert"
@@ -776,7 +777,7 @@ func TestReconcile_AddFinalizer(t *testing.T) {
 	})
 
 	assert.NoError(t, err)
-	assert.True(t, result.Requeue)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
 
 	// Verify finalizer was added
 	updatedProfile := &nextdnsv1alpha1.NextDNSProfile{}

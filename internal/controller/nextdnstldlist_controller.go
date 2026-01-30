@@ -58,7 +58,7 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := r.Update(ctx, &list); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Count active TLDs
