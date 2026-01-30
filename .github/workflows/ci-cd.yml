@@ -8,6 +8,11 @@ name: CI/CD
     branches: [main]
   workflow_dispatch:
 
+# Only allow one release at a time - queue subsequent runs
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write
