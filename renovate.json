@@ -2,5 +2,17 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate Dashboard",
-  "postUpdateOptions": ["gomodTidy"]
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "description": "Group Kubernetes client libraries (must be updated together)",
+      "matchPackagePatterns": ["^k8s.io/"],
+      "groupName": "kubernetes-client-libraries"
+    },
+    {
+      "description": "Group controller-runtime with k8s libraries",
+      "matchPackagePatterns": ["^sigs.k8s.io/controller-runtime$"],
+      "groupName": "kubernetes-client-libraries"
+    }
+  ]
 }
