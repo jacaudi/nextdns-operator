@@ -263,7 +263,7 @@ func TestNextDNSTLDListReconciler_Reconcile(t *testing.T) {
 	// First reconcile - should add finalizer
 	result, err := r.Reconcile(context.Background(), req)
 	assert.NoError(t, err)
-	assert.True(t, result.Requeue)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
 
 	// Get updated list
 	var updatedList nextdnsv1alpha1.NextDNSTLDList
@@ -274,7 +274,7 @@ func TestNextDNSTLDListReconciler_Reconcile(t *testing.T) {
 	// Second reconcile - should update status
 	result, err = r.Reconcile(context.Background(), req)
 	assert.NoError(t, err)
-	assert.False(t, result.Requeue)
+	assert.Equal(t, time.Duration(0), result.RequeueAfter)
 
 	// Verify status
 	err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedList)
@@ -396,7 +396,6 @@ func TestNextDNSTLDListReconciler_HandleDeletion(t *testing.T) {
 		// Reconcile should allow deletion by removing finalizer
 		result, err := r.Reconcile(context.Background(), req)
 		assert.NoError(t, err)
-		assert.False(t, result.Requeue)
 		assert.Equal(t, time.Duration(0), result.RequeueAfter)
 
 		// After finalizer is removed, the resource will be deleted

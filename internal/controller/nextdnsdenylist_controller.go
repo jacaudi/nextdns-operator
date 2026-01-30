@@ -58,7 +58,7 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err := r.Update(ctx, &list); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Count active domains
