@@ -31,9 +31,9 @@ type NextDNSDenylistReconciler struct {
 	SyncPeriod time.Duration
 }
 
-// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=nextdns.jacaudi.com,resources=nextdnsdenylists/finalizers,verbs=update
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsdenylists,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsdenylists/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsdenylists/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

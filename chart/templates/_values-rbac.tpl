@@ -48,42 +48,7 @@ rbac:
           resources:
             - nextdnsallowlists
             - nextdnsdenylists
-            - nextdnstldlists
-          verbs:
-            - get
-            - list
-            - watch
-        - apiGroups:
-            - nextdns.io
-          resources:
             - nextdnsprofiles
-          verbs:
-            - create
-            - delete
-            - get
-            - list
-            - patch
-            - update
-            - watch
-        - apiGroups:
-            - nextdns.io
-          resources:
-            - nextdnsprofiles/finalizers
-          verbs:
-            - update
-        - apiGroups:
-            - nextdns.io
-          resources:
-            - nextdnsprofiles/status
-          verbs:
-            - get
-            - patch
-            - update
-        - apiGroups:
-            - nextdns.jacaudi.com
-          resources:
-            - nextdnsallowlists
-            - nextdnsdenylists
             - nextdnstldlists
           verbs:
             - create
@@ -94,18 +59,20 @@ rbac:
             - update
             - watch
         - apiGroups:
-            - nextdns.jacaudi.com
+            - nextdns.io
           resources:
             - nextdnsallowlists/finalizers
             - nextdnsdenylists/finalizers
+            - nextdnsprofiles/finalizers
             - nextdnstldlists/finalizers
           verbs:
             - update
         - apiGroups:
-            - nextdns.jacaudi.com
+            - nextdns.io
           resources:
             - nextdnsallowlists/status
             - nextdnsdenylists/status
+            - nextdnsprofiles/status
             - nextdnstldlists/status
           verbs:
             - get
