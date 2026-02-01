@@ -115,3 +115,45 @@ func TestWrapErrorNil(t *testing.T) {
 		t.Errorf("WrapError(nil) should return nil, got %v", wrapped)
 	}
 }
+
+func TestHasErrorCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		code     string
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			code:     "not_found",
+			expected: false,
+		},
+		{
+			name:     "regular error",
+			err:      errors.New("some error"),
+			code:     "not_found",
+			expected: false,
+		},
+		{
+			name:     "wrapped regular error",
+			err:      WrapError("operation failed", errors.New("some error")),
+			code:     "duplicate",
+			expected: false,
+		},
+		{
+			name:     "empty code",
+			err:      errors.New("some error"),
+			code:     "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasErrorCode(tt.err, tt.code); got != tt.expected {
+				t.Errorf("HasErrorCode() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
