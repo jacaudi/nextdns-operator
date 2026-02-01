@@ -2223,3 +2223,68 @@ func TestReconcileConfigMapUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "newid456", configMap.Data["NEXTDNS_PROFILE_ID"])
 }
+
+func TestFindProfilesForConfigMap(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+			UID:       "profile-uid-123",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-credentials",
+			},
+		},
+	}
+
+	// ConfigMap owned by the profile
+	ownedConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile-nextdns",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: nextdnsv1alpha1.GroupVersion.String(),
+					Kind:       "NextDNSProfile",
+					Name:       "test-profile",
+					UID:        "profile-uid-123",
+				},
+			},
+		},
+	}
+
+	// ConfigMap not owned by any profile
+	unownedConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-configmap",
+			Namespace: "default",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	t.Run("owned ConfigMap triggers reconcile", func(t *testing.T) {
+		requests := reconciler.findProfilesForConfigMap(ctx, ownedConfigMap)
+		require.Len(t, requests, 1)
+		assert.Equal(t, "test-profile", requests[0].Name)
+		assert.Equal(t, "default", requests[0].Namespace)
+	})
+
+	t.Run("unowned ConfigMap does not trigger reconcile", func(t *testing.T) {
+		requests := reconciler.findProfilesForConfigMap(ctx, unownedConfigMap)
+		assert.Empty(t, requests)
+	})
+}
