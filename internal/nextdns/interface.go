@@ -37,6 +37,12 @@ type ClientInterface interface {
 	GetAllowlist(ctx context.Context, profileID string) ([]*nextdns.Allowlist, error)
 	GetSecurityTLDs(ctx context.Context, profileID string) ([]*nextdns.SecurityTlds, error)
 
+	// Individual list entry operations (for optimized sync)
+	AddAllowlistEntry(ctx context.Context, profileID string, domain string, active bool) error
+	DeleteAllowlistEntry(ctx context.Context, profileID string, domain string) error
+	AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error
+	DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error
+
 	// Settings operations
 	UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error
 }
