@@ -59,3 +59,9 @@ spec:
       ecs: true
       cacheBoost: true
       cnameFlattening: true
+
+  # Optional: Create ConfigMap with DNS connection details
+  # Useful for configuring DNS clients or injecting into pods
+  configMapRef:
+    enabled: true
+    # name: custom-config-name  # defaults to "<profile-name>-nextdns"

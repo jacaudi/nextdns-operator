@@ -9,6 +9,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - **Full NextDNS API Coverage**: Security, privacy, parental control, and settings configuration
 - **Profile Lifecycle Management**: Create new profiles or adopt existing ones; operator-created profiles are deleted on resource removal
 - **Drift Detection**: Automatic periodic reconciliation (default: 1 hour) catches manual changes made outside the operator
+- **ConfigMap Export**: Optionally create a ConfigMap with DNS connection details for easy integration with other applications
 
 ## Custom Resources
 
@@ -108,6 +109,46 @@ See the [config/samples](config/samples/) directory for complete examples:
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
 
 ## Configuration
+
+### ConfigMap Export
+
+Optionally create a ConfigMap containing your profile's DNS connection details. This is useful for configuring DNS clients (CoreDNS, Blocky, etc.) or injecting connection details into pods.
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  name: my-profile
+spec:
+  name: "My Profile"
+  credentialsRef:
+    name: nextdns-credentials
+  configMapRef:
+    enabled: true
+    name: my-dns-config  # optional, defaults to "<profile-name>-nextdns"
+```
+
+The created ConfigMap contains:
+
+```yaml
+data:
+  NEXTDNS_PROFILE_ID: "abc123"
+  NEXTDNS_DOT: "abc123.dns.nextdns.io"
+  NEXTDNS_DOH: "https://dns.nextdns.io/abc123"
+  NEXTDNS_DOQ: "quic://abc123.dns.nextdns.io"
+  NEXTDNS_IPV4_1: "45.90.28.0"
+  NEXTDNS_IPV4_2: "45.90.30.0"
+  NEXTDNS_IPV6_1: "2a07:a8c0::"
+  NEXTDNS_IPV6_2: "2a07:a8c1::"
+```
+
+Use it in your pods with `envFrom`:
+
+```yaml
+envFrom:
+  - configMapRef:
+      name: my-dns-config
+```
 
 ### Drift Detection
 
