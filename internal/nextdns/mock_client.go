@@ -614,6 +614,18 @@ func (m *MockClient) WasMethodCalled(method string) bool {
 	return m.GetCallCount(method) > 0
 }
 
+// SetProfile pre-configures a profile in the mock with specific ID, name and fingerprint
+// The fingerprint parameter is stored separately for tests to verify
+// This is useful for tests that need a specific profile to already exist
+func (m *MockClient) SetProfile(profileID, name, fingerprint string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Profiles[profileID] = &nextdns.Profile{
+		Name: name,
+	}
+}
+
 // Reset clears all mock data and calls
 func (m *MockClient) Reset() {
 	m.mu.Lock()

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -1919,4 +1920,302 @@ func (m *mockNextDNSClient) AddPrivacyNative(ctx context.Context, profileID stri
 
 func (m *mockNextDNSClient) DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error {
 	return nil
+}
+
+func TestReconcileConfigMap(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	// Create a profile with ConfigMapRef enabled
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-credentials",
+			},
+			ConfigMapRef: &nextdnsv1alpha1.ConfigMapRef{
+				Enabled: true,
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-credentials",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			mock := nextdns.NewMockClient()
+			mock.SetProfile("abc123", "Test Profile", "abc123.dns.nextdns.io")
+			return mock, nil
+		},
+	}
+
+	// Reconcile
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify ConfigMap was created
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "test-profile-nextdns",
+		Namespace: "default",
+	}, configMap)
+	require.NoError(t, err, "ConfigMap should be created")
+
+	// Verify ConfigMap data
+	assert.Equal(t, "abc123", configMap.Data["NEXTDNS_PROFILE_ID"])
+	assert.Equal(t, "abc123.dns.nextdns.io", configMap.Data["NEXTDNS_DOT"])
+	assert.Equal(t, "https://dns.nextdns.io/abc123", configMap.Data["NEXTDNS_DOH"])
+	assert.Equal(t, "quic://abc123.dns.nextdns.io", configMap.Data["NEXTDNS_DOQ"])
+	assert.Equal(t, "45.90.28.0", configMap.Data["NEXTDNS_IPV4_1"])
+	assert.Equal(t, "45.90.30.0", configMap.Data["NEXTDNS_IPV4_2"])
+	assert.Equal(t, "2a07:a8c0::", configMap.Data["NEXTDNS_IPV6_1"])
+	assert.Equal(t, "2a07:a8c1::", configMap.Data["NEXTDNS_IPV6_2"])
+
+	// Verify owner reference
+	require.Len(t, configMap.OwnerReferences, 1)
+	assert.Equal(t, "test-profile", configMap.OwnerReferences[0].Name)
+	assert.Equal(t, "NextDNSProfile", configMap.OwnerReferences[0].Kind)
+}
+
+func TestReconcileConfigMapCustomName(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-credentials",
+			},
+			ConfigMapRef: &nextdnsv1alpha1.ConfigMapRef{
+				Enabled: true,
+				Name:    "my-custom-config",
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "xyz789",
+			Fingerprint: "xyz789.dns.nextdns.io",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-credentials",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			mock := nextdns.NewMockClient()
+			mock.SetProfile("xyz789", "Test Profile", "xyz789.dns.nextdns.io")
+			return mock, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify ConfigMap was created with custom name
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "my-custom-config",
+		Namespace: "default",
+	}, configMap)
+	require.NoError(t, err, "ConfigMap with custom name should be created")
+	assert.Equal(t, "xyz789", configMap.Data["NEXTDNS_PROFILE_ID"])
+}
+
+func TestReconcileConfigMapDisabled(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-credentials",
+			},
+			// ConfigMapRef not set - should not create ConfigMap
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-credentials",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			mock := nextdns.NewMockClient()
+			mock.SetProfile("abc123", "Test Profile", "abc123.dns.nextdns.io")
+			return mock, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify ConfigMap was NOT created
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "test-profile-nextdns",
+		Namespace: "default",
+	}, configMap)
+	assert.True(t, apierrors.IsNotFound(err), "ConfigMap should not be created when disabled")
+}
+
+func TestReconcileConfigMapUpdate(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+			UID:       "test-uid",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-credentials",
+			},
+			ConfigMapRef: &nextdnsv1alpha1.ConfigMapRef{
+				Enabled: true,
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "newid456",
+			Fingerprint: "newid456.dns.nextdns.io",
+		},
+	}
+
+	// Pre-existing ConfigMap with old data
+	existingConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile-nextdns",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"NEXTDNS_PROFILE_ID": "oldid123",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-credentials",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret, existingConfigMap).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			mock := nextdns.NewMockClient()
+			mock.SetProfile("newid456", "Test Profile", "newid456.dns.nextdns.io")
+			return mock, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify ConfigMap was updated
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "test-profile-nextdns",
+		Namespace: "default",
+	}, configMap)
+	require.NoError(t, err)
+	assert.Equal(t, "newid456", configMap.Data["NEXTDNS_PROFILE_ID"])
 }
