@@ -155,6 +155,12 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "Success", "All settings applied")
 	r.setCondition(profile, ConditionTypeReady, metav1.ConditionTrue, "Synced", "Profile successfully synced with NextDNS")
 
+	// Reconcile ConfigMap if enabled
+	if err := r.reconcileConfigMap(ctx, profile); err != nil {
+		logger.Error(err, "Failed to reconcile ConfigMap")
+		// Don't fail the reconciliation for ConfigMap errors, just log
+	}
+
 	if err := r.Status().Update(ctx, profile); err != nil {
 		logger.Error(err, "Failed to update status")
 		return ctrl.Result{}, err
@@ -548,6 +554,87 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 	}
 
 	logger.Info("Successfully synced with NextDNS API", "profileID", profileID)
+	return nil
+}
+
+// reconcileConfigMap creates or updates the ConfigMap with connection details
+func (r *NextDNSProfileReconciler) reconcileConfigMap(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile) error {
+	// Skip if ConfigMapRef is not enabled
+	if profile.Spec.ConfigMapRef == nil || !profile.Spec.ConfigMapRef.Enabled {
+		return nil
+	}
+
+	// Skip if we don't have a profile ID yet
+	if profile.Status.ProfileID == "" {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+
+	// Determine ConfigMap name
+	configMapName := profile.Spec.ConfigMapRef.Name
+	if configMapName == "" {
+		configMapName = profile.Name + "-nextdns"
+	}
+
+	profileID := profile.Status.ProfileID
+
+	// Build ConfigMap data
+	data := map[string]string{
+		"NEXTDNS_PROFILE_ID": profileID,
+		"NEXTDNS_DOT":        fmt.Sprintf("%s.dns.nextdns.io", profileID),
+		"NEXTDNS_DOH":        fmt.Sprintf("https://dns.nextdns.io/%s", profileID),
+		"NEXTDNS_DOQ":        fmt.Sprintf("quic://%s.dns.nextdns.io", profileID),
+		"NEXTDNS_IPV4_1":     "45.90.28.0",
+		"NEXTDNS_IPV4_2":     "45.90.30.0",
+		"NEXTDNS_IPV6_1":     "2a07:a8c0::",
+		"NEXTDNS_IPV6_2":     "2a07:a8c1::",
+	}
+
+	// Check if ConfigMap already exists
+	existingConfigMap := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      configMapName,
+		Namespace: profile.Namespace,
+	}, existingConfigMap)
+
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get ConfigMap: %w", err)
+		}
+
+		// Create new ConfigMap
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: profile.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					*metav1.NewControllerRef(profile, nextdnsv1alpha1.GroupVersion.WithKind("NextDNSProfile")),
+				},
+			},
+			Data: data,
+		}
+
+		if err := r.Create(ctx, configMap); err != nil {
+			return fmt.Errorf("failed to create ConfigMap: %w", err)
+		}
+		logger.Info("Created ConfigMap with connection details", "configMap", configMapName)
+		return nil
+	}
+
+	// Update existing ConfigMap
+	existingConfigMap.Data = data
+	// Ensure owner reference is set
+	if len(existingConfigMap.OwnerReferences) == 0 {
+		existingConfigMap.OwnerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(profile, nextdnsv1alpha1.GroupVersion.WithKind("NextDNSProfile")),
+		}
+	}
+
+	if err := r.Update(ctx, existingConfigMap); err != nil {
+		return fmt.Errorf("failed to update ConfigMap: %w", err)
+	}
+	logger.V(1).Info("Updated ConfigMap with connection details", "configMap", configMapName)
 	return nil
 }
 

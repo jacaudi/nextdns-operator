@@ -1929,8 +1929,9 @@ func TestReconcileConfigMap(t *testing.T) {
 	// Create a profile with ConfigMapRef enabled
 	profile := &nextdnsv1alpha1.NextDNSProfile{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-profile",
-			Namespace: "default",
+			Name:       "test-profile",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
 		},
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Test Profile",
@@ -2012,8 +2013,9 @@ func TestReconcileConfigMapCustomName(t *testing.T) {
 
 	profile := &nextdnsv1alpha1.NextDNSProfile{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-profile",
-			Namespace: "default",
+			Name:       "test-profile",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
 		},
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Test Profile",
@@ -2081,8 +2083,9 @@ func TestReconcileConfigMapDisabled(t *testing.T) {
 
 	profile := &nextdnsv1alpha1.NextDNSProfile{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-profile",
-			Namespace: "default",
+			Name:       "test-profile",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
 		},
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Test Profile",
@@ -2146,9 +2149,10 @@ func TestReconcileConfigMapUpdate(t *testing.T) {
 
 	profile := &nextdnsv1alpha1.NextDNSProfile{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-profile",
-			Namespace: "default",
-			UID:       "test-uid",
+			Name:       "test-profile",
+			Namespace:  "default",
+			UID:        "test-uid",
+			Finalizers: []string{FinalizerName},
 		},
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Test Profile",
