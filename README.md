@@ -187,6 +187,14 @@ make test
 make build
 ```
 
+## Acknowledgements
+
+This project stands on the shoulders of giants:
+
+- **[bjw-s](https://github.com/bjw-s)** - For the excellent [helm-charts](https://github.com/bjw-s-labs/helm-charts) library and app-template that powers the Helm chart for this operator. The common library pattern has been invaluable.
+
+- **[amalucelli](https://github.com/amalucelli)** - For creating the original [nextdns-go](https://github.com/amalucelli/nextdns-go) client library that this operator's fork is based on. The solid foundation made building this operator possible.
+
 ## License
 
 Apache 2.0
