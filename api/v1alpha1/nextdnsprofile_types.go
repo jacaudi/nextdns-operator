@@ -4,6 +4,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ConfigMapRef configures the optional ConfigMap containing connection details
+type ConfigMapRef struct {
+	// Enabled enables creation of the ConfigMap
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Name is the name of the ConfigMap to create
+	// If not specified, defaults to "<profile-name>-nextdns"
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
 // NextDNSProfileSpec defines the desired state of NextDNSProfile
 type NextDNSProfileSpec struct {
 	// Name is the human-readable name shown in NextDNS dashboard
@@ -75,6 +88,10 @@ type NextDNSProfileSpec struct {
 	// Settings configures logging, performance, and other options
 	// +optional
 	Settings *SettingsSpec `json:"settings,omitempty"`
+
+	// ConfigMapRef configures optional ConfigMap creation with connection details
+	// +optional
+	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"`
 }
 
 // SecuritySpec defines security/threat protection settings
