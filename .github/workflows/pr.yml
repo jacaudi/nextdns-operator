@@ -23,6 +23,31 @@ jobs:
       go-version: '1.25'
       helm-chart-path: 'chart'
 
+  verify-helm-rbac:
+    name: Verify Helm RBAC Sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Check RBAC sync
+        run: |
+          # Generate fresh RBAC from kubebuilder output
+          ./hack/generate-helm-rbac.sh
+
+          # Check if there are any differences
+          if ! git diff --exit-code chart/templates/_values-rbac.tpl; then
+            echo "::error::Helm RBAC template is out of sync with config/rbac/role.yaml"
+            echo "Run 'make generate-helm-rbac' and commit the changes"
+            exit 1
+          fi
+          echo "Helm RBAC template is in sync"
+
   test:
     name: Run Tests
     uses: jacaudi/github-actions/.github/workflows/test.yml@v0.7.0
