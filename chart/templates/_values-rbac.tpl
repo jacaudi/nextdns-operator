@@ -1,5 +1,7 @@
 {{/*
-Build RBAC structure from flat values
+RBAC configuration for nextdns-operator
+AUTO-GENERATED from config/rbac/role.yaml - DO NOT EDIT MANUALLY
+Run 'make generate-helm-rbac' to regenerate after updating kubebuilder markers.
 */}}
 {{- define "nextdns-operator.values.rbac" -}}
 {{- if .Values.rbac.enabled }}
@@ -9,38 +11,94 @@ rbac:
       enabled: true
       type: ClusterRole
       rules:
-        # NextDNS Profile CRD permissions
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsprofiles"]
-          verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsprofiles/status"]
-          verbs: ["get", "patch", "update"]
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsprofiles/finalizers"]
-          verbs: ["update"]
-        # NextDNS List CRD permissions
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsallowlists", "nextdnsdenylists", "nextdnstldlists"]
-          verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsallowlists/status", "nextdnsdenylists/status", "nextdnstldlists/status"]
-          verbs: ["get", "patch", "update"]
-        - apiGroups: ["nextdns.io"]
-          resources: ["nextdnsallowlists/finalizers", "nextdnsdenylists/finalizers", "nextdnstldlists/finalizers"]
-          verbs: ["update"]
-        # Secret access for API credentials
-        - apiGroups: [""]
-          resources: ["secrets"]
-          verbs: ["get", "list", "watch"]
-        # Events for status reporting
-        - apiGroups: [""]
-          resources: ["events"]
-          verbs: ["create", "patch"]
-        # Leader election
-        - apiGroups: ["coordination.k8s.io"]
-          resources: ["leases"]
-          verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+        - apiGroups:
+            - ""
+          resources:
+            - configmaps
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - ""
+          resources:
+            - secrets
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - nextdns.io
+          resources:
+            - nextdnsallowlists
+            - nextdnsdenylists
+            - nextdnstldlists
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - nextdns.io
+          resources:
+            - nextdnsprofiles
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - nextdns.io
+          resources:
+            - nextdnsprofiles/finalizers
+          verbs:
+            - update
+        - apiGroups:
+            - nextdns.io
+          resources:
+            - nextdnsprofiles/status
+          verbs:
+            - get
+            - patch
+            - update
+        - apiGroups:
+            - nextdns.jacaudi.com
+          resources:
+            - nextdnsallowlists
+            - nextdnsdenylists
+            - nextdnstldlists
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - nextdns.jacaudi.com
+          resources:
+            - nextdnsallowlists/finalizers
+            - nextdnsdenylists/finalizers
+            - nextdnstldlists/finalizers
+          verbs:
+            - update
+        - apiGroups:
+            - nextdns.jacaudi.com
+          resources:
+            - nextdnsallowlists/status
+            - nextdnsdenylists/status
+            - nextdnstldlists/status
+          verbs:
+            - get
+            - patch
+            - update
   bindings:
     main:
       enabled: true
