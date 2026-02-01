@@ -33,6 +33,10 @@ rbac:
         - apiGroups: [""]
           resources: ["secrets"]
           verbs: ["get", "list", "watch"]
+        # ConfigMap access for connection details export
+        - apiGroups: [""]
+          resources: ["configmaps"]
+          verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
         # Events for status reporting
         - apiGroups: [""]
           resources: ["events"]
