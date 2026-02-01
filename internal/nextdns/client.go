@@ -289,6 +289,80 @@ func (c *Client) SyncAllowlist(ctx context.Context, profileID string, entries []
 	return nil
 }
 
+// AddAllowlistEntry adds a single entry to the allowlist.
+func (c *Client) AddAllowlistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	start := time.Now()
+
+	request := &nextdns.AddAllowlistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+		Active:    &active,
+	}
+
+	err := c.client.Allowlist.Add(ctx, request)
+	metrics.RecordAPIRequest("AddAllowlistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add allowlist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// DeleteAllowlistEntry removes a single entry from the allowlist.
+func (c *Client) DeleteAllowlistEntry(ctx context.Context, profileID string, domain string) error {
+	start := time.Now()
+
+	request := &nextdns.DeleteAllowlistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+	}
+
+	err := c.client.Allowlist.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteAllowlistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete allowlist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// AddDenylistEntry adds a single entry to the denylist.
+func (c *Client) AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	start := time.Now()
+
+	request := &nextdns.AddDenylistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+		Active:    &active,
+	}
+
+	err := c.client.Denylist.Add(ctx, request)
+	metrics.RecordAPIRequest("AddDenylistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add denylist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// DeleteDenylistEntry removes a single entry from the denylist.
+func (c *Client) DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error {
+	start := time.Now()
+
+	request := &nextdns.DeleteDenylistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+	}
+
+	err := c.client.Denylist.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteDenylistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete denylist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
 // UpdateSettings updates general settings for a profile
 func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error {
 	if config == nil {
