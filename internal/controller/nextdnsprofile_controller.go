@@ -814,6 +814,29 @@ func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, ob
 	return requests
 }
 
+// findProfilesForConfigMap returns reconcile requests for profiles that own the ConfigMap
+func (r *NextDNSProfileReconciler) findProfilesForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	configMap, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return nil
+	}
+
+	// Check owner references to find the owning profile
+	for _, ref := range configMap.OwnerReferences {
+		if ref.Kind == "NextDNSProfile" && ref.APIVersion == nextdnsv1alpha1.GroupVersion.String() {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      ref.Name,
+						Namespace: configMap.Namespace,
+					},
+				},
+			}
+		}
+	}
+	return nil
+}
+
 // updateResourceMetrics updates the gauge metrics for resource counts
 func (r *NextDNSProfileReconciler) updateResourceMetrics(ctx context.Context) {
 	// Count profiles
@@ -860,6 +883,10 @@ func (r *NextDNSProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findProfilesForSecret),
+		).
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.findProfilesForConfigMap),
 		).
 		Complete(r)
 }
