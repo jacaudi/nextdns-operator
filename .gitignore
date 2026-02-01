@@ -37,3 +37,6 @@ docs/plans/
 
 # Journals
 .private-journal/**
+
+# Git worktrees
+.worktrees/

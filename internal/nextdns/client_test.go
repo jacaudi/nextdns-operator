@@ -779,3 +779,166 @@ func TestDomainEntryType(t *testing.T) {
 	assert.Equal(t, "blocked.com", inactiveEntry.Domain)
 	assert.False(t, inactiveEntry.Active)
 }
+
+// Tests for individual list operations (v0.7.0-v0.11.0 SDK features)
+
+func TestMockClient_AddAllowlistEntry(t *testing.T) {
+	mock := NewMockClient()
+
+	err := mock.AddAllowlistEntry(context.Background(), "profile-1", "good.com", true)
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("AddAllowlistEntry"))
+
+	// Verify the entry was added
+	allowlist, err := mock.GetAllowlist(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(allowlist))
+	assert.Equal(t, "good.com", allowlist[0].ID)
+	assert.True(t, allowlist[0].Active)
+
+	// Add another entry with active=false
+	err = mock.AddAllowlistEntry(context.Background(), "profile-1", "inactive.com", false)
+	require.NoError(t, err)
+
+	allowlist, err = mock.GetAllowlist(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(allowlist))
+}
+
+func TestMockClient_DeleteAllowlistEntry(t *testing.T) {
+	mock := NewMockClient()
+
+	// Add some entries first
+	err := mock.AddAllowlistEntry(context.Background(), "profile-1", "good.com", true)
+	require.NoError(t, err)
+	err = mock.AddAllowlistEntry(context.Background(), "profile-1", "other.com", true)
+	require.NoError(t, err)
+
+	// Delete one
+	err = mock.DeleteAllowlistEntry(context.Background(), "profile-1", "good.com")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("DeleteAllowlistEntry"))
+
+	// Verify it was removed
+	allowlist, err := mock.GetAllowlist(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(allowlist))
+	assert.Equal(t, "other.com", allowlist[0].ID)
+}
+
+func TestMockClient_AddDenylistEntry(t *testing.T) {
+	mock := NewMockClient()
+
+	err := mock.AddDenylistEntry(context.Background(), "profile-1", "bad.com", true)
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("AddDenylistEntry"))
+
+	// Verify the entry was added
+	denylist, err := mock.GetDenylist(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(denylist))
+	assert.Equal(t, "bad.com", denylist[0].ID)
+	assert.True(t, denylist[0].Active)
+}
+
+func TestMockClient_DeleteDenylistEntry(t *testing.T) {
+	mock := NewMockClient()
+
+	// Add some entries first
+	err := mock.AddDenylistEntry(context.Background(), "profile-1", "bad.com", true)
+	require.NoError(t, err)
+	err = mock.AddDenylistEntry(context.Background(), "profile-1", "evil.com", true)
+	require.NoError(t, err)
+
+	// Delete one
+	err = mock.DeleteDenylistEntry(context.Background(), "profile-1", "bad.com")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("DeleteDenylistEntry"))
+
+	// Verify it was removed
+	denylist, err := mock.GetDenylist(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(denylist))
+	assert.Equal(t, "evil.com", denylist[0].ID)
+}
+
+func TestMockClient_AddSecurityTLD(t *testing.T) {
+	mock := NewMockClient()
+
+	err := mock.AddSecurityTLD(context.Background(), "profile-1", "xyz")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("AddSecurityTLD"))
+
+	// Verify the TLD was added
+	tlds, err := mock.GetSecurityTLDs(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(tlds))
+	assert.Equal(t, "xyz", tlds[0].ID)
+}
+
+func TestMockClient_DeleteSecurityTLD(t *testing.T) {
+	mock := NewMockClient()
+
+	// Add some TLDs first
+	err := mock.AddSecurityTLD(context.Background(), "profile-1", "xyz")
+	require.NoError(t, err)
+	err = mock.AddSecurityTLD(context.Background(), "profile-1", "tk")
+	require.NoError(t, err)
+
+	// Delete one
+	err = mock.DeleteSecurityTLD(context.Background(), "profile-1", "xyz")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("DeleteSecurityTLD"))
+
+	// Verify it was removed
+	tlds, err := mock.GetSecurityTLDs(context.Background(), "profile-1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(tlds))
+	assert.Equal(t, "tk", tlds[0].ID)
+}
+
+func TestMockClient_AddPrivacyNative(t *testing.T) {
+	mock := NewMockClient()
+
+	err := mock.AddPrivacyNative(context.Background(), "profile-1", "apple")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("AddPrivacyNative"))
+
+	// Verify the native was added
+	assert.Equal(t, 1, len(mock.PrivacyNatives["profile-1"]))
+}
+
+func TestMockClient_DeletePrivacyNative(t *testing.T) {
+	mock := NewMockClient()
+
+	// Add some natives first
+	err := mock.AddPrivacyNative(context.Background(), "profile-1", "apple")
+	require.NoError(t, err)
+	err = mock.AddPrivacyNative(context.Background(), "profile-1", "windows")
+	require.NoError(t, err)
+
+	// Delete one
+	err = mock.DeletePrivacyNative(context.Background(), "profile-1", "apple")
+	require.NoError(t, err)
+	assert.True(t, mock.WasMethodCalled("DeletePrivacyNative"))
+
+	// Verify it was removed
+	assert.Equal(t, 1, len(mock.PrivacyNatives["profile-1"]))
+}
+
+func TestMockClient_IndividualOperations_EmptyProfile(t *testing.T) {
+	mock := NewMockClient()
+
+	// Operations on non-existent profile should still work (create empty list)
+	err := mock.DeleteAllowlistEntry(context.Background(), "new-profile", "domain.com")
+	require.NoError(t, err)
+
+	err = mock.DeleteDenylistEntry(context.Background(), "new-profile", "domain.com")
+	require.NoError(t, err)
+
+	err = mock.DeleteSecurityTLD(context.Background(), "new-profile", "xyz")
+	require.NoError(t, err)
+
+	err = mock.DeletePrivacyNative(context.Background(), "new-profile", "apple")
+	require.NoError(t, err)
+}

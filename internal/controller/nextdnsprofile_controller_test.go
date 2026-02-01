@@ -1888,3 +1888,35 @@ func (m *mockNextDNSClient) UpdateSettings(ctx context.Context, profileID string
 	m.settingsConfig = config
 	return nil
 }
+
+func (m *mockNextDNSClient) AddAllowlistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) DeleteAllowlistEntry(ctx context.Context, profileID string, domain string) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) AddSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) DeleteSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) AddPrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	return nil
+}

@@ -289,6 +289,152 @@ func (c *Client) SyncAllowlist(ctx context.Context, profileID string, entries []
 	return nil
 }
 
+// AddAllowlistEntry adds a single entry to the allowlist.
+func (c *Client) AddAllowlistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	start := time.Now()
+
+	request := &nextdns.AddAllowlistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+		Active:    &active,
+	}
+
+	err := c.client.Allowlist.Add(ctx, request)
+	metrics.RecordAPIRequest("AddAllowlistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add allowlist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// DeleteAllowlistEntry removes a single entry from the allowlist.
+func (c *Client) DeleteAllowlistEntry(ctx context.Context, profileID string, domain string) error {
+	start := time.Now()
+
+	request := &nextdns.DeleteAllowlistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+	}
+
+	err := c.client.Allowlist.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteAllowlistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete allowlist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// AddDenylistEntry adds a single entry to the denylist.
+func (c *Client) AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	start := time.Now()
+
+	request := &nextdns.AddDenylistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+		Active:    &active,
+	}
+
+	err := c.client.Denylist.Add(ctx, request)
+	metrics.RecordAPIRequest("AddDenylistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add denylist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// DeleteDenylistEntry removes a single entry from the denylist.
+func (c *Client) DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error {
+	start := time.Now()
+
+	request := &nextdns.DeleteDenylistRequest{
+		ProfileID: profileID,
+		ID:        domain,
+	}
+
+	err := c.client.Denylist.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteDenylistEntry", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete denylist entry %s: %w", domain, err)
+	}
+
+	return nil
+}
+
+// AddSecurityTLD adds a single TLD to the blocked list.
+func (c *Client) AddSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	start := time.Now()
+
+	request := &nextdns.AddSecurityTldsRequest{
+		ProfileID: profileID,
+		ID:        tld,
+	}
+
+	err := c.client.SecurityTlds.Add(ctx, request)
+	metrics.RecordAPIRequest("AddSecurityTLD", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add security TLD %s: %w", tld, err)
+	}
+
+	return nil
+}
+
+// DeleteSecurityTLD removes a single TLD from the blocked list.
+func (c *Client) DeleteSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	start := time.Now()
+
+	request := &nextdns.DeleteSecurityTldsRequest{
+		ProfileID: profileID,
+		TldID:     tld,
+	}
+
+	err := c.client.SecurityTlds.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeleteSecurityTLD", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete security TLD %s: %w", tld, err)
+	}
+
+	return nil
+}
+
+// AddPrivacyNative adds a single native tracker protection.
+func (c *Client) AddPrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	start := time.Now()
+
+	request := &nextdns.AddPrivacyNativesRequest{
+		ProfileID: profileID,
+		ID:        nativeID,
+	}
+
+	err := c.client.PrivacyNatives.Add(ctx, request)
+	metrics.RecordAPIRequest("AddPrivacyNative", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to add privacy native %s: %w", nativeID, err)
+	}
+
+	return nil
+}
+
+// DeletePrivacyNative removes a single native tracker protection.
+func (c *Client) DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	start := time.Now()
+
+	request := &nextdns.DeletePrivacyNativesRequest{
+		ProfileID: profileID,
+		NativeID:  nativeID,
+	}
+
+	err := c.client.PrivacyNatives.Delete(ctx, request)
+	metrics.RecordAPIRequest("DeletePrivacyNative", time.Since(start).Seconds(), err == nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete privacy native %s: %w", nativeID, err)
+	}
+
+	return nil
+}
+
 // UpdateSettings updates general settings for a profile
 func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error {
 	if config == nil {

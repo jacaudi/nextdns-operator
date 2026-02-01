@@ -483,6 +483,118 @@ func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, confi
 	return nil
 }
 
+// AddAllowlistEntry adds a single entry to the mock allowlist
+func (m *MockClient) AddAllowlistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	m.recordCall("AddAllowlistEntry", profileID, domain, active)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Allowlists[profileID] = append(m.Allowlists[profileID], &nextdns.Allowlist{ID: domain, Active: active})
+	return nil
+}
+
+// DeleteAllowlistEntry removes a single entry from the mock allowlist
+func (m *MockClient) DeleteAllowlistEntry(ctx context.Context, profileID string, domain string) error {
+	m.recordCall("DeleteAllowlistEntry", profileID, domain)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var newList []*nextdns.Allowlist
+	for _, entry := range m.Allowlists[profileID] {
+		if entry.ID != domain {
+			newList = append(newList, entry)
+		}
+	}
+	m.Allowlists[profileID] = newList
+	return nil
+}
+
+// AddDenylistEntry adds a single entry to the mock denylist
+func (m *MockClient) AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error {
+	m.recordCall("AddDenylistEntry", profileID, domain, active)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Denylists[profileID] = append(m.Denylists[profileID], &nextdns.Denylist{ID: domain, Active: active})
+	return nil
+}
+
+// DeleteDenylistEntry removes a single entry from the mock denylist
+func (m *MockClient) DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error {
+	m.recordCall("DeleteDenylistEntry", profileID, domain)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var newList []*nextdns.Denylist
+	for _, entry := range m.Denylists[profileID] {
+		if entry.ID != domain {
+			newList = append(newList, entry)
+		}
+	}
+	m.Denylists[profileID] = newList
+	return nil
+}
+
+// AddSecurityTLD adds a single TLD to the mock security TLDs
+func (m *MockClient) AddSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	m.recordCall("AddSecurityTLD", profileID, tld)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.SecurityTLDs[profileID] = append(m.SecurityTLDs[profileID], &nextdns.SecurityTlds{ID: tld})
+	return nil
+}
+
+// DeleteSecurityTLD removes a single TLD from the mock security TLDs
+func (m *MockClient) DeleteSecurityTLD(ctx context.Context, profileID string, tld string) error {
+	m.recordCall("DeleteSecurityTLD", profileID, tld)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var newList []*nextdns.SecurityTlds
+	for _, entry := range m.SecurityTLDs[profileID] {
+		if entry.ID != tld {
+			newList = append(newList, entry)
+		}
+	}
+	m.SecurityTLDs[profileID] = newList
+	return nil
+}
+
+// AddPrivacyNative adds a single native tracker to the mock privacy natives
+func (m *MockClient) AddPrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	m.recordCall("AddPrivacyNative", profileID, nativeID)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.PrivacyNatives[profileID] = append(m.PrivacyNatives[profileID], &nextdns.PrivacyNatives{ID: nativeID})
+	return nil
+}
+
+// DeletePrivacyNative removes a single native tracker from the mock privacy natives
+func (m *MockClient) DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error {
+	m.recordCall("DeletePrivacyNative", profileID, nativeID)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var newList []*nextdns.PrivacyNatives
+	for _, entry := range m.PrivacyNatives[profileID] {
+		if entry.ID != nativeID {
+			newList = append(newList, entry)
+		}
+	}
+	m.PrivacyNatives[profileID] = newList
+	return nil
+}
+
 // GetCallCount returns the number of calls to a specific method
 func (m *MockClient) GetCallCount(method string) int {
 	m.mu.RLock()
