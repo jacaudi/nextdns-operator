@@ -43,6 +43,14 @@ type ClientInterface interface {
 	AddDenylistEntry(ctx context.Context, profileID string, domain string, active bool) error
 	DeleteDenylistEntry(ctx context.Context, profileID string, domain string) error
 
+	// Individual TLD operations
+	AddSecurityTLD(ctx context.Context, profileID string, tld string) error
+	DeleteSecurityTLD(ctx context.Context, profileID string, tld string) error
+
+	// Individual privacy native operations
+	AddPrivacyNative(ctx context.Context, profileID string, nativeID string) error
+	DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error
+
 	// Settings operations
 	UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error
 }
