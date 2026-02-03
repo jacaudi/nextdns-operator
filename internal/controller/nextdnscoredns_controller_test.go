@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -1246,4 +1247,131 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			assert.Equal(t, tt.wantMetrics, cfg.MetricsEnabled, "MetricsEnabled should match")
 		})
 	}
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodSpec(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	// Create a NextDNSCoreDNS with all placement and resource settings
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Image: "custom-coredns:v1.0.0",
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+				NodeSelector: map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "node-role.kubernetes.io/control-plane",
+						Operator: corev1.TolerationOpExists,
+						Effect:   corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		},
+	}
+
+	configMapName := "test-coredns-abc123-coredns"
+	podSpec := r.buildPodSpec(coreDNS, configMapName)
+
+	// Verify container image matches custom image
+	require.Len(t, podSpec.Containers, 1, "Should have exactly one container")
+	assert.Equal(t, "custom-coredns:v1.0.0", podSpec.Containers[0].Image, "Container image should match custom image")
+	assert.Equal(t, "coredns", podSpec.Containers[0].Name, "Container name should be coredns")
+
+	// Verify resource requests are set correctly
+	cpuRequest := podSpec.Containers[0].Resources.Requests[corev1.ResourceCPU]
+	assert.Equal(t, "100m", cpuRequest.String(), "CPU request should be 100m")
+
+	memRequest := podSpec.Containers[0].Resources.Requests[corev1.ResourceMemory]
+	assert.Equal(t, "128Mi", memRequest.String(), "Memory request should be 128Mi")
+
+	// Verify resource limits are set correctly
+	memLimit := podSpec.Containers[0].Resources.Limits[corev1.ResourceMemory]
+	assert.Equal(t, "256Mi", memLimit.String(), "Memory limit should be 256Mi")
+
+	// Verify NodeSelector is applied
+	require.NotNil(t, podSpec.NodeSelector, "NodeSelector should be set")
+	assert.Equal(t, "linux", podSpec.NodeSelector["kubernetes.io/os"], "NodeSelector should have kubernetes.io/os=linux")
+
+	// Verify Tolerations are present
+	require.Len(t, podSpec.Tolerations, 1, "Should have exactly one toleration")
+	assert.Equal(t, "node-role.kubernetes.io/control-plane", podSpec.Tolerations[0].Key, "Toleration key should match")
+	assert.Equal(t, corev1.TolerationOpExists, podSpec.Tolerations[0].Operator, "Toleration operator should be Exists")
+	assert.Equal(t, corev1.TaintEffectNoSchedule, podSpec.Tolerations[0].Effect, "Toleration effect should be NoSchedule")
+
+	// Verify volume mount for /etc/coredns exists
+	require.Len(t, podSpec.Containers[0].VolumeMounts, 1, "Should have exactly one volume mount")
+	assert.Equal(t, "/etc/coredns", podSpec.Containers[0].VolumeMounts[0].MountPath, "Volume mount path should be /etc/coredns")
+	assert.True(t, podSpec.Containers[0].VolumeMounts[0].ReadOnly, "Volume mount should be read-only")
+
+	// Verify volume is configured correctly
+	require.Len(t, podSpec.Volumes, 1, "Should have exactly one volume")
+	assert.Equal(t, "config-volume", podSpec.Volumes[0].Name, "Volume name should be config-volume")
+	require.NotNil(t, podSpec.Volumes[0].ConfigMap, "Volume should be a ConfigMap volume")
+	assert.Equal(t, configMapName, podSpec.Volumes[0].ConfigMap.Name, "ConfigMap name should match")
+
+	// Verify security context
+	require.NotNil(t, podSpec.Containers[0].SecurityContext, "Container security context should be set")
+	assert.False(t, *podSpec.Containers[0].SecurityContext.AllowPrivilegeEscalation, "AllowPrivilegeEscalation should be false")
+	assert.True(t, *podSpec.Containers[0].SecurityContext.ReadOnlyRootFilesystem, "ReadOnlyRootFilesystem should be true")
+
+	// Verify pod-level security context
+	require.NotNil(t, podSpec.SecurityContext, "Pod security context should be set")
+	assert.True(t, *podSpec.SecurityContext.RunAsNonRoot, "RunAsNonRoot should be true")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_DefaultImage(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	// Create a NextDNSCoreDNS without custom image (should use default)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			// No Deployment spec - use defaults
+		},
+	}
+
+	configMapName := "test-coredns-abc123-coredns"
+	podSpec := r.buildPodSpec(coreDNS, configMapName)
+
+	// Verify default image is used
+	require.Len(t, podSpec.Containers, 1, "Should have exactly one container")
+	assert.Equal(t, "registry.k8s.io/coredns/coredns:1.11.1", podSpec.Containers[0].Image, "Container image should be default coredns image")
+
+	// Verify no custom NodeSelector, Tolerations, or Resources
+	assert.Nil(t, podSpec.NodeSelector, "NodeSelector should be nil when not specified")
+	assert.Nil(t, podSpec.Tolerations, "Tolerations should be nil when not specified")
+	assert.Empty(t, podSpec.Containers[0].Resources.Requests, "Resource requests should be empty when not specified")
+	assert.Empty(t, podSpec.Containers[0].Resources.Limits, "Resource limits should be empty when not specified")
 }
