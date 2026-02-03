@@ -15,6 +15,7 @@ rbac:
             - ""
           resources:
             - configmaps
+            - services
           verbs:
             - create
             - delete
@@ -32,6 +33,19 @@ rbac:
             - list
             - watch
         - apiGroups:
+            - apps
+          resources:
+            - daemonsets
+            - deployments
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
             - coordination.k8s.io
           resources:
             - leases
@@ -47,6 +61,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists
+            - nextdnscoredns
             - nextdnsdenylists
             - nextdnsprofiles
             - nextdnstldlists
@@ -62,6 +77,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists/finalizers
+            - nextdnscoredns/finalizers
             - nextdnsdenylists/finalizers
             - nextdnsprofiles/finalizers
             - nextdnstldlists/finalizers
@@ -71,6 +87,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists/status
+            - nextdnscoredns/status
             - nextdnsdenylists/status
             - nextdnsprofiles/status
             - nextdnstldlists/status
