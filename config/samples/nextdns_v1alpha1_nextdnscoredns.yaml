@@ -1,0 +1,38 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+  namespace: default
+spec:
+  profileRef:
+    name: my-profile
+
+  upstream:
+    primary: DoT
+    fallback: DoH
+
+  deployment:
+    mode: Deployment
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+  service:
+    type: LoadBalancer
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "192.168.1.53"
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+  cache:
+    ttl: 30
+
+  logging:
+    enabled: false
