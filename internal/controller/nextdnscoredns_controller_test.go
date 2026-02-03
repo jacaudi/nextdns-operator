@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -718,4 +719,91 @@ func TestNextDNSCoreDNSReconciler_Reconcile_DaemonSetMode(t *testing.T) {
 		Namespace: "default",
 	}, deployment)
 	assert.Error(t, err, "Deployment should NOT exist when mode is DaemonSet")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_ProfileNotReady(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a NextDNSProfile with Ready=False condition (no ProfileID yet)
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			// No ProfileID - profile is not ready yet
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					Reason:             "Syncing",
+					Message:            "Profile is syncing with NextDNS API",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with profileRef and finalizer already added
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// Run reconcile - should wait for profile to become ready
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Verify result.RequeueAfter > 0 (should requeue to wait for profile)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0), "Should requeue to wait for profile to become ready")
+
+	// Fetch the updated NextDNSCoreDNS to check conditions
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updatedCoreDNS)
+	require.NoError(t, err)
+
+	// Verify ProfileResolved condition is False with reason "ProfileNotReady"
+	profileResolvedCondition := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeProfileResolved)
+	require.NotNil(t, profileResolvedCondition, "ProfileResolved condition should exist")
+	assert.Equal(t, metav1.ConditionFalse, profileResolvedCondition.Status, "ProfileResolved should be False")
+	assert.Equal(t, "ProfileNotReady", profileResolvedCondition.Reason, "ProfileResolved reason should be ProfileNotReady")
+
+	// Verify Ready condition is also False
+	readyCondition := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition, "Ready condition should exist")
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status, "Ready should be False")
+
+	// Verify Status.Ready is false
+	assert.False(t, updatedCoreDNS.Status.Ready, "Status.Ready should be false")
 }
