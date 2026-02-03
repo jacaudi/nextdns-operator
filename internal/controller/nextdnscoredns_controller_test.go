@@ -1113,3 +1113,137 @@ func TestNextDNSCoreDNSReconciler_Reconcile_NodePortService(t *testing.T) {
 	// Verify service type is NodePort
 	assert.Equal(t, corev1.ServiceTypeNodePort, service.Spec.Type, "Service should be NodePort type")
 }
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	// Helper to create a pointer to DNSProtocol
+	protocolPtr := func(p nextdnsv1alpha1.DNSProtocol) *nextdnsv1alpha1.DNSProtocol {
+		return &p
+	}
+
+	// Helper to create a pointer to bool
+	boolPtr := func(b bool) *bool {
+		return &b
+	}
+
+	// Helper to create a pointer to int32
+	int32Ptr := func(i int32) *int32 {
+		return &i
+	}
+
+	tests := []struct {
+		name             string
+		coreDNS          *nextdnsv1alpha1.NextDNSCoreDNS
+		profile          *nextdnsv1alpha1.NextDNSProfile
+		wantProfileID    string
+		wantPrimary      string
+		wantFallback     string
+		wantCacheTTL     int32
+		wantLogging      bool
+		wantMetrics      bool
+	}{
+		{
+			name: "DoT primary with DoH fallback",
+			coreDNS: &nextdnsv1alpha1.NextDNSCoreDNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-coredns",
+					Namespace: "default",
+				},
+				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+					Upstream: &nextdnsv1alpha1.UpstreamConfig{
+						Primary:  nextdnsv1alpha1.DNSProtocolDoT,
+						Fallback: protocolPtr(nextdnsv1alpha1.DNSProtocolDoH),
+					},
+					Cache: &nextdnsv1alpha1.CoreDNSCacheConfig{
+						SuccessTTL: int32Ptr(60),
+					},
+					Logging: &nextdnsv1alpha1.CoreDNSLoggingConfig{
+						Enabled: boolPtr(true),
+					},
+					Metrics: &nextdnsv1alpha1.CoreDNSMetricsConfig{
+						Enabled: boolPtr(true),
+					},
+				},
+			},
+			profile: &nextdnsv1alpha1.NextDNSProfile{
+				Status: nextdnsv1alpha1.NextDNSProfileStatus{
+					ProfileID: "abc123",
+				},
+			},
+			wantProfileID: "abc123",
+			wantPrimary:   "DoT",
+			wantFallback:  "DoH",
+			wantCacheTTL:  60,
+			wantLogging:   true,
+			wantMetrics:   true,
+		},
+		{
+			name: "DNS primary only",
+			coreDNS: &nextdnsv1alpha1.NextDNSCoreDNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-coredns",
+					Namespace: "default",
+				},
+				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+					Upstream: &nextdnsv1alpha1.UpstreamConfig{
+						Primary: nextdnsv1alpha1.DNSProtocolDNS,
+						// No fallback
+					},
+					// Use defaults for cache, logging, metrics
+				},
+			},
+			profile: &nextdnsv1alpha1.NextDNSProfile{
+				Status: nextdnsv1alpha1.NextDNSProfileStatus{
+					ProfileID: "def456",
+				},
+			},
+			wantProfileID: "def456",
+			wantPrimary:   "DNS",
+			wantFallback:  "", // No fallback
+			wantCacheTTL:  3600, // Default
+			wantLogging:   false, // Default
+			wantMetrics:   true, // Default
+		},
+		{
+			name: "defaults when spec is minimal",
+			coreDNS: &nextdnsv1alpha1.NextDNSCoreDNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-coredns",
+					Namespace: "default",
+				},
+				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+					// Empty spec - all defaults
+				},
+			},
+			profile: &nextdnsv1alpha1.NextDNSProfile{
+				Status: nextdnsv1alpha1.NextDNSProfileStatus{
+					ProfileID: "ghi789",
+				},
+			},
+			wantProfileID: "ghi789",
+			wantPrimary:   "DoT", // Default
+			wantFallback:  "", // No fallback by default
+			wantCacheTTL:  3600, // Default
+			wantLogging:   false, // Default
+			wantMetrics:   true, // Default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := r.buildCorefileConfig(tt.coreDNS, tt.profile)
+
+			assert.Equal(t, tt.wantProfileID, cfg.ProfileID, "ProfileID should match")
+			assert.Equal(t, tt.wantPrimary, cfg.PrimaryProtocol, "PrimaryProtocol should match")
+			assert.Equal(t, tt.wantFallback, cfg.FallbackProtocol, "FallbackProtocol should match")
+			assert.Equal(t, tt.wantCacheTTL, cfg.CacheTTL, "CacheTTL should match")
+			assert.Equal(t, tt.wantLogging, cfg.LoggingEnabled, "LoggingEnabled should match")
+			assert.Equal(t, tt.wantMetrics, cfg.MetricsEnabled, "MetricsEnabled should match")
+		})
+	}
+}
