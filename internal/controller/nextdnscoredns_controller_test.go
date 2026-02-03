@@ -3,14 +3,18 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
@@ -505,4 +509,117 @@ func TestNextDNSCoreDNSReconciler_Constants(t *testing.T) {
 	assert.Equal(t, "nextdns.io/coredns-finalizer", CoreDNSFinalizerName)
 	assert.Equal(t, "ProfileResolved", ConditionTypeProfileResolved)
 	assert.Equal(t, "Corefile", CorefileKey)
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_HappyPath(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a ready NextDNSProfile with ProfileID "abc123"
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with profileRef, upstream DoT, and 2 replicas
+	replicas := int32(2)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary: nextdnsv1alpha1.DNSProtocolDoT,
+			},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// First reconcile - should add finalizer
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0), "Should requeue after adding finalizer")
+
+	// Verify finalizer was added
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updatedCoreDNS)
+	require.NoError(t, err)
+	assert.Contains(t, updatedCoreDNS.Finalizers, CoreDNSFinalizerName, "Finalizer should be added")
+
+	// Second reconcile - should create ConfigMap, Deployment, Service
+	result, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Expected resource name: test-coredns-abc123-coredns
+	resourceName := "test-coredns-abc123-coredns"
+
+	// Verify ConfigMap was created with "forward" in Corefile
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, configMap)
+	require.NoError(t, err, "ConfigMap should be created")
+	assert.Contains(t, configMap.Data[CorefileKey], "forward", "Corefile should contain forward directive")
+
+	// Verify Deployment was created with 2 replicas
+	deployment := &appsv1.Deployment{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, deployment)
+	require.NoError(t, err, "Deployment should be created")
+	require.NotNil(t, deployment.Spec.Replicas, "Replicas should be set")
+	assert.Equal(t, int32(2), *deployment.Spec.Replicas, "Deployment should have 2 replicas")
+
+	// Verify Service was created with ClusterIP type
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, service)
+	require.NoError(t, err, "Service should be created")
+	assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type, "Service should be ClusterIP type")
 }
