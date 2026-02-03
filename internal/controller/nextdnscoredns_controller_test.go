@@ -623,3 +623,99 @@ func TestNextDNSCoreDNSReconciler_Reconcile_HappyPath(t *testing.T) {
 	require.NoError(t, err, "Service should be created")
 	assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type, "Service should be ClusterIP type")
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_DaemonSetMode(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a ready NextDNSProfile with ProfileID "abc123"
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with profileRef and DaemonSet mode
+	// Include finalizer to skip the first reconcile that adds it
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Mode: nextdnsv1alpha1.DeploymentModeDaemonSet,
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// Run reconcile - should create DaemonSet (finalizer already present)
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+	_ = result // Result may vary depending on implementation
+
+	// Expected resource name: test-coredns-abc123-coredns
+	resourceName := "test-coredns-abc123-coredns"
+
+	// Verify DaemonSet was created with correct labels
+	daemonSet := &appsv1.DaemonSet{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, daemonSet)
+	require.NoError(t, err, "DaemonSet should be created")
+
+	// Verify DaemonSet labels
+	assert.Equal(t, "coredns", daemonSet.Labels["app.kubernetes.io/name"])
+	assert.Equal(t, "test-coredns", daemonSet.Labels["app.kubernetes.io/instance"])
+	assert.Equal(t, "dns", daemonSet.Labels["app.kubernetes.io/component"])
+	assert.Equal(t, "nextdns-operator", daemonSet.Labels["app.kubernetes.io/managed-by"])
+	assert.Equal(t, "abc123", daemonSet.Labels["nextdns.io/profile-id"])
+
+	// Verify NO Deployment exists (should error on Get)
+	deployment := &appsv1.Deployment{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, deployment)
+	assert.Error(t, err, "Deployment should NOT exist when mode is DaemonSet")
+}
