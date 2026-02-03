@@ -19,10 +19,10 @@ const (
 
 // NextDNS server endpoints.
 const (
-	nextDNSDoTServer   = "dns.nextdns.io"
-	nextDNSDoHServer   = "dns.nextdns.io"
-	nextDNSAnycastIP1  = "45.90.28.0"
-	nextDNSAnycastIP2  = "45.90.30.0"
+	nextDNSDoTServer  = "dns.nextdns.io"
+	nextDNSDoHServer  = "dns.nextdns.io"
+	nextDNSAnycastIP1 = "45.90.28.0"
+	nextDNSAnycastIP2 = "45.90.30.0"
 )
 
 // CorefileConfig holds the configuration for generating a CoreDNS Corefile.

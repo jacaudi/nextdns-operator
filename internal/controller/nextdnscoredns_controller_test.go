@@ -414,9 +414,9 @@ func TestNextDNSCoreDNSReconciler_IsProfileReady(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		profile    *nextdnsv1alpha1.NextDNSProfile
-		wantReady  bool
+		name      string
+		profile   *nextdnsv1alpha1.NextDNSProfile
+		wantReady bool
 	}{
 		{
 			name: "profile with Ready=True",
