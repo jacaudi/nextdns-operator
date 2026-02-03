@@ -1375,3 +1375,133 @@ func TestNextDNSCoreDNSReconciler_BuildPodSpec_DefaultImage(t *testing.T) {
 	assert.Empty(t, podSpec.Containers[0].Resources.Requests, "Resource requests should be empty when not specified")
 	assert.Empty(t, podSpec.Containers[0].Resources.Limits, "Resource limits should be empty when not specified")
 }
+
+func TestNextDNSCoreDNSReconciler_UpdateStatus(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// 1. Create a ready NextDNSProfile with ProfileID "abc123"
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// 2. Create a NextDNSCoreDNS with profileRef and upstream.primary="DoT"
+	// 3. Add finalizer to skip first reconcile phase
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary: nextdnsv1alpha1.DNSProtocolDoT,
+			},
+		},
+	}
+
+	// Pre-create Service with ClusterIP already assigned (simulating Kubernetes behavior)
+	// The reconciler's reconcileService will update labels/ports but preserve ClusterIP
+	resourceName := "test-coredns-abc123-coredns"
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "coredns",
+		"app.kubernetes.io/instance":   "test-coredns",
+		"app.kubernetes.io/component":  "dns",
+		"app.kubernetes.io/managed-by": "nextdns-operator",
+		"nextdns.io/profile-id":        "abc123",
+	}
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      resourceName,
+			Namespace: "default",
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.96.0.53",
+			Selector:  labels,
+			Ports: []corev1.ServicePort{
+				{Name: "dns", Port: 53, Protocol: corev1.ProtocolUDP},
+				{Name: "dns-tcp", Port: 53, Protocol: corev1.ProtocolTCP},
+				{Name: "metrics", Port: 9153, Protocol: corev1.ProtocolTCP},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS, service).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	// Call updateStatus directly to test status update logic
+	// First set ProfileResolved condition (normally done in Reconcile before updateStatus)
+	reconciler.setCondition(coreDNS, ConditionTypeProfileResolved, metav1.ConditionTrue, "ProfileResolved", "Referenced profile found and ready")
+	coreDNS.Status.ProfileID = profile.Status.ProfileID
+	coreDNS.Status.Fingerprint = profile.Status.Fingerprint
+
+	// 4. Run updateStatus
+	err := reconciler.updateStatus(ctx, coreDNS, profile)
+	require.NoError(t, err)
+
+	// Fetch updated NextDNSCoreDNS
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updatedCoreDNS)
+	require.NoError(t, err)
+
+	// 5. Verify status fields
+	// - ProfileID equals "abc123"
+	assert.Equal(t, "abc123", updatedCoreDNS.Status.ProfileID, "ProfileID should be set from profile")
+
+	// - UpstreamEndpoint contains "tls://" (for DoT)
+	require.NotNil(t, updatedCoreDNS.Status.Upstream, "Upstream status should be set")
+	assert.Contains(t, updatedCoreDNS.Status.Upstream.URL, "tls://", "UpstreamEndpoint should contain tls:// for DoT protocol")
+
+	// - DNSEndpoint is not empty
+	assert.NotEmpty(t, updatedCoreDNS.Status.Endpoints, "DNSEndpoints should not be empty")
+
+	// Verify DNS IP is set
+	assert.Equal(t, "10.96.0.53", updatedCoreDNS.Status.DNSIP, "DNSIP should be set from Service ClusterIP")
+
+	// 6. Verify conditions
+	// - ProfileResolved condition is True
+	profileResolvedCondition := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeProfileResolved)
+	require.NotNil(t, profileResolvedCondition, "ProfileResolved condition should exist")
+	assert.Equal(t, metav1.ConditionTrue, profileResolvedCondition.Status, "ProfileResolved should be True")
+
+	// - Ready condition exists
+	readyCondition := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeReady)
+	assert.NotNil(t, readyCondition, "Ready condition should exist")
+}
