@@ -934,3 +934,182 @@ func TestNextDNSCoreDNSReconciler_HandleDeletion(t *testing.T) {
 	err = fakeClient.Get(ctx, req.NamespacedName, updatedCoreDNS)
 	assert.True(t, apierrors.IsNotFound(err), "Resource should be deleted after finalizer removal, got error: %v", err)
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_LoadBalancerService(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a ready NextDNSProfile
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with LoadBalancer service type, loadBalancerIP, and annotations
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Service: &nextdnsv1alpha1.CoreDNSServiceConfig{
+				Type:           nextdnsv1alpha1.ServiceTypeLoadBalancer,
+				LoadBalancerIP: "192.168.1.53",
+				Annotations: map[string]string{
+					"metallb.universe.tf/address-pool": "dns-pool",
+					"external-dns.alpha.kubernetes.io/hostname": "dns.example.com",
+				},
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// Run reconcile - finalizer already present, should create resources
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+	_ = result
+
+	// Expected resource name: test-coredns-abc123-coredns
+	resourceName := "test-coredns-abc123-coredns"
+
+	// Verify Service was created with LoadBalancer type
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, service)
+	require.NoError(t, err, "Service should be created")
+
+	// Verify service type is LoadBalancer
+	assert.Equal(t, corev1.ServiceTypeLoadBalancer, service.Spec.Type, "Service should be LoadBalancer type")
+
+	// Verify loadBalancerIP is set
+	assert.Equal(t, "192.168.1.53", service.Spec.LoadBalancerIP, "Service should have loadBalancerIP set")
+
+	// Verify annotations are present
+	require.NotNil(t, service.Annotations, "Service should have annotations")
+	assert.Equal(t, "dns-pool", service.Annotations["metallb.universe.tf/address-pool"], "MetalLB annotation should be present")
+	assert.Equal(t, "dns.example.com", service.Annotations["external-dns.alpha.kubernetes.io/hostname"], "External DNS annotation should be present")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_NodePortService(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a ready NextDNSProfile
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with NodePort service type
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			Service: &nextdnsv1alpha1.CoreDNSServiceConfig{
+				Type: nextdnsv1alpha1.ServiceTypeNodePort,
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// Run reconcile - finalizer already present, should create resources
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+	_ = result
+
+	// Expected resource name: test-coredns-abc123-coredns
+	resourceName := "test-coredns-abc123-coredns"
+
+	// Verify Service was created with NodePort type
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, service)
+	require.NoError(t, err, "Service should be created")
+
+	// Verify service type is NodePort
+	assert.Equal(t, corev1.ServiceTypeNodePort, service.Spec.Type, "Service should be NodePort type")
+}
