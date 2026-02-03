@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -806,4 +807,130 @@ func TestNextDNSCoreDNSReconciler_Reconcile_ProfileNotReady(t *testing.T) {
 
 	// Verify Status.Ready is false
 	assert.False(t, updatedCoreDNS.Status.Ready, "Status.Ready should be false")
+}
+
+func TestNextDNSCoreDNSReconciler_HandleDeletion(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Create a ready NextDNSProfile (needed to compute resource names for the Deployment)
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	// Create a NextDNSCoreDNS with:
+	// - DeletionTimestamp set (marks it for deletion)
+	// - Finalizer present (to be removed by handleDeletion)
+	// - profileRef to "test-profile"
+	deletionTime := metav1.Now()
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-coredns",
+			Namespace:         "default",
+			Finalizers:        []string{CoreDNSFinalizerName},
+			DeletionTimestamp: &deletionTime,
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+		},
+	}
+
+	// Pre-create a Deployment that would have been created by the controller
+	// In real scenarios, OwnerReferences would handle cleanup, but we verify the flow
+	resourceName := "test-coredns-abc123-coredns"
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "coredns",
+		"app.kubernetes.io/instance":   "test-coredns",
+		"app.kubernetes.io/component":  "dns",
+		"app.kubernetes.io/managed-by": "nextdns-operator",
+		"nextdns.io/profile-id":        "abc123",
+	}
+	replicas := int32(2)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      resourceName,
+			Namespace: "default",
+			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "nextdns.io/v1alpha1",
+					Kind:       "NextDNSCoreDNS",
+					Name:       "test-coredns",
+					UID:        coreDNS.UID,
+				},
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "coredns",
+							Image: "coredns/coredns:1.11.1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create fake client with status subresource support
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS, deployment).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	// Run reconcile - should handle deletion and remove finalizer
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Verify result is empty (no requeue needed after deletion handling)
+	assert.Equal(t, ctrl.Result{}, result, "Result should be empty after deletion handling")
+
+	// Verify the resource is deleted (Get should fail with NotFound)
+	// When the finalizer is removed from a resource with DeletionTimestamp,
+	// the fake client simulates the real Kubernetes behavior and deletes the resource.
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updatedCoreDNS)
+	assert.True(t, apierrors.IsNotFound(err), "Resource should be deleted after finalizer removal, got error: %v", err)
 }
