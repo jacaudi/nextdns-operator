@@ -101,7 +101,9 @@ type CoreDNSServiceConfig struct {
 	// +optional
 	Type CoreDNSServiceType `json:"type,omitempty"`
 
-	// LoadBalancerIP specifies the IP address for LoadBalancer type services
+	// LoadBalancerIP specifies the IP address for LoadBalancer type services.
+	// Must be a valid IPv4 address if specified.
+	// +kubebuilder:validation:Pattern=`^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`
 	// +optional
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 
