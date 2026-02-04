@@ -60,6 +60,7 @@ type UpstreamConfig struct {
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment
+// TODO: Consider adding PodDisruptionBudget support for HA deployments.
 type CoreDNSDeploymentConfig struct {
 	// Mode specifies whether to deploy as Deployment or DaemonSet
 	// +kubebuilder:default=Deployment
@@ -117,6 +118,8 @@ type CoreDNSServiceConfig struct {
 }
 
 // ServiceMonitorConfig configures Prometheus ServiceMonitor creation
+// TODO: Implement ServiceMonitor reconciliation in the controller.
+// Currently this struct is defined but not used.
 type ServiceMonitorConfig struct {
 	// Enabled creates a ServiceMonitor for Prometheus Operator
 	// +kubebuilder:default=false
