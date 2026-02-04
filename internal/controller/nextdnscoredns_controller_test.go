@@ -1457,6 +1457,35 @@ func TestNextDNSCoreDNSReconciler_BuildPodSpec_NoHardcodedServiceAccount(t *test
 	assert.Empty(t, podSpec.ServiceAccountName, "ServiceAccountName should be empty to use namespace default")
 }
 
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_RunAsUser(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+		},
+	}
+
+	configMapName := "test-coredns"
+	podSpec := r.buildPodSpec(coreDNS, configMapName)
+
+	require.NotNil(t, podSpec.SecurityContext)
+	require.NotNil(t, podSpec.SecurityContext.RunAsNonRoot)
+	assert.True(t, *podSpec.SecurityContext.RunAsNonRoot)
+	require.NotNil(t, podSpec.SecurityContext.RunAsUser)
+	assert.Equal(t, int64(65534), *podSpec.SecurityContext.RunAsUser, "RunAsUser should be 65534 (nobody)")
+}
+
 func TestNextDNSCoreDNSReconciler_UpdateStatus(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()
