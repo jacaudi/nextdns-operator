@@ -1376,6 +1376,32 @@ func TestNextDNSCoreDNSReconciler_BuildPodSpec_DefaultImage(t *testing.T) {
 	assert.Empty(t, podSpec.Containers[0].Resources.Limits, "Resource limits should be empty when not specified")
 }
 
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_NoHardcodedServiceAccount(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+		},
+	}
+
+	configMapName := "test-coredns-abc123-coredns"
+	podSpec := r.buildPodSpec(coreDNS, configMapName)
+
+	// ServiceAccountName should be empty (use namespace default)
+	assert.Empty(t, podSpec.ServiceAccountName, "ServiceAccountName should be empty to use namespace default")
+}
+
 func TestNextDNSCoreDNSReconciler_UpdateStatus(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()

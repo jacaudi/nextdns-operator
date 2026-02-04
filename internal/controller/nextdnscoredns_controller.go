@@ -468,7 +468,10 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 	runAsNonRoot := true
 
 	podSpec := corev1.PodSpec{
-		ServiceAccountName: "coredns",
+		// ServiceAccountName is intentionally left empty to use the namespace default
+		// ServiceAccount. The controller does not create a dedicated ServiceAccount,
+		// so hardcoding one would cause pods to fail scheduling. Users can configure
+		// a dedicated ServiceAccount via pod security policies if needed.
 		Containers: []corev1.Container{
 			{
 				Name:  "coredns",
