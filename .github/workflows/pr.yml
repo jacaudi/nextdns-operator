@@ -89,7 +89,7 @@ jobs:
   # Build multi-arch container images natively (no push)
   docker-amd64:
     name: Build Container (amd64)
-    needs: [lint, test]
+    needs: [lint, test, verify-helm-rbac, verify-helm-crds]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -140,7 +140,7 @@ jobs:
 
   docker-arm64:
     name: Build Container (arm64)
-    needs: [lint, test]
+    needs: [lint, test, verify-helm-rbac, verify-helm-crds]
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
