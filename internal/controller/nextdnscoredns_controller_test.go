@@ -1586,3 +1586,59 @@ func TestNextDNSCoreDNSReconciler_UpdateStatus(t *testing.T) {
 	readyCondition := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeReady)
 	assert.NotNil(t, readyCondition, "Ready condition should exist")
 }
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_NilDeployment(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{},
+	}
+
+	result := r.buildPodAnnotations(coreDNS)
+	assert.Nil(t, result, "Should return nil when deployment config is nil")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_NilAnnotations(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{},
+		},
+	}
+
+	result := r.buildPodAnnotations(coreDNS)
+	assert.Nil(t, result, "Should return nil when podAnnotations is nil")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_WithMultus(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				PodAnnotations: map[string]string{
+					"k8s.v1.cni.cncf.io/networks": "macvlan-conf",
+				},
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(coreDNS)
+	assert.NotNil(t, result)
+	assert.Equal(t, "macvlan-conf", result["k8s.v1.cni.cncf.io/networks"])
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_ReturnsCopy(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	original := map[string]string{"key": "value"}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				PodAnnotations: original,
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(coreDNS)
+	result["new-key"] = "new-value"
+
+	assert.NotContains(t, original, "new-key", "Modifying result should not affect original")
+}
