@@ -978,7 +978,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_LoadBalancerService(t *testing.T) {
 				Type:           nextdnsv1alpha1.ServiceTypeLoadBalancer,
 				LoadBalancerIP: "192.168.1.53",
 				Annotations: map[string]string{
-					"metallb.universe.tf/address-pool": "dns-pool",
+					"metallb.universe.tf/address-pool":          "dns-pool",
 					"external-dns.alpha.kubernetes.io/hostname": "dns.example.com",
 				},
 			},
@@ -1138,15 +1138,15 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		coreDNS          *nextdnsv1alpha1.NextDNSCoreDNS
-		profile          *nextdnsv1alpha1.NextDNSProfile
-		wantProfileID    string
-		wantPrimary      string
-		wantFallback     string
-		wantCacheTTL     int32
-		wantLogging      bool
-		wantMetrics      bool
+		name          string
+		coreDNS       *nextdnsv1alpha1.NextDNSCoreDNS
+		profile       *nextdnsv1alpha1.NextDNSProfile
+		wantProfileID string
+		wantPrimary   string
+		wantFallback  string
+		wantCacheTTL  int32
+		wantLogging   bool
+		wantMetrics   bool
 	}{
 		{
 			name: "DoT primary with DoH fallback",
@@ -1205,10 +1205,10 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			},
 			wantProfileID: "def456",
 			wantPrimary:   "DNS",
-			wantFallback:  "", // No fallback
-			wantCacheTTL:  3600, // Default
+			wantFallback:  "",    // No fallback
+			wantCacheTTL:  3600,  // Default
 			wantLogging:   false, // Default
-			wantMetrics:   true, // Default
+			wantMetrics:   true,  // Default
 		},
 		{
 			name: "defaults when spec is minimal",
@@ -1228,10 +1228,10 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			},
 			wantProfileID: "ghi789",
 			wantPrimary:   "DoT", // Default
-			wantFallback:  "", // No fallback by default
-			wantCacheTTL:  3600, // Default
+			wantFallback:  "",    // No fallback by default
+			wantCacheTTL:  3600,  // Default
 			wantLogging:   false, // Default
-			wantMetrics:   true, // Default
+			wantMetrics:   true,  // Default
 		},
 	}
 

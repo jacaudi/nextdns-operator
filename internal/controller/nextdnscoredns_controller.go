@@ -317,7 +317,10 @@ func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDN
 func (r *NextDNSCoreDNSReconciler) cleanupDeployment(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
 	profile, err := r.resolveProfile(ctx, coreDNS)
 	if err != nil {
-		return nil // Profile not found, nothing to clean up
+		if apierrors.IsNotFound(err) {
+			return nil // Profile not found, nothing to clean up
+		}
+		return err // Unexpected error, propagate it
 	}
 
 	resourceName := r.getResourceName(coreDNS, profile)
@@ -337,7 +340,10 @@ func (r *NextDNSCoreDNSReconciler) cleanupDeployment(ctx context.Context, coreDN
 func (r *NextDNSCoreDNSReconciler) cleanupDaemonSet(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
 	profile, err := r.resolveProfile(ctx, coreDNS)
 	if err != nil {
-		return nil // Profile not found, nothing to clean up
+		if apierrors.IsNotFound(err) {
+			return nil // Profile not found, nothing to clean up
+		}
+		return err // Unexpected error, propagate it
 	}
 
 	resourceName := r.getResourceName(coreDNS, profile)
