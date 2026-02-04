@@ -19,6 +19,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 | `NextDNSAllowlist` | Reusable list of allowed domains |
 | `NextDNSDenylist` | Reusable list of blocked domains |
 | `NextDNSTLDList` | Reusable list of blocked TLDs |
+| `NextDNSCoreDNS` | Deploy CoreDNS instances forwarding to NextDNS upstream |
 
 ## Installation
 
@@ -107,6 +108,7 @@ See the [config/samples](config/samples/) directory for complete examples:
 - [NextDNSAllowlist](config/samples/nextdns_v1alpha1_nextdnsallowlist.yaml) - Shared allowlist for business services
 - [NextDNSDenylist](config/samples/nextdns_v1alpha1_nextdnsdenylist.yaml) - Shared denylist for malicious domains
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
+- [NextDNSCoreDNS](config/samples/nextdns_v1alpha1_nextdnscoredns.yaml) - CoreDNS deployment with NextDNS upstream
 
 ## Configuration
 
@@ -149,6 +151,115 @@ envFrom:
   - configMapRef:
       name: my-dns-config
 ```
+
+### CoreDNS Deployment
+
+Deploy a dedicated CoreDNS instance that forwards DNS queries to NextDNS. This is useful for providing DNS services to devices on your network (home routers, IoT devices, etc.) that can't use DoH/DoT directly.
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+spec:
+  profileRef:
+    name: my-profile  # References an existing NextDNSProfile
+
+  upstream:
+    primary: DoT      # DNS over TLS (recommended)
+    fallback: DoH     # Fallback to DNS over HTTPS
+
+  deployment:
+    mode: Deployment
+    replicas: 2
+
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "192.168.1.53"  # Optional static IP
+
+  cache:
+    enabled: true
+    successTTL: 3600  # Cache TTL in seconds
+```
+
+**Features:**
+
+- **Upstream protocols**: DoT (DNS over TLS), DoH (DNS over HTTPS), or plain DNS
+- **Deployment modes**: Kubernetes Deployment (with replicas) or DaemonSet
+- **Service types**: ClusterIP, LoadBalancer, or NodePort
+- **Placement controls**: nodeSelector, affinity, tolerations
+- **Caching**: Configurable DNS response caching
+- **Metrics**: Prometheus metrics endpoint with optional ServiceMonitor
+- **Security**: Containers run read-only with dropped capabilities
+
+**Check deployment status:**
+
+```bash
+kubectl get nextdnscoredns home-dns
+# NAME       PROFILE ID   DNS IP          READY   AGE
+# home-dns   abc123       192.168.1.53    true    5m
+```
+
+> **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Use DoT or DoH for privacy in untrusted networks.
+
+#### Multus CNI Integration
+
+For advanced networking scenarios, you can attach CoreDNS pods to additional networks using [Multus CNI](https://github.com/k8snetworkplumbingwg/multus-cni). This is useful for exposing DNS services directly on a VLAN or dedicated network interface.
+
+**Example: CoreDNS on a VLAN with primary and secondary IPs**
+
+First, create a NetworkAttachmentDefinition for your VLAN:
+
+```yaml
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: dns-vlan
+  namespace: default
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "eth0.100",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static",
+        "addresses": [
+          { "address": "192.168.100.53/24" },
+          { "address": "192.168.100.54/24" }
+        ],
+        "routes": [
+          { "dst": "0.0.0.0/0", "gw": "192.168.100.1" }
+        ]
+      }
+    }
+```
+
+Then reference it in your NextDNSCoreDNS resource:
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: vlan-dns
+spec:
+  profileRef:
+    name: my-profile
+
+  upstream:
+    primary: DoT
+
+  deployment:
+    mode: DaemonSet
+    podAnnotations:
+      k8s.v1.cni.cncf.io/networks: dns-vlan
+
+  service:
+    type: ClusterIP  # Internal only; clients use Multus IPs directly
+```
+
+The CoreDNS pods will now have interfaces on both the cluster network and the VLAN, accessible at `192.168.100.53` and `192.168.100.54`.
 
 ### Drift Detection
 

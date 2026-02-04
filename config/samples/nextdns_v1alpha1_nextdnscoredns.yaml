@@ -1,0 +1,63 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+  namespace: default
+spec:
+  # Reference to an existing NextDNSProfile
+  profileRef:
+    name: my-profile
+
+  # Upstream DNS protocol configuration
+  # DoT (DNS over TLS) is recommended for privacy
+  # Plain DNS exposes your profile ID to network observers
+  upstream:
+    primary: DoT
+    fallback: DoH
+
+  # CoreDNS deployment configuration
+  deployment:
+    mode: Deployment  # or DaemonSet
+    replicas: 2
+    image: registry.k8s.io/coredns/coredns:1.11.1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    # Optional: constrain to specific nodes
+    # nodeSelector:
+    #   kubernetes.io/os: linux
+    # tolerations:
+    #   - key: "node-role.kubernetes.io/control-plane"
+    #     operator: "Exists"
+    #     effect: "NoSchedule"
+    # Pod annotations for Multus CNI, Istio, etc.
+    # podAnnotations:
+    #   k8s.v1.cni.cncf.io/networks: macvlan-conf
+
+  # Kubernetes Service configuration
+  service:
+    type: LoadBalancer
+    # For static IP with MetalLB or cloud providers
+    # loadBalancerIP: "192.168.1.53"
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "192.168.1.53"
+
+  # Prometheus metrics endpoint
+  metrics:
+    enabled: true
+    # ServiceMonitor support planned for future release
+    # serviceMonitor:
+    #   enabled: true
+    #   interval: "30s"
+
+  # DNS response caching
+  cache:
+    enabled: true
+    successTTL: 3600  # TTL for successful responses in seconds
+
+  # DNS query logging (useful for debugging)
+  logging:
+    enabled: false

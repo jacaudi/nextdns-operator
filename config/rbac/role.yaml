@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - services
   verbs:
   - create
   - delete
@@ -25,6 +26,19 @@ rules:
   - list
   - watch
 - apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - coordination.k8s.io
   resources:
   - leases
@@ -40,6 +54,7 @@ rules:
   - nextdns.io
   resources:
   - nextdnsallowlists
+  - nextdnscoredns
   - nextdnsdenylists
   - nextdnsprofiles
   - nextdnstldlists
@@ -55,6 +70,7 @@ rules:
   - nextdns.io
   resources:
   - nextdnsallowlists/finalizers
+  - nextdnscoredns/finalizers
   - nextdnsdenylists/finalizers
   - nextdnsprofiles/finalizers
   - nextdnstldlists/finalizers
@@ -64,6 +80,7 @@ rules:
   - nextdns.io
   resources:
   - nextdnsallowlists/status
+  - nextdnscoredns/status
   - nextdnsdenylists/status
   - nextdnsprofiles/status
   - nextdnstldlists/status
