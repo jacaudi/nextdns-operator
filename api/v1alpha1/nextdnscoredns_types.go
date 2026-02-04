@@ -160,12 +160,6 @@ type CoreDNSCacheConfig struct {
 	// +kubebuilder:default=3600
 	// +optional
 	SuccessTTL *int32 `json:"successTTL,omitempty"`
-
-	// DenialTTL specifies the TTL for NXDOMAIN responses (in seconds)
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default=300
-	// +optional
-	DenialTTL *int32 `json:"denialTTL,omitempty"`
 }
 
 // CoreDNSLoggingConfig configures DNS query logging
@@ -174,10 +168,6 @@ type CoreDNSLoggingConfig struct {
 	// +kubebuilder:default=false
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
-
-	// Classes specifies which DNS classes to log (e.g., "denial", "error", "all")
-	// +optional
-	Classes []string `json:"classes,omitempty"`
 }
 
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS

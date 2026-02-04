@@ -57,13 +57,6 @@ spec:
               cache:
                 description: Cache configures DNS response caching
                 properties:
-                  denialTTL:
-                    default: 300
-                    description: DenialTTL specifies the TTL for NXDOMAIN responses
-                      (in seconds)
-                    format: int32
-                    minimum: 0
-                    type: integer
                   enabled:
                     default: true
                     description: Enabled enables DNS response caching
@@ -1126,12 +1119,6 @@ spec:
               logging:
                 description: Logging configures DNS query logging
                 properties:
-                  classes:
-                    description: Classes specifies which DNS classes to log (e.g.,
-                      "denial", "error", "all")
-                    items:
-                      type: string
-                    type: array
                   enabled:
                     default: false
                     description: Enabled enables DNS query logging
