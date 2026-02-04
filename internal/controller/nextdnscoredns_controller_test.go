@@ -1177,11 +1177,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	// Helper to create a pointer to DNSProtocol
-	protocolPtr := func(p nextdnsv1alpha1.DNSProtocol) *nextdnsv1alpha1.DNSProtocol {
-		return &p
-	}
-
 	// Helper to create a pointer to bool
 	boolPtr := func(b bool) *bool {
 		return &b
@@ -1198,13 +1193,12 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 		profile       *nextdnsv1alpha1.NextDNSProfile
 		wantProfileID string
 		wantPrimary   string
-		wantFallback  string
 		wantCacheTTL  int32
 		wantLogging   bool
 		wantMetrics   bool
 	}{
 		{
-			name: "DoT primary with DoH fallback",
+			name: "DoT primary with custom settings",
 			coreDNS: &nextdnsv1alpha1.NextDNSCoreDNS{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-coredns",
@@ -1212,8 +1206,7 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 				},
 				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 					Upstream: &nextdnsv1alpha1.UpstreamConfig{
-						Primary:  nextdnsv1alpha1.DNSProtocolDoT,
-						Fallback: protocolPtr(nextdnsv1alpha1.DNSProtocolDoH),
+						Primary: nextdnsv1alpha1.DNSProtocolDoT,
 					},
 					Cache: &nextdnsv1alpha1.CoreDNSCacheConfig{
 						SuccessTTL: int32Ptr(60),
@@ -1233,7 +1226,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			},
 			wantProfileID: "abc123",
 			wantPrimary:   "DoT",
-			wantFallback:  "DoH",
 			wantCacheTTL:  60,
 			wantLogging:   true,
 			wantMetrics:   true,
@@ -1248,7 +1240,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 					Upstream: &nextdnsv1alpha1.UpstreamConfig{
 						Primary: nextdnsv1alpha1.DNSProtocolDNS,
-						// No fallback
 					},
 					// Use defaults for cache, logging, metrics
 				},
@@ -1260,7 +1251,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			},
 			wantProfileID: "def456",
 			wantPrimary:   "DNS",
-			wantFallback:  "",    // No fallback
 			wantCacheTTL:  3600,  // Default
 			wantLogging:   false, // Default
 			wantMetrics:   true,  // Default
@@ -1283,7 +1273,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 			},
 			wantProfileID: "ghi789",
 			wantPrimary:   "DoT", // Default
-			wantFallback:  "",    // No fallback by default
 			wantCacheTTL:  3600,  // Default
 			wantLogging:   false, // Default
 			wantMetrics:   true,  // Default
@@ -1296,7 +1285,6 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 
 			assert.Equal(t, tt.wantProfileID, cfg.ProfileID, "ProfileID should match")
 			assert.Equal(t, tt.wantPrimary, cfg.PrimaryProtocol, "PrimaryProtocol should match")
-			assert.Equal(t, tt.wantFallback, cfg.FallbackProtocol, "FallbackProtocol should match")
 			assert.Equal(t, tt.wantCacheTTL, cfg.CacheTTL, "CacheTTL should match")
 			assert.Equal(t, tt.wantLogging, cfg.LoggingEnabled, "LoggingEnabled should match")
 			assert.Equal(t, tt.wantMetrics, cfg.MetricsEnabled, "MetricsEnabled should match")

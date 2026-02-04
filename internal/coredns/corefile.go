@@ -33,10 +33,6 @@ type CorefileConfig struct {
 	// PrimaryProtocol specifies the primary DNS protocol (DoT, DoH, or DNS).
 	PrimaryProtocol string
 
-	// FallbackProtocol specifies an optional fallback DNS protocol.
-	// If empty, no fallback will be configured.
-	FallbackProtocol string
-
 	// CacheTTL specifies the cache TTL in seconds.
 	CacheTTL int32
 
@@ -85,48 +81,25 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 }
 
 // writeForwardPlugin writes the forward plugin configuration to the string builder.
+// Note: Cross-protocol fallback (e.g., DoT→DoH) is not supported because CoreDNS's
+// forward plugin cannot mix tls:// and https:// upstreams with a single tls_servername.
 func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
-	// Determine if we need a tls_servername block
-	needsTLSServername := cfg.PrimaryProtocol == ProtocolDoT || cfg.FallbackProtocol == ProtocolDoT
-
-	// Build the list of upstreams
-	var upstreams []string
-
-	// Add primary upstream
-	primaryUpstream := getForwardUpstream(cfg.ProfileID, cfg.PrimaryProtocol)
-	if primaryUpstream != "" {
-		upstreams = append(upstreams, primaryUpstream)
-	}
-
-	// Add fallback upstream if specified
-	if cfg.FallbackProtocol != "" {
-		fallbackUpstream := getForwardUpstream(cfg.ProfileID, cfg.FallbackProtocol)
-		if fallbackUpstream != "" {
-			upstreams = append(upstreams, fallbackUpstream)
-		}
-	}
-
-	// Write the forward directive
-	if needsTLSServername {
-		sb.WriteString(fmt.Sprintf("    forward . %s {\n", strings.Join(upstreams, " ")))
+	switch cfg.PrimaryProtocol {
+	case ProtocolDoT:
+		// DoT requires tls_servername block for SNI
+		upstream := fmt.Sprintf("tls://%s.%s", cfg.ProfileID, nextDNSDoTServer)
+		sb.WriteString(fmt.Sprintf("    forward . %s {\n", upstream))
 		sb.WriteString(fmt.Sprintf("        tls_servername %s.%s\n", cfg.ProfileID, nextDNSDoTServer))
 		sb.WriteString("    }\n")
-	} else {
-		sb.WriteString(fmt.Sprintf("    forward . %s\n", strings.Join(upstreams, " ")))
-	}
-}
 
-// getForwardUpstream returns the forward upstream string for a given protocol.
-func getForwardUpstream(profileID, protocol string) string {
-	switch protocol {
-	case ProtocolDoT:
-		return fmt.Sprintf("tls://%s.%s", profileID, nextDNSDoTServer)
 	case ProtocolDoH:
-		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, profileID)
+		// DoH uses https:// URL directly
+		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, cfg.ProfileID)
+		sb.WriteString(fmt.Sprintf("    forward . %s\n", upstream))
+
 	case ProtocolDNS:
-		return fmt.Sprintf("%s %s", nextDNSAnycastIP1, nextDNSAnycastIP2)
-	default:
-		return ""
+		// Plain DNS uses anycast IPs
+		sb.WriteString(fmt.Sprintf("    forward . %s %s\n", nextDNSAnycastIP1, nextDNSAnycastIP2))
 	}
 }
 

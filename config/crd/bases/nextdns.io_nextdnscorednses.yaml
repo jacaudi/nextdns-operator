@@ -1207,14 +1207,6 @@ spec:
               upstream:
                 description: Upstream configures the upstream DNS connection to NextDNS
                 properties:
-                  fallback:
-                    description: Fallback specifies an optional fallback protocol
-                      if primary fails
-                    enum:
-                    - DoT
-                    - DoH
-                    - DNS
-                    type: string
                   primary:
                     default: DoT
                     description: Primary specifies the primary protocol for DNS queries

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateCorefile_DoTPrimary(t *testing.T) {
@@ -120,68 +119,6 @@ func TestGenerateCorefile_DNSPrimary(t *testing.T) {
 
 	// Should always contain errors plugin
 	assert.Contains(t, corefile, "errors")
-}
-
-func TestGenerateCorefile_WithFallback(t *testing.T) {
-	cfg := &CorefileConfig{
-		ProfileID:        "jkl012",
-		PrimaryProtocol:  ProtocolDoT,
-		FallbackProtocol: ProtocolDNS,
-		CacheTTL:         3600,
-		LoggingEnabled:   true,
-		MetricsEnabled:   true,
-	}
-
-	corefile := GenerateCorefile(cfg)
-
-	// Should contain primary DoT configuration
-	assert.Contains(t, corefile, "tls://jkl012.dns.nextdns.io")
-	assert.Contains(t, corefile, "tls_servername jkl012.dns.nextdns.io")
-
-	// Should contain fallback DNS IPs
-	assert.Contains(t, corefile, "45.90.28.0")
-	assert.Contains(t, corefile, "45.90.30.0")
-
-	// Primary should appear before fallback in the forward directive
-	dotIndex := strings.Index(corefile, "tls://jkl012.dns.nextdns.io")
-	dnsIndex := strings.Index(corefile, "45.90.28.0")
-	require.Greater(t, dotIndex, -1, "DoT endpoint should be present")
-	require.Greater(t, dnsIndex, -1, "DNS endpoint should be present")
-	assert.Less(t, dotIndex, dnsIndex, "Primary (DoT) should appear before fallback (DNS)")
-
-	// Should contain all standard plugins
-	assert.Contains(t, corefile, "cache 3600")
-	assert.Contains(t, corefile, "health :8080")
-	assert.Contains(t, corefile, "ready :8181")
-	assert.Contains(t, corefile, "prometheus :9153")
-	assert.Contains(t, corefile, "errors")
-}
-
-func TestGenerateCorefile_DoHWithDoTFallback(t *testing.T) {
-	cfg := &CorefileConfig{
-		ProfileID:        "mno345",
-		PrimaryProtocol:  ProtocolDoH,
-		FallbackProtocol: ProtocolDoT,
-		CacheTTL:         1800,
-		LoggingEnabled:   false,
-		MetricsEnabled:   true,
-	}
-
-	corefile := GenerateCorefile(cfg)
-
-	// Should contain primary DoH configuration
-	assert.Contains(t, corefile, "https://dns.nextdns.io/mno345")
-
-	// Should contain fallback DoT configuration
-	assert.Contains(t, corefile, "tls://mno345.dns.nextdns.io")
-	assert.Contains(t, corefile, "tls_servername mno345.dns.nextdns.io")
-
-	// Primary should appear before fallback
-	dohIndex := strings.Index(corefile, "https://dns.nextdns.io/mno345")
-	dotIndex := strings.Index(corefile, "tls://mno345.dns.nextdns.io")
-	require.Greater(t, dohIndex, -1, "DoH endpoint should be present")
-	require.Greater(t, dotIndex, -1, "DoT endpoint should be present")
-	assert.Less(t, dohIndex, dotIndex, "Primary (DoH) should appear before fallback (DoT)")
 }
 
 func TestGenerateCorefile_MetricsDisabled(t *testing.T) {
@@ -304,17 +241,6 @@ func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 				CacheTTL:        600,
 				LoggingEnabled:  true,
 				MetricsEnabled:  false,
-			},
-		},
-		{
-			name: "DoT with DNS fallback",
-			cfg: &CorefileConfig{
-				ProfileID:        "test4",
-				PrimaryProtocol:  ProtocolDoT,
-				FallbackProtocol: ProtocolDNS,
-				CacheTTL:         3600,
-				LoggingEnabled:   true,
-				MetricsEnabled:   true,
 			},
 		},
 	}
