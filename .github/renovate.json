@@ -4,5 +4,16 @@
     "github>jacaudi/renovate-config:base",
     "github>jacaudi/renovate-config:go",
     "github>jacaudi/renovate-config:kubernetes"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "CONTROLLER_TOOLS_VERSION \\?= (?<currentValue>v[0-9.]+)"
+      ],
+      "depNameTemplate": "sigs.k8s.io/controller-tools",
+      "datasourceTemplate": "go"
+    }
   ]
 }
