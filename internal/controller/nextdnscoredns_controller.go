@@ -47,9 +47,9 @@ type NextDNSCoreDNSReconciler struct {
 	SyncPeriod time.Duration
 }
 
-// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscoredns,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscoredns/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscoredns/finalizers,verbs=update
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscorednses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscorednses/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscorednses/finalizers,verbs=update
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
