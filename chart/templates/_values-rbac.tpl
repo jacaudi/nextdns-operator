@@ -61,7 +61,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists
-            - nextdnscoredns
+            - nextdnscorednses
             - nextdnsdenylists
             - nextdnsprofiles
             - nextdnstldlists
@@ -77,7 +77,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists/finalizers
-            - nextdnscoredns/finalizers
+            - nextdnscorednses/finalizers
             - nextdnsdenylists/finalizers
             - nextdnsprofiles/finalizers
             - nextdnstldlists/finalizers
@@ -87,7 +87,7 @@ rbac:
             - nextdns.io
           resources:
             - nextdnsallowlists/status
-            - nextdnscoredns/status
+            - nextdnscorednses/status
             - nextdnsdenylists/status
             - nextdnsprofiles/status
             - nextdnstldlists/status
