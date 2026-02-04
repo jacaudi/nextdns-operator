@@ -20,7 +20,7 @@ func TestGenerateCorefile_DoTPrimary(t *testing.T) {
 	corefile := GenerateCorefile(cfg)
 
 	// Should contain forward with tls:// and tls_servername
-	assert.Contains(t, corefile, "forward . tls://dns.nextdns.io")
+	assert.Contains(t, corefile, "forward . tls://abc123.dns.nextdns.io")
 	assert.Contains(t, corefile, "tls_servername abc123.dns.nextdns.io")
 
 	// Should contain cache with TTL
@@ -135,7 +135,7 @@ func TestGenerateCorefile_WithFallback(t *testing.T) {
 	corefile := GenerateCorefile(cfg)
 
 	// Should contain primary DoT configuration
-	assert.Contains(t, corefile, "tls://dns.nextdns.io")
+	assert.Contains(t, corefile, "tls://jkl012.dns.nextdns.io")
 	assert.Contains(t, corefile, "tls_servername jkl012.dns.nextdns.io")
 
 	// Should contain fallback DNS IPs
@@ -143,7 +143,7 @@ func TestGenerateCorefile_WithFallback(t *testing.T) {
 	assert.Contains(t, corefile, "45.90.30.0")
 
 	// Primary should appear before fallback in the forward directive
-	dotIndex := strings.Index(corefile, "tls://dns.nextdns.io")
+	dotIndex := strings.Index(corefile, "tls://jkl012.dns.nextdns.io")
 	dnsIndex := strings.Index(corefile, "45.90.28.0")
 	require.Greater(t, dotIndex, -1, "DoT endpoint should be present")
 	require.Greater(t, dnsIndex, -1, "DNS endpoint should be present")
@@ -173,12 +173,12 @@ func TestGenerateCorefile_DoHWithDoTFallback(t *testing.T) {
 	assert.Contains(t, corefile, "https://dns.nextdns.io/mno345")
 
 	// Should contain fallback DoT configuration
-	assert.Contains(t, corefile, "tls://dns.nextdns.io")
+	assert.Contains(t, corefile, "tls://mno345.dns.nextdns.io")
 	assert.Contains(t, corefile, "tls_servername mno345.dns.nextdns.io")
 
 	// Primary should appear before fallback
 	dohIndex := strings.Index(corefile, "https://dns.nextdns.io/mno345")
-	dotIndex := strings.Index(corefile, "tls://dns.nextdns.io")
+	dotIndex := strings.Index(corefile, "tls://mno345.dns.nextdns.io")
 	require.Greater(t, dohIndex, -1, "DoH endpoint should be present")
 	require.Greater(t, dotIndex, -1, "DoT endpoint should be present")
 	assert.Less(t, dohIndex, dotIndex, "Primary (DoH) should appear before fallback (DoT)")
@@ -256,7 +256,7 @@ func TestGetUpstreamEndpoint_UnknownProtocol(t *testing.T) {
 }
 
 func TestDefaultCoreDNSImage(t *testing.T) {
-	assert.Equal(t, "registry.k8s.io/coredns/coredns:1.11.1", DefaultCoreDNSImage)
+	assert.Equal(t, "mirror.gcr.io/coredns/coredns:1.13.1", DefaultCoreDNSImage)
 }
 
 func TestCorefileConfig_Defaults(t *testing.T) {

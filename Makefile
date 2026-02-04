@@ -31,6 +31,12 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate-helm-rbac: manifests ## Generate Helm RBAC template from kubebuilder-generated role.yaml
 	./hack/generate-helm-rbac.sh
 
+.PHONY: sync-helm-crds
+sync-helm-crds: manifests ## Sync CRDs to Helm chart
+	@echo "Syncing CRDs to Helm chart..."
+	@cp config/crd/bases/*.yaml chart/crds/
+	@echo "CRDs synced successfully"
+
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -96,7 +102,7 @@ $(LOCALBIN):
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.18.0
+CONTROLLER_TOOLS_VERSION ?= v0.20.0
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.

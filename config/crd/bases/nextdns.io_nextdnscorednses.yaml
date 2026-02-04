@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: nextdnscorednses.nextdns.io
 spec:
   group: nextdns.io
@@ -992,7 +992,7 @@ spec:
                         type: object
                     type: object
                   image:
-                    default: registry.k8s.io/coredns/coredns:1.11.1
+                    default: mirror.gcr.io/coredns/coredns:1.13.1
                     description: Image specifies the CoreDNS container image
                     type: string
                   mode:

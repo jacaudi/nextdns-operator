@@ -479,6 +479,7 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 	allowPrivilegeEscalation := false
 	readOnlyRootFilesystem := true
 	runAsNonRoot := true
+	runAsUser := int64(65534) // nobody user
 
 	podSpec := corev1.PodSpec{
 		// ServiceAccountName is intentionally left empty to use the namespace default
@@ -572,6 +573,7 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 		},
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsNonRoot: &runAsNonRoot,
+			RunAsUser:    &runAsUser,
 		},
 	}
 
