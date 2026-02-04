@@ -53,10 +53,6 @@ type UpstreamConfig struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default=DoT
 	Primary DNSProtocol `json:"primary"`
-
-	// Fallback specifies an optional fallback protocol if primary fails
-	// +optional
-	Fallback *DNSProtocol `json:"fallback,omitempty"`
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment

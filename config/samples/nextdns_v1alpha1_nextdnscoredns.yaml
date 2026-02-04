@@ -10,10 +10,10 @@ spec:
 
   # Upstream DNS protocol configuration
   # DoT (DNS over TLS) is recommended for privacy
+  # DoH (DNS over HTTPS) is an alternative
   # Plain DNS exposes your profile ID to network observers
   upstream:
     primary: DoT
-    fallback: DoH
 
   # CoreDNS deployment configuration
   deployment:
