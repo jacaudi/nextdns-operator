@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -33,6 +35,9 @@ const (
 
 	// CorefileKey is the key in the ConfigMap for the Corefile
 	CorefileKey = "Corefile"
+
+	// maxResourceNameLength is the maximum length for Kubernetes resource names
+	maxResourceNameLength = 63
 )
 
 // NextDNSCoreDNSReconciler reconciles a NextDNSCoreDNS object
@@ -685,9 +690,18 @@ func (r *NextDNSCoreDNSReconciler) buildLabels(coreDNS *nextdnsv1alpha1.NextDNSC
 	}
 }
 
-// getResourceName returns the name for managed resources
+// getResourceName returns the name for managed resources.
+// Names are truncated with a hash suffix if they exceed 63 characters.
 func (r *NextDNSCoreDNSReconciler) getResourceName(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) string {
-	return fmt.Sprintf("%s-%s-coredns", coreDNS.Name, profile.Status.ProfileID)
+	name := fmt.Sprintf("%s-%s-coredns", coreDNS.Name, profile.Status.ProfileID)
+	if len(name) <= maxResourceNameLength {
+		return name
+	}
+	// Truncate and add hash for uniqueness
+	hash := sha256.Sum256([]byte(name))
+	hashSuffix := hex.EncodeToString(hash[:3]) // 6 hex chars
+	// Leave room for dash and hash: 63 - 1 - 6 = 56
+	return name[:56] + "-" + hashSuffix
 }
 
 // getServiceName returns the service name, respecting nameOverride

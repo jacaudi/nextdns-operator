@@ -289,6 +289,61 @@ func TestNextDNSCoreDNSReconciler_GetResourceName(t *testing.T) {
 	}
 }
 
+func TestNextDNSCoreDNSReconciler_GetResourceName_TruncatesLongNames(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	// Create a CoreDNS with a very long name
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "very-long-coredns-resource-name-that-exceeds-limits",
+			Namespace: "default",
+		},
+	}
+
+	// Profile with a moderately long ID
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abcdef123456",
+		},
+	}
+
+	result := r.getResourceName(coreDNS, profile)
+
+	// Result should be <= 63 characters (Kubernetes name limit)
+	assert.LessOrEqual(t, len(result), 63, "Resource name should not exceed 63 characters")
+	assert.True(t, len(result) > 0, "Resource name should not be empty")
+}
+
+func TestNextDNSCoreDNSReconciler_GetResourceName_ShortNamesUnchanged(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dns",
+			Namespace: "default",
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	result := r.getResourceName(coreDNS, profile)
+
+	// Short names should remain unchanged
+	assert.Equal(t, "dns-abc123-coredns", result)
+}
+
 func TestNextDNSCoreDNSReconciler_GetServiceName_Default(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 
