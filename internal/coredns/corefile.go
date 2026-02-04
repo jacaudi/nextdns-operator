@@ -120,7 +120,7 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 func getForwardUpstream(profileID, protocol string) string {
 	switch protocol {
 	case ProtocolDoT:
-		return fmt.Sprintf("tls://%s", nextDNSDoTServer)
+		return fmt.Sprintf("tls://%s.%s", profileID, nextDNSDoTServer)
 	case ProtocolDoH:
 		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, profileID)
 	case ProtocolDNS:
