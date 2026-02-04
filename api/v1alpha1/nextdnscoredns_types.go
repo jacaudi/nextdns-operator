@@ -93,6 +93,11 @@ type CoreDNSDeploymentConfig struct {
 	// Resources specifies compute resource requirements
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// PodAnnotations specifies additional annotations for the CoreDNS pods
+	// Useful for Multus CNI network attachments, Istio sidecar injection control, etc.
+	// +optional
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 }
 
 // CoreDNSServiceConfig configures the CoreDNS Kubernetes Service
