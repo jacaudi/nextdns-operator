@@ -992,7 +992,7 @@ spec:
                         type: object
                     type: object
                   image:
-                    default: coredns/coredns:1.11.1
+                    default: registry.k8s.io/coredns/coredns:1.11.1
                     description: Image specifies the CoreDNS container image
                     type: string
                   mode:
@@ -1008,6 +1008,13 @@ spec:
                       type: string
                     description: NodeSelector constrains pods to nodes with matching
                       labels
+                    type: object
+                  podAnnotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      PodAnnotations specifies additional annotations for the CoreDNS pods
+                      Useful for Multus CNI network attachments, Istio sidecar injection control, etc.
                     type: object
                   replicas:
                     default: 2
@@ -1180,8 +1187,10 @@ spec:
                       the Service
                     type: object
                   loadBalancerIP:
-                    description: LoadBalancerIP specifies the IP address for LoadBalancer
-                      type services
+                    description: |-
+                      LoadBalancerIP specifies the IP address for LoadBalancer type services.
+                      Must be a valid IPv4 address if specified.
+                    pattern: ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$
                     type: string
                   nameOverride:
                     description: NameOverride overrides the generated service name
