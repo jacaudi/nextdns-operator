@@ -202,6 +202,65 @@ kubectl get nextdnscoredns home-dns
 
 > **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Use DoT or DoH for privacy in untrusted networks.
 
+#### Multus CNI Integration
+
+For advanced networking scenarios, you can attach CoreDNS pods to additional networks using [Multus CNI](https://github.com/k8snetworkplumbingwg/multus-cni). This is useful for exposing DNS services directly on a VLAN or dedicated network interface.
+
+**Example: CoreDNS on a VLAN with primary and secondary IPs**
+
+First, create a NetworkAttachmentDefinition for your VLAN:
+
+```yaml
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: dns-vlan
+  namespace: default
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "eth0.100",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static",
+        "addresses": [
+          { "address": "192.168.100.53/24" },
+          { "address": "192.168.100.54/24" }
+        ],
+        "routes": [
+          { "dst": "0.0.0.0/0", "gw": "192.168.100.1" }
+        ]
+      }
+    }
+```
+
+Then reference it in your NextDNSCoreDNS resource:
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: vlan-dns
+spec:
+  profileRef:
+    name: my-profile
+
+  upstream:
+    primary: DoT
+
+  deployment:
+    mode: DaemonSet
+    podAnnotations:
+      k8s.v1.cni.cncf.io/networks: dns-vlan
+
+  service:
+    type: ClusterIP  # Internal only; clients use Multus IPs directly
+```
+
+The CoreDNS pods will now have interfaces on both the cluster network and the VLAN, accessible at `192.168.100.53` and `192.168.100.54`.
+
 ### Drift Detection
 
 The operator periodically reconciles all resources to detect and correct drift from manual changes made outside Kubernetes.
