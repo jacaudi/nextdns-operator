@@ -54,7 +54,7 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	writeForwardPlugin(&sb, cfg)
 
 	// Cache plugin
-	sb.WriteString(fmt.Sprintf("    cache %d\n", cfg.CacheTTL))
+	fmt.Fprintf(&sb, "    cache %d\n", cfg.CacheTTL)
 
 	// Health plugin for liveness probes
 	sb.WriteString("    health :8080\n")
@@ -88,18 +88,18 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 	case ProtocolDoT:
 		// DoT requires tls_servername block for SNI
 		upstream := fmt.Sprintf("tls://%s.%s", cfg.ProfileID, nextDNSDoTServer)
-		sb.WriteString(fmt.Sprintf("    forward . %s {\n", upstream))
-		sb.WriteString(fmt.Sprintf("        tls_servername %s.%s\n", cfg.ProfileID, nextDNSDoTServer))
+		fmt.Fprintf(sb, "    forward . %s {\n", upstream)
+		fmt.Fprintf(sb, "        tls_servername %s.%s\n", cfg.ProfileID, nextDNSDoTServer)
 		sb.WriteString("    }\n")
 
 	case ProtocolDoH:
 		// DoH uses https:// URL directly
 		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, cfg.ProfileID)
-		sb.WriteString(fmt.Sprintf("    forward . %s\n", upstream))
+		fmt.Fprintf(sb, "    forward . %s\n", upstream)
 
 	case ProtocolDNS:
 		// Plain DNS uses anycast IPs
-		sb.WriteString(fmt.Sprintf("    forward . %s %s\n", nextDNSAnycastIP1, nextDNSAnycastIP2))
+		fmt.Fprintf(sb, "    forward . %s %s\n", nextDNSAnycastIP1, nextDNSAnycastIP2)
 	}
 }
 
