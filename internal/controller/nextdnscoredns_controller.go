@@ -398,7 +398,8 @@ func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, core
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: r.buildPodAnnotations(coreDNS),
 				},
 				Spec: r.buildPodSpec(coreDNS, resourceName),
 			},
@@ -445,7 +446,8 @@ func (r *NextDNSCoreDNSReconciler) reconcileDaemonSet(ctx context.Context, coreD
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: r.buildPodAnnotations(coreDNS),
 				},
 				Spec: r.buildPodSpec(coreDNS, resourceName),
 			},
@@ -688,6 +690,19 @@ func (r *NextDNSCoreDNSReconciler) buildLabels(coreDNS *nextdnsv1alpha1.NextDNSC
 		"app.kubernetes.io/managed-by": "nextdns-operator",
 		"nextdns.io/profile-id":        profile.Status.ProfileID,
 	}
+}
+
+// buildPodAnnotations returns annotations for CoreDNS pods
+func (r *NextDNSCoreDNSReconciler) buildPodAnnotations(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) map[string]string {
+	if coreDNS.Spec.Deployment == nil || coreDNS.Spec.Deployment.PodAnnotations == nil {
+		return nil
+	}
+	// Return a copy to avoid modifying the original
+	annotations := make(map[string]string, len(coreDNS.Spec.Deployment.PodAnnotations))
+	for k, v := range coreDNS.Spec.Deployment.PodAnnotations {
+		annotations[k] = v
+	}
+	return annotations
 }
 
 // getResourceName returns the name for managed resources.
