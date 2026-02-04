@@ -11,10 +11,15 @@ type DNSProtocol string
 
 const (
 	// DNSProtocolDoT uses DNS over TLS (port 853)
+	// Recommended for privacy - encrypts DNS queries
 	DNSProtocolDoT DNSProtocol = "DoT"
 	// DNSProtocolDoH uses DNS over HTTPS
+	// Recommended for privacy - encrypts DNS queries
 	DNSProtocolDoH DNSProtocol = "DoH"
 	// DNSProtocolDNS uses plain DNS (port 53)
+	// WARNING: Plain DNS traffic is unencrypted. Your NextDNS profile ID
+	// and DNS queries may be visible to network observers. Use DoT or DoH
+	// for privacy in untrusted networks.
 	DNSProtocolDNS DNSProtocol = "DNS"
 )
 
