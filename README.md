@@ -19,6 +19,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 | `NextDNSAllowlist` | Reusable list of allowed domains |
 | `NextDNSDenylist` | Reusable list of blocked domains |
 | `NextDNSTLDList` | Reusable list of blocked TLDs |
+| `NextDNSCoreDNS` | Deploy CoreDNS instances forwarding to NextDNS upstream |
 
 ## Installation
 
@@ -107,6 +108,7 @@ See the [config/samples](config/samples/) directory for complete examples:
 - [NextDNSAllowlist](config/samples/nextdns_v1alpha1_nextdnsallowlist.yaml) - Shared allowlist for business services
 - [NextDNSDenylist](config/samples/nextdns_v1alpha1_nextdnsdenylist.yaml) - Shared denylist for malicious domains
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
+- [NextDNSCoreDNS](config/samples/nextdns_v1alpha1_nextdnscoredns.yaml) - CoreDNS deployment with NextDNS upstream
 
 ## Configuration
 
@@ -149,6 +151,56 @@ envFrom:
   - configMapRef:
       name: my-dns-config
 ```
+
+### CoreDNS Deployment
+
+Deploy a dedicated CoreDNS instance that forwards DNS queries to NextDNS. This is useful for providing DNS services to devices on your network (home routers, IoT devices, etc.) that can't use DoH/DoT directly.
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+spec:
+  profileRef:
+    name: my-profile  # References an existing NextDNSProfile
+
+  upstream:
+    primary: DoT      # DNS over TLS (recommended)
+    fallback: DoH     # Fallback to DNS over HTTPS
+
+  deployment:
+    mode: Deployment
+    replicas: 2
+
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "192.168.1.53"  # Optional static IP
+
+  cache:
+    enabled: true
+    successTTL: 3600  # Cache TTL in seconds
+```
+
+**Features:**
+
+- **Upstream protocols**: DoT (DNS over TLS), DoH (DNS over HTTPS), or plain DNS
+- **Deployment modes**: Kubernetes Deployment (with replicas) or DaemonSet
+- **Service types**: ClusterIP, LoadBalancer, or NodePort
+- **Placement controls**: nodeSelector, affinity, tolerations
+- **Caching**: Configurable DNS response caching
+- **Metrics**: Prometheus metrics endpoint with optional ServiceMonitor
+- **Security**: Containers run read-only with dropped capabilities
+
+**Check deployment status:**
+
+```bash
+kubectl get nextdnscoredns home-dns
+# NAME       PROFILE ID   DNS IP          READY   AGE
+# home-dns   abc123       192.168.1.53    true    5m
+```
+
+> **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Use DoT or DoH for privacy in untrusted networks.
 
 ### Drift Detection
 
