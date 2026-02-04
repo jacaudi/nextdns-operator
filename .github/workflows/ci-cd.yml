@@ -42,7 +42,7 @@ jobs:
       go-version: '1.25'
       coverage: true
       coverage-threshold: 70
-      test-packages: './internal/controller/... ./internal/nextdns/...'
+      test-packages: './internal/controller/... ./internal/nextdns/... ./internal/coredns/...'
 
   # Create semantic version and GitHub release (main branch only)
   release:
