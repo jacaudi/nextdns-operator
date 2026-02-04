@@ -86,9 +86,9 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 	switch cfg.PrimaryProtocol {
 	case ProtocolDoT:
-		// DoT requires tls_servername block for SNI
-		upstream := fmt.Sprintf("tls://%s.%s", cfg.ProfileID, nextDNSDoTServer)
-		fmt.Fprintf(sb, "    forward . %s {\n", upstream)
+		// DoT uses anycast IPs with TLS and tls_servername for SNI
+		// The profile ID is embedded in the SNI hostname for NextDNS routing
+		fmt.Fprintf(sb, "    forward . tls://%s tls://%s {\n", nextDNSAnycastIP1, nextDNSAnycastIP2)
 		fmt.Fprintf(sb, "        tls_servername %s.%s\n", cfg.ProfileID, nextDNSDoTServer)
 		sb.WriteString("    }\n")
 
@@ -108,7 +108,7 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 func GetUpstreamEndpoint(profileID, protocol string) string {
 	switch protocol {
 	case ProtocolDoT:
-		return fmt.Sprintf("tls://%s.%s", profileID, nextDNSDoTServer)
+		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", nextDNSAnycastIP1, nextDNSAnycastIP2, profileID, nextDNSDoTServer)
 	case ProtocolDoH:
 		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, profileID)
 	case ProtocolDNS:

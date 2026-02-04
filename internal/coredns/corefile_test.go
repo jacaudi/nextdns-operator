@@ -18,8 +18,8 @@ func TestGenerateCorefile_DoTPrimary(t *testing.T) {
 
 	corefile := GenerateCorefile(cfg)
 
-	// Should contain forward with tls:// and tls_servername
-	assert.Contains(t, corefile, "forward . tls://abc123.dns.nextdns.io")
+	// Should contain forward with tls:// IPs and tls_servername with profile ID
+	assert.Contains(t, corefile, "forward . tls://45.90.28.0 tls://45.90.30.0")
 	assert.Contains(t, corefile, "tls_servername abc123.dns.nextdns.io")
 
 	// Should contain cache with TTL
@@ -173,7 +173,7 @@ func TestGenerateCorefile_ZeroCacheTTL(t *testing.T) {
 
 func TestGetUpstreamEndpoint_DoT(t *testing.T) {
 	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT)
-	assert.Equal(t, "tls://abc123.dns.nextdns.io", endpoint)
+	assert.Equal(t, "tls://45.90.28.0, tls://45.90.30.0 (SNI: abc123.dns.nextdns.io)", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DoH(t *testing.T) {
