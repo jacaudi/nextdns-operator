@@ -1348,22 +1348,10 @@ spec:
               upstream:
                 description: Upstream is the status of the NextDNS upstream connection
                 properties:
-                  healthy:
-                    description: Healthy indicates if the upstream is responding
-                    type: boolean
-                  lastChecked:
-                    description: LastChecked is the time of the last health check
-                    format: date-time
-                    type: string
-                  latency:
-                    description: Latency is the last measured latency in milliseconds
-                    format: int64
-                    type: integer
                   url:
-                    description: URL is the NextDNS upstream URL
+                    description: URL is the NextDNS upstream URL being used
                     type: string
                 required:
-                - healthy
                 - url
                 type: object
             type: object

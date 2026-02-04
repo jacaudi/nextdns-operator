@@ -723,8 +723,7 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 
 	// Update upstream status
 	coreDNS.Status.Upstream = &nextdnsv1alpha1.UpstreamStatus{
-		URL:     upstreamURL,
-		Healthy: true, // We assume healthy since we're just configuring it
+		URL: upstreamURL,
 	}
 
 	// Get service to determine DNS IP

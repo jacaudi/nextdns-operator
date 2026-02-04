@@ -213,21 +213,10 @@ type DNSEndpoint struct {
 	Protocol string `json:"protocol"`
 }
 
-// UpstreamStatus represents the status of upstream DNS connectivity
+// UpstreamStatus represents the status of upstream DNS configuration
 type UpstreamStatus struct {
-	// URL is the NextDNS upstream URL
+	// URL is the NextDNS upstream URL being used
 	URL string `json:"url"`
-
-	// Healthy indicates if the upstream is responding
-	Healthy bool `json:"healthy"`
-
-	// Latency is the last measured latency in milliseconds
-	// +optional
-	Latency *int64 `json:"latency,omitempty"`
-
-	// LastChecked is the time of the last health check
-	// +optional
-	LastChecked *metav1.Time `json:"lastChecked,omitempty"`
 }
 
 // ReplicaStatus represents the status of deployment replicas
