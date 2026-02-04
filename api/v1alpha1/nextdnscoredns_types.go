@@ -74,7 +74,7 @@ type CoreDNSDeploymentConfig struct {
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Image specifies the CoreDNS container image
-	// +kubebuilder:default="coredns/coredns:1.11.1"
+	// +kubebuilder:default="registry.k8s.io/coredns/coredns:1.11.1"
 	// +optional
 	Image string `json:"image,omitempty"`
 
