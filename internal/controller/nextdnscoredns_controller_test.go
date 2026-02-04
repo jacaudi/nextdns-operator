@@ -1422,7 +1422,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodSpec_DefaultImage(t *testing.T) {
 
 	// Verify default image is used
 	require.Len(t, podSpec.Containers, 1, "Should have exactly one container")
-	assert.Equal(t, "registry.k8s.io/coredns/coredns:1.11.1", podSpec.Containers[0].Image, "Container image should be default coredns image")
+	assert.Equal(t, "mirror.gcr.io/coredns/coredns:1.13.1", podSpec.Containers[0].Image, "Container image should be default coredns image")
 
 	// Verify no custom NodeSelector, Tolerations, or Resources
 	assert.Nil(t, podSpec.NodeSelector, "NodeSelector should be nil when not specified")
