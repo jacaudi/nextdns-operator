@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -1281,7 +1282,8 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := r.buildCorefileConfig(tt.coreDNS, tt.profile)
+			cfg, err := r.buildCorefileConfig(tt.coreDNS, tt.profile)
+			assert.NoError(t, err, "buildCorefileConfig should not return error")
 
 			assert.Equal(t, tt.wantProfileID, cfg.ProfileID, "ProfileID should match")
 			assert.Equal(t, tt.wantPrimary, cfg.PrimaryProtocol, "PrimaryProtocol should match")
@@ -1658,4 +1660,174 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_ReturnsCopy(t *testing.T) 
 	result["new-key"] = "new-value"
 
 	assert.NotContains(t, original, "new-key", "Modifying result should not affect original")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithDomainOverrides(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	cacheTTL := int32(120)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+				{
+					Domain:    "internal.corp.com",
+					Upstreams: []string{"10.0.0.53", "10.0.0.54"},
+					CacheTTL:  &cacheTTL,
+				},
+				{
+					Domain:    "home.local",
+					Upstreams: []string{"192.168.1.1"},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.Len(t, cfg.DomainOverrides, 2)
+
+	assert.Equal(t, "internal.corp.com", cfg.DomainOverrides[0].Domain)
+	assert.Equal(t, []string{"10.0.0.53", "10.0.0.54"}, cfg.DomainOverrides[0].Upstreams)
+	assert.Equal(t, int32(120), cfg.DomainOverrides[0].CacheTTL)
+
+	assert.Equal(t, "home.local", cfg.DomainOverrides[1].Domain)
+	assert.Equal(t, []string{"192.168.1.1"}, cfg.DomainOverrides[1].Upstreams)
+	assert.Equal(t, int32(0), cfg.DomainOverrides[1].CacheTTL)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_DuplicateDomainError(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+				{
+					Domain:    "corp.example.com",
+					Upstreams: []string{"10.0.0.1"},
+				},
+				{
+					Domain:    "corp.example.com",
+					Upstreams: []string{"10.0.0.2"},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	_, err := r.buildCorefileConfig(coreDNS, profile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate domain override")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Ready",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	cacheTTL := int32(60)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+				{
+					Domain:    "internal.corp.com",
+					Upstreams: []string{"10.0.0.53", "10.0.0.54"},
+					CacheTTL:  &cacheTTL,
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	resourceName := "test-coredns-abc123-coredns"
+	configMap := &corev1.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}, configMap)
+	require.NoError(t, err, "ConfigMap should be created")
+
+	corefile := configMap.Data[CorefileKey]
+	assert.Contains(t, corefile, "internal.corp.com {", "Corefile should contain domain override block")
+	assert.Contains(t, corefile, "forward . 10.0.0.53 10.0.0.54", "Corefile should forward to override upstreams")
+	assert.Contains(t, corefile, "cache 60", "Corefile should have override-specific cache TTL")
+
+	overrideIdx := strings.Index(corefile, "internal.corp.com {")
+	catchAllIdx := strings.Index(corefile, ". {")
+	assert.True(t, overrideIdx < catchAllIdx, "Domain override block should precede catch-all block")
 }

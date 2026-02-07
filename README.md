@@ -261,6 +261,61 @@ spec:
 
 The CoreDNS pods will now have interfaces on both the cluster network and the VLAN, accessible at `192.168.100.53` and `192.168.100.54`.
 
+
+### Domain Overrides
+
+Configure domain-specific DNS upstream servers for split-horizon DNS:
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+spec:
+  profileRef:
+    name: my-profile
+  upstream:
+    primary: DoT
+  domainOverrides:
+    - domain: corp.example.com
+      upstreams:
+        - 10.0.0.1
+        - 10.0.0.2
+      cacheTTL: 60
+    - domain: internal.local
+      upstreams:
+        - 192.168.1.1
+```
+
+This generates a Corefile with domain-specific server blocks:
+
+```
+corp.example.com {
+    forward . 10.0.0.1 10.0.0.2
+    cache 60
+    errors
+}
+
+internal.local {
+    forward . 192.168.1.1
+    cache 30
+    errors
+}
+
+. {
+    forward . tls://45.90.28.0 tls://45.90.30.0 {
+        tls_servername profileid.dns.nextdns.io
+    }
+    cache 3600
+    ...
+}
+```
+
+**Use cases:**
+- Forward internal domains to internal DNS servers
+- Split-horizon DNS for private zones
+- Override resolution for specific domains without affecting NextDNS upstream
+
 ### Drift Detection
 
 The operator periodically reconciles all resources to detect and correct drift from manual changes made outside Kubernetes.

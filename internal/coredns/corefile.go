@@ -25,6 +25,13 @@ const (
 	nextDNSAnycastIP2 = "45.90.30.0"
 )
 
+// DomainOverrideConfig represents a domain-specific upstream configuration
+type DomainOverrideConfig struct {
+	Domain    string
+	Upstreams []string
+	CacheTTL  int32 // 0 means use default (30 seconds)
+}
+
 // CorefileConfig holds the configuration for generating a CoreDNS Corefile.
 type CorefileConfig struct {
 	// ProfileID is the NextDNS profile ID to use for DNS resolution.
@@ -41,6 +48,31 @@ type CorefileConfig struct {
 
 	// MetricsEnabled controls whether the prometheus plugin is enabled.
 	MetricsEnabled bool
+
+	// DomainOverrides specifies domain-specific upstream configurations
+	DomainOverrides []DomainOverrideConfig
+}
+
+// ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
+// Returns an error describing all validation failures.
+func ValidateDomainOverrides(overrides []DomainOverrideConfig) error {
+	seen := make(map[string]bool, len(overrides))
+	var errs []string
+	for _, o := range overrides {
+		if seen[o.Domain] {
+			errs = append(errs, fmt.Sprintf("duplicate domain override: %s", o.Domain))
+		}
+		seen[o.Domain] = true
+		for _, u := range o.Upstreams {
+			if u == "" {
+				errs = append(errs, fmt.Sprintf("empty upstream for domain %s", o.Domain))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("domain override validation failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // GenerateCorefile generates a CoreDNS Corefile configuration string
@@ -48,6 +80,12 @@ type CorefileConfig struct {
 func GenerateCorefile(cfg *CorefileConfig) string {
 	var sb strings.Builder
 
+	// Generate domain override blocks first (order matters in CoreDNS)
+	for _, override := range cfg.DomainOverrides {
+		writeDomainOverrideBlock(&sb, &override)
+	}
+
+	// Generate the catch-all block for NextDNS
 	sb.WriteString(". {\n")
 
 	// Generate forward plugin configuration
@@ -78,6 +116,29 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	sb.WriteString("}")
 
 	return sb.String()
+}
+
+// writeDomainOverrideBlock writes a domain-specific server block.
+// Override blocks intentionally only include forward, cache, and errors.
+// Plugins like health, ready, prometheus, and log are omitted because they
+// only need to be configured once in the catch-all block — CoreDNS applies
+// them process-wide from there.
+func writeDomainOverrideBlock(sb *strings.Builder, override *DomainOverrideConfig) {
+	fmt.Fprintf(sb, "%s {\n", override.Domain)
+
+	// Build upstream list
+	upstreams := strings.Join(override.Upstreams, " ")
+	fmt.Fprintf(sb, "    forward . %s\n", upstreams)
+
+	// Cache with override-specific TTL or default
+	cacheTTL := override.CacheTTL
+	if cacheTTL == 0 {
+		cacheTTL = 30 // default for overrides
+	}
+	fmt.Fprintf(sb, "    cache %d\n", cacheTTL)
+
+	sb.WriteString("    errors\n")
+	sb.WriteString("}\n\n")
 }
 
 // writeForwardPlugin writes the forward plugin configuration to the string builder.
