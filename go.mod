@@ -2,7 +2,7 @@ module github.com/jacaudi/nextdns-operator
 
 go 1.25.0
 
-toolchain go1.25.6
+toolchain go1.25.7
 
 require (
 	github.com/jacaudi/nextdns-go v0.11.0
