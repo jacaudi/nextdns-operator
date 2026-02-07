@@ -176,6 +176,25 @@ type CoreDNSLoggingConfig struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+// DomainOverride specifies a domain-specific DNS upstream configuration
+type DomainOverride struct {
+	// Domain is the DNS domain to override (e.g., "corp.example.com")
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Domain string `json:"domain"`
+
+	// Upstreams is the list of upstream DNS server IPs for this domain
+	// Each entry must be a valid IPv4 address or IPv4:port
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Upstreams []string `json:"upstreams"`
+
+	// CacheTTL specifies the cache TTL for this domain in seconds (optional)
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	CacheTTL *int32 `json:"cacheTTL,omitempty"`
+}
+
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
 type NextDNSCoreDNSSpec struct {
 	// ProfileRef references the NextDNSProfile to use for DNS resolution
@@ -205,6 +224,12 @@ type NextDNSCoreDNSSpec struct {
 	// Logging configures DNS query logging
 	// +optional
 	Logging *CoreDNSLoggingConfig `json:"logging,omitempty"`
+
+	// DomainOverrides configures domain-specific DNS upstream servers
+	// Queries for these domains will be forwarded to the specified upstreams
+	// instead of NextDNS
+	// +optional
+	DomainOverrides []DomainOverride `json:"domainOverrides,omitempty"`
 }
 
 // DNSEndpoint represents a DNS endpoint exposed by the service

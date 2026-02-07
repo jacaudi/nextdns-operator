@@ -221,7 +221,10 @@ func (r *NextDNSCoreDNSReconciler) reconcileConfigMap(ctx context.Context, coreD
 	resourceName := r.getResourceName(coreDNS, profile)
 
 	// Build Corefile configuration
-	cfg := r.buildCorefileConfig(coreDNS, profile)
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	if err != nil {
+		return fmt.Errorf("invalid Corefile configuration: %w", err)
+	}
 	corefileContent := coredns.GenerateCorefile(cfg)
 
 	configMap := &corev1.ConfigMap{
@@ -256,7 +259,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileConfigMap(ctx context.Context, coreD
 }
 
 // buildCorefileConfig builds the CorefileConfig from the CR spec
-func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) *coredns.CorefileConfig {
+func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) (*coredns.CorefileConfig, error) {
 	cfg := &coredns.CorefileConfig{
 		ProfileID:       profile.Status.ProfileID,
 		PrimaryProtocol: coredns.ProtocolDoT, // default
@@ -289,7 +292,26 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		cfg.MetricsEnabled = *coreDNS.Spec.Metrics.Enabled
 	}
 
-	return cfg
+	// Add domain overrides if specified
+	if len(coreDNS.Spec.DomainOverrides) > 0 {
+		cfg.DomainOverrides = make([]coredns.DomainOverrideConfig, len(coreDNS.Spec.DomainOverrides))
+		for i, override := range coreDNS.Spec.DomainOverrides {
+			cfg.DomainOverrides[i] = coredns.DomainOverrideConfig{
+				Domain:    override.Domain,
+				Upstreams: override.Upstreams,
+			}
+			if override.CacheTTL != nil {
+				cfg.DomainOverrides[i].CacheTTL = *override.CacheTTL
+			}
+		}
+
+		// Validate domain overrides (catch duplicates, empty upstreams)
+		if err := coredns.ValidateDomainOverrides(cfg.DomainOverrides); err != nil {
+			return nil, err
+		}
+	}
+
+	return cfg, nil
 }
 
 // reconcileWorkload dispatches to Deployment or DaemonSet reconciliation based on mode

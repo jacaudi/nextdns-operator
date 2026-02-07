@@ -208,6 +208,118 @@ func TestCorefileConfig_Defaults(t *testing.T) {
 	assert.Contains(t, corefile, "forward")
 }
 
+func TestGenerateCorefile_WithDomainOverrides(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		LoggingEnabled:  false,
+		MetricsEnabled:  true,
+		DomainOverrides: []DomainOverrideConfig{
+			{
+				Domain:    "corp.example.com",
+				Upstreams: []string{"10.0.0.1", "10.0.0.2"},
+				CacheTTL:  60,
+			},
+		},
+	}
+
+	corefile := GenerateCorefile(cfg)
+
+	assert.Contains(t, corefile, "corp.example.com {")
+	assert.Contains(t, corefile, "forward . 10.0.0.1 10.0.0.2")
+	assert.Contains(t, corefile, "cache 60")
+
+	corpIndex := strings.Index(corefile, "corp.example.com {")
+	catchAllIndex := strings.Index(corefile, ". {")
+	assert.True(t, corpIndex < catchAllIndex, "Domain override should come before catch-all block")
+
+	assert.Contains(t, corefile, "tls://45.90.28.0")
+	assert.Contains(t, corefile, "tls_servername abc123.dns.nextdns.io")
+}
+
+func TestGenerateCorefile_MultipleDomainOverrides(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "xyz789",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		DomainOverrides: []DomainOverrideConfig{
+			{
+				Domain:    "internal.local",
+				Upstreams: []string{"192.168.1.1"},
+			},
+			{
+				Domain:    "corp.example.com",
+				Upstreams: []string{"10.0.0.1", "10.0.0.2"},
+				CacheTTL:  120,
+			},
+		},
+	}
+
+	corefile := GenerateCorefile(cfg)
+
+	assert.Contains(t, corefile, "internal.local {")
+	assert.Contains(t, corefile, "corp.example.com {")
+
+	internalIndex := strings.Index(corefile, "internal.local {")
+	internalEnd := strings.Index(corefile[internalIndex:], "}") + internalIndex
+	internalBlock := corefile[internalIndex:internalEnd]
+	assert.Contains(t, internalBlock, "cache 30")
+
+	corpIndex := strings.Index(corefile, "corp.example.com {")
+	corpEnd := strings.Index(corefile[corpIndex:], "}") + corpIndex
+	corpBlock := corefile[corpIndex:corpEnd]
+	assert.Contains(t, corpBlock, "cache 120")
+}
+
+func TestGenerateCorefile_NoDomainOverrides(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "test123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		DomainOverrides: nil,
+	}
+
+	corefile := GenerateCorefile(cfg)
+
+	assert.True(t, strings.HasPrefix(strings.TrimSpace(corefile), ". {"),
+		"Without overrides, corefile should start with catch-all block")
+	assert.Contains(t, corefile, "forward . tls://45.90.28.0")
+
+	catchAllIndex := strings.Index(corefile, ". {")
+	preamble := corefile[:catchAllIndex]
+	assert.Empty(t, strings.TrimSpace(preamble),
+		"Nothing should appear before the catch-all block when there are no overrides")
+}
+
+func TestValidateDomainOverrides_DuplicateDomains(t *testing.T) {
+	overrides := []DomainOverrideConfig{
+		{Domain: "corp.example.com", Upstreams: []string{"10.0.0.1"}},
+		{Domain: "corp.example.com", Upstreams: []string{"10.0.0.2"}},
+	}
+
+	err := ValidateDomainOverrides(overrides)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate domain override")
+}
+
+func TestValidateDomainOverrides_Valid(t *testing.T) {
+	overrides := []DomainOverrideConfig{
+		{Domain: "corp.example.com", Upstreams: []string{"10.0.0.1"}},
+		{Domain: "internal.local", Upstreams: []string{"192.168.1.1"}},
+	}
+
+	err := ValidateDomainOverrides(overrides)
+	assert.NoError(t, err)
+}
+
+func TestValidateDomainOverrides_Empty(t *testing.T) {
+	err := ValidateDomainOverrides(nil)
+	assert.NoError(t, err)
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string
@@ -243,17 +355,27 @@ func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 				MetricsEnabled:  false,
 			},
 		},
+		{
+			name: "with domain overrides",
+			cfg: &CorefileConfig{
+				ProfileID:       "test4",
+				PrimaryProtocol: ProtocolDoT,
+				CacheTTL:        3600,
+				MetricsEnabled:  true,
+				DomainOverrides: []DomainOverrideConfig{
+					{Domain: "corp.example.com", Upstreams: []string{"10.0.0.1"}},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			corefile := GenerateCorefile(tt.cfg)
 
-			// Basic structural validation
-			assert.True(t, strings.HasPrefix(strings.TrimSpace(corefile), ". {"), "Corefile should start with '. {'")
+			assert.Contains(t, corefile, ". {", "Corefile should contain catch-all block")
 			assert.True(t, strings.HasSuffix(strings.TrimSpace(corefile), "}"), "Corefile should end with '}'")
 
-			// Count braces to ensure they're balanced
 			openBraces := strings.Count(corefile, "{")
 			closeBraces := strings.Count(corefile, "}")
 			assert.Equal(t, openBraces, closeBraces, "Braces should be balanced")

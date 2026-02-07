@@ -1123,6 +1123,38 @@ spec:
                       type: object
                     type: array
                 type: object
+              domainOverrides:
+                description: |-
+                  DomainOverrides configures domain-specific DNS upstream servers
+                  Queries for these domains will be forwarded to the specified upstreams
+                  instead of NextDNS
+                items:
+                  description: DomainOverride specifies a domain-specific DNS upstream
+                    configuration
+                  properties:
+                    cacheTTL:
+                      description: CacheTTL specifies the cache TTL for this domain
+                        in seconds (optional)
+                      format: int32
+                      minimum: 0
+                      type: integer
+                    domain:
+                      description: Domain is the DNS domain to override (e.g., "corp.example.com")
+                      minLength: 1
+                      type: string
+                    upstreams:
+                      description: |-
+                        Upstreams is the list of upstream DNS server IPs for this domain
+                        Each entry must be a valid IPv4 address or IPv4:port
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - domain
+                  - upstreams
+                  type: object
+                type: array
               logging:
                 description: Logging configures DNS query logging
                 properties:
