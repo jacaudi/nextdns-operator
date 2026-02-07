@@ -13,7 +13,8 @@ func TestProfileConfigJSON_Unmarshal(t *testing.T) {
 		"security": {
 			"aiThreatDetection": true,
 			"googleSafeBrowsing": false,
-			"cryptojacking": true
+			"cryptojacking": true,
+			"threatIntelligenceFeeds": ["feed-a", "feed-b"]
 		},
 		"privacy": {
 			"blocklists": [
@@ -48,6 +49,7 @@ func TestProfileConfigJSON_Unmarshal(t *testing.T) {
 	require.NotNil(t, cfg.Security)
 	assert.Equal(t, ptrBool(true), cfg.Security.AIThreatDetection)
 	assert.Equal(t, ptrBool(false), cfg.Security.GoogleSafeBrowsing)
+	assert.Equal(t, []string{"feed-a", "feed-b"}, cfg.Security.ThreatIntelligenceFeeds)
 
 	require.NotNil(t, cfg.Privacy)
 	assert.Len(t, cfg.Privacy.Blocklists, 2)

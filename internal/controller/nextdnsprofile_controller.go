@@ -38,6 +38,9 @@ const (
 
 	// ConditionTypeReferencesResolved indicates all references are resolved
 	ConditionTypeReferencesResolved = "ReferencesResolved"
+
+	// ConditionTypeConfigImported indicates whether config import from ConfigMap succeeded
+	ConditionTypeConfigImported = "ConfigImported"
 )
 
 // ClientFactory is a function that creates a NextDNS client
@@ -85,6 +88,9 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	// Deep copy to avoid mutating the controller-runtime cache
+	profile = profile.DeepCopy()
+
 	// Check if the resource is being deleted
 	if !profile.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, profile)
@@ -118,6 +124,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err != nil {
 			logger.Error(err, "Failed to import configuration from ConfigMap")
 			metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ConfigImportFailed")
+			r.setCondition(profile, ConditionTypeConfigImported, metav1.ConditionFalse, "ImportFailed", err.Error())
 			r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ConfigImportFailed", err.Error())
 			if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
 				logger.Error(updateErr, "Failed to update status")
@@ -125,13 +132,24 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 
-		// Merge imported config into spec (spec fields take precedence)
+		// Merge imported config into the in-memory spec. This mutation is intentional
+		// and is NOT persisted back to the API server. On each reconciliation the
+		// profile is fetched fresh from the cache and the merge is re-applied, so
+		// the stored spec always remains the user's original intent. Do not persist
+		// the merged spec; doing so would overwrite the user's explicit field values.
 		configimport.MergeIntoSpec(&profile.Spec, importResult.Config)
 		profile.Status.ConfigImportResourceVersion = importResult.ResourceVersion
+
+		for _, w := range importResult.Warnings {
+			logger.Info("Config import warning", "warning", w)
+		}
 
 		logger.Info("Imported configuration from ConfigMap",
 			"configMap", profile.Spec.ConfigImportRef.Name,
 			"resourceVersion", importResult.ResourceVersion)
+
+		r.setCondition(profile, ConditionTypeConfigImported, metav1.ConditionTrue, "ImportSucceeded",
+			fmt.Sprintf("Imported from ConfigMap %s (resourceVersion: %s)", profile.Spec.ConfigImportRef.Name, importResult.ResourceVersion))
 	}
 
 	// Resolve list references

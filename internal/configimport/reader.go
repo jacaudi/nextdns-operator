@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,6 +19,7 @@ const defaultKey = "config.json"
 type ImportResult struct {
 	Config          *ProfileConfigJSON
 	ResourceVersion string
+	Warnings        []string
 }
 
 // ReadAndParse reads a ConfigMap referenced by ConfigImportRef, parses the
@@ -39,13 +41,33 @@ func ReadAndParse(ctx context.Context, c client.Client, namespace string, ref *n
 		return nil, fmt.Errorf("key %q not found in ConfigMap %s/%s", key, namespace, ref.Name)
 	}
 
-	var cfg ProfileConfigJSON
-	if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+	// Try strict parsing first to detect unknown fields.
+	dec := json.NewDecoder(strings.NewReader(jsonData))
+	dec.DisallowUnknownFields()
+	var strictCfg ProfileConfigJSON
+	var warnings []string
+	if err := dec.Decode(&strictCfg); err != nil {
+		if strings.Contains(err.Error(), "unknown field") {
+			warnings = append(warnings, fmt.Sprintf("import JSON contains unknown fields that will be ignored: %s", err.Error()))
+			// Fall back to lenient parsing.
+			var cfg ProfileConfigJSON
+			if err := json.Unmarshal([]byte(jsonData), &cfg); err != nil {
+				return nil, fmt.Errorf("failed to parse JSON from ConfigMap %s/%s key %q: %w", namespace, ref.Name, key, err)
+			}
+			if err := Validate(&cfg); err != nil {
+				return nil, fmt.Errorf("ConfigMap %s/%s key %q: %w", namespace, ref.Name, key, err)
+			}
+			return &ImportResult{Config: &cfg, ResourceVersion: cm.ResourceVersion, Warnings: warnings}, nil
+		}
 		return nil, fmt.Errorf("failed to parse JSON from ConfigMap %s/%s key %q: %w", namespace, ref.Name, key, err)
 	}
 
+	if err := Validate(&strictCfg); err != nil {
+		return nil, fmt.Errorf("ConfigMap %s/%s key %q: %w", namespace, ref.Name, key, err)
+	}
+
 	return &ImportResult{
-		Config:          &cfg,
+		Config:          &strictCfg,
 		ResourceVersion: cm.ResourceVersion,
 	}, nil
 }

@@ -210,6 +210,120 @@ data:
 - Lists (denylist, allowlist, rewrites, blocklists, etc.) are merged with deduplication
 - Changes to the import ConfigMap trigger re-reconciliation
 
+#### Supported Import Fields
+
+Below is a complete JSON example showing every supported field. All fields are optional -- include only what you need.
+
+```json
+{
+  "security": {
+    "aiThreatDetection": true,
+    "googleSafeBrowsing": true,
+    "cryptojacking": true,
+    "dnsRebinding": true,
+    "idnHomographs": true,
+    "typosquatting": true,
+    "dga": true,
+    "nrd": false,
+    "ddns": false,
+    "parking": true,
+    "csam": true,
+    "threatIntelligenceFeeds": ["feed-id-1", "feed-id-2"]
+  },
+  "privacy": {
+    "blocklists": [
+      {"id": "nextdns-recommended", "active": true},
+      {"id": "oisd", "active": true}
+    ],
+    "natives": [
+      {"id": "apple", "active": true},
+      {"id": "windows", "active": true}
+    ],
+    "disguisedTrackers": true,
+    "allowAffiliate": false
+  },
+  "parentalControl": {
+    "categories": [
+      {"id": "gambling", "active": true},
+      {"id": "adult", "active": true}
+    ],
+    "services": [
+      {"id": "tiktok", "active": true},
+      {"id": "facebook", "active": false}
+    ],
+    "safeSearch": false,
+    "youtubeRestrictedMode": false
+  },
+  "denylist": [
+    {"domain": "ads.example.com", "active": true},
+    {"domain": "tracker.example.com", "active": true}
+  ],
+  "allowlist": [
+    {"domain": "safe.example.com", "active": true}
+  ],
+  "rewrites": [
+    {"from": "app.internal", "to": "10.0.0.5", "active": true}
+  ],
+  "settings": {
+    "logs": {
+      "enabled": true,
+      "logClientsIPs": false,
+      "logDomains": true,
+      "retention": "30d"
+    },
+    "blockPage": {
+      "enabled": true
+    },
+    "performance": {
+      "ecs": true,
+      "cacheBoost": true,
+      "cnameFlattening": true
+    },
+    "web3": false
+  }
+}
+```
+
+| Section | Field | Type | Description |
+|---------|-------|------|-------------|
+| `security` | `aiThreatDetection` | bool | AI-based threat detection |
+| | `googleSafeBrowsing` | bool | Google Safe Browsing protection |
+| | `cryptojacking` | bool | Block cryptomining scripts |
+| | `dnsRebinding` | bool | DNS rebinding attack protection |
+| | `idnHomographs` | bool | Block IDN homograph attacks |
+| | `typosquatting` | bool | Block typosquatting domains |
+| | `dga` | bool | Block algorithmically-generated domains |
+| | `nrd` | bool | Block newly registered domains |
+| | `ddns` | bool | Block dynamic DNS hostnames |
+| | `parking` | bool | Block parked domains |
+| | `csam` | bool | Block child sexual abuse material |
+| | `threatIntelligenceFeeds` | string[] | Threat feed identifiers to enable |
+| `privacy` | `blocklists` | object[] | Ad/tracker blocklists (`id`, `active`) |
+| | `natives` | object[] | Native tracking protection per vendor (`id`, `active`) |
+| | `disguisedTrackers` | bool | Block CNAME-cloaked trackers |
+| | `allowAffiliate` | bool | Allow affiliate & tracking links |
+| `parentalControl` | `categories` | object[] | Content categories to block (`id`, `active`) |
+| | `services` | object[] | Specific services to block (`id`, `active`) |
+| | `safeSearch` | bool | Enforce safe search on search engines |
+| | `youtubeRestrictedMode` | bool | Enforce YouTube restricted mode |
+| `denylist` | | object[] | Domains to block (`domain`, `active`) |
+| `allowlist` | | object[] | Domains to allow (`domain`, `active`) |
+| `rewrites` | | object[] | DNS rewrites (`from`, `to`, `active`) |
+| `settings.logs` | `enabled` | bool | Enable query logging |
+| | `logClientsIPs` | bool | Log client IP addresses |
+| | `logDomains` | bool | Log queried domains |
+| | `retention` | string | Log retention period (`1h`, `6h`, `1d`, `7d`, `30d`, `90d`, `1y`, `2y`) |
+| `settings.blockPage` | `enabled` | bool | Show block page instead of failing silently |
+| `settings.performance` | `ecs` | bool | EDNS Client Subnet |
+| | `cacheBoost` | bool | Extended caching |
+| | `cnameFlattening` | bool | CNAME flattening |
+| `settings` | `web3` | bool | Web3 domain resolution |
+
+**Notes:**
+- Unknown fields in the JSON are silently ignored (the operator logs a warning).
+- Domain values in `denylist`, `allowlist`, and `rewrites` are validated against the same rules as inline spec domains.
+- List entries have configurable upper bounds: 1000 for deny/allowlists, 500 for rewrites, and 100 for blocklists.
+
 ### CoreDNS Deployment
 
 Deploy a dedicated CoreDNS instance that forwards DNS queries to NextDNS. This is useful for providing DNS services to devices on your network (home routers, IoT devices, etc.) that can't use DoH/DoT directly.

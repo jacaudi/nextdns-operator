@@ -147,6 +147,67 @@ func TestReadAndParse_KeyNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "key \"config.json\" not found")
 }
 
+func TestReadAndParse_UnknownFieldWarning(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "my-config",
+			Namespace:       "default",
+			ResourceVersion: "42",
+		},
+		Data: map[string]string{
+			"config.json": `{
+				"security": {"aiThreatDetection": true},
+				"unknownTopLevel": "value"
+			}`,
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(cm).
+		Build()
+
+	ref := &nextdnsv1alpha1.ConfigImportRef{
+		Name: "my-config",
+	}
+
+	result, err := ReadAndParse(context.Background(), client, "default", ref)
+	require.NoError(t, err)
+	require.NotNil(t, result.Config)
+	assert.NotNil(t, result.Config.Security)
+	assert.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0], "unknown field")
+}
+
+func TestReadAndParse_NoWarningsForKnownFields(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "my-config",
+			Namespace:       "default",
+			ResourceVersion: "10",
+		},
+		Data: map[string]string{
+			"config.json": `{
+				"security": {"aiThreatDetection": true},
+				"denylist": [{"domain": "bad.com", "active": true}]
+			}`,
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(cm).
+		Build()
+
+	ref := &nextdnsv1alpha1.ConfigImportRef{
+		Name: "my-config",
+	}
+
+	result, err := ReadAndParse(context.Background(), client, "default", ref)
+	require.NoError(t, err)
+	assert.Empty(t, result.Warnings)
+}
+
 func TestReadAndParse_InvalidJSON(t *testing.T) {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

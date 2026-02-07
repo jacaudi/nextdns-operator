@@ -863,6 +863,7 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "Ready", ConditionTypeReady)
 	assert.Equal(t, "Synced", ConditionTypeSynced)
 	assert.Equal(t, "ReferencesResolved", ConditionTypeReferencesResolved)
+	assert.Equal(t, "ConfigImported", ConditionTypeConfigImported)
 }
 
 func TestFindProfilesForAllowlist_InvalidType(t *testing.T) {

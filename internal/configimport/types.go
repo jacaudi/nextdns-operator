@@ -14,17 +14,18 @@ type ProfileConfigJSON struct {
 }
 
 type SecurityJSON struct {
-	AIThreatDetection  *bool `json:"aiThreatDetection,omitempty"`
-	GoogleSafeBrowsing *bool `json:"googleSafeBrowsing,omitempty"`
-	Cryptojacking      *bool `json:"cryptojacking,omitempty"`
-	DNSRebinding       *bool `json:"dnsRebinding,omitempty"`
-	IDNHomographs      *bool `json:"idnHomographs,omitempty"`
-	Typosquatting      *bool `json:"typosquatting,omitempty"`
-	DGA                *bool `json:"dga,omitempty"`
-	NRD                *bool `json:"nrd,omitempty"`
-	DDNS               *bool `json:"ddns,omitempty"`
-	Parking            *bool `json:"parking,omitempty"`
-	CSAM               *bool `json:"csam,omitempty"`
+	AIThreatDetection       *bool    `json:"aiThreatDetection,omitempty"`
+	GoogleSafeBrowsing      *bool    `json:"googleSafeBrowsing,omitempty"`
+	Cryptojacking           *bool    `json:"cryptojacking,omitempty"`
+	DNSRebinding            *bool    `json:"dnsRebinding,omitempty"`
+	IDNHomographs           *bool    `json:"idnHomographs,omitempty"`
+	Typosquatting           *bool    `json:"typosquatting,omitempty"`
+	DGA                     *bool    `json:"dga,omitempty"`
+	NRD                     *bool    `json:"nrd,omitempty"`
+	DDNS                    *bool    `json:"ddns,omitempty"`
+	Parking                 *bool    `json:"parking,omitempty"`
+	CSAM                    *bool    `json:"csam,omitempty"`
+	ThreatIntelligenceFeeds []string `json:"threatIntelligenceFeeds,omitempty"`
 }
 
 type PrivacyJSON struct {
