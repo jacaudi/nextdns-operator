@@ -10,6 +10,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - **Profile Lifecycle Management**: Create new profiles or adopt existing ones; operator-created profiles are deleted on resource removal
 - **Drift Detection**: Automatic periodic reconciliation (default: 1 hour) catches manual changes made outside the operator
 - **ConfigMap Export**: Optionally create a ConfigMap with DNS connection details for easy integration with other applications
+- **ConfigMap Import**: Import base profile configuration from a ConfigMap JSON, with spec fields taking precedence
 
 ## Custom Resources
 
@@ -151,6 +152,63 @@ envFrom:
   - configMapRef:
       name: my-dns-config
 ```
+
+### ConfigMap Import
+
+Import base profile configuration from a ConfigMap containing JSON. Explicit spec fields always take precedence over imported values, making this useful for shared base configurations, migration from existing profiles, or templating.
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  name: my-profile
+spec:
+  name: "My Profile"
+  credentialsRef:
+    name: nextdns-credentials
+  configImportRef:
+    name: base-profile-config
+    key: config.json  # optional, defaults to "config.json"
+  # Explicit spec fields override imported values
+  security:
+    nrd: false  # overrides imported nrd value
+```
+
+The referenced ConfigMap contains profile configuration as JSON:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: base-profile-config
+data:
+  config.json: |
+    {
+      "security": {
+        "aiThreatDetection": true,
+        "googleSafeBrowsing": true,
+        "nrd": true
+      },
+      "privacy": {
+        "blocklists": [
+          {"id": "nextdns-recommended", "active": true}
+        ],
+        "disguisedTrackers": true
+      },
+      "denylist": [
+        {"domain": "ads.example.com", "active": true}
+      ],
+      "settings": {
+        "logs": {"enabled": true, "retention": "30d"}
+      }
+    }
+```
+
+**Precedence rules:**
+- Explicit spec fields always win over imported values
+- Imported values fill in fields not set in the spec
+- Lists (denylist, allowlist, rewrites, blocklists, etc.) are merged with deduplication
+- Changes to the import ConfigMap trigger re-reconciliation
 
 ### CoreDNS Deployment
 
