@@ -863,6 +863,7 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "Ready", ConditionTypeReady)
 	assert.Equal(t, "Synced", ConditionTypeSynced)
 	assert.Equal(t, "ReferencesResolved", ConditionTypeReferencesResolved)
+	assert.Equal(t, "ConfigImported", ConditionTypeConfigImported)
 }
 
 func TestFindProfilesForAllowlist_InvalidType(t *testing.T) {
@@ -1769,6 +1770,7 @@ type mockNextDNSClient struct {
 	settingsConfig        *nextdns.SettingsConfig
 	blocklists            []string
 	natives               []string
+	denylistEntries       []nextdns.DomainEntry
 
 	// Error injection
 	createProfileError error
@@ -1859,6 +1861,7 @@ func (m *mockNextDNSClient) GetParentalControl(ctx context.Context, profileID st
 
 func (m *mockNextDNSClient) SyncDenylist(ctx context.Context, profileID string, entries []nextdns.DomainEntry) error {
 	m.syncDenylistCalled = true
+	m.denylistEntries = entries
 	return nil
 }
 
@@ -2287,4 +2290,216 @@ func TestFindProfilesForConfigMap(t *testing.T) {
 		requests := reconciler.findProfilesForConfigMap(ctx, unownedConfigMap)
 		assert.Empty(t, requests)
 	})
+}
+
+func TestReconcile_ConfigImport(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	mockClient := newMockNextDNSClient()
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-creds",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	importCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "profile-import",
+			Namespace:       "default",
+			ResourceVersion: "42",
+		},
+		Data: map[string]string{
+			"config.json": `{
+				"security": {
+					"nrd": true,
+					"ddns": true
+				},
+				"denylist": [
+					{"domain": "imported.example.com", "active": true}
+				]
+			}`,
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-profile",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-creds",
+				Key:  "api-key",
+			},
+			ConfigImportRef: &nextdnsv1alpha1.ConfigImportRef{
+				Name: "profile-import",
+			},
+			Security: &nextdnsv1alpha1.SecuritySpec{
+				NRD: boolPtr(false), // Spec overrides import's NRD=true
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret, importCM, profile).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockClient, nil
+		},
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-profile", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+
+	// Verify security was called with spec overriding import
+	require.NotNil(t, mockClient.securityConfig)
+	assert.False(t, mockClient.securityConfig.NRD, "Spec NRD=false should override import NRD=true")
+	assert.True(t, mockClient.securityConfig.DDNS, "Import DDNS=true should be applied (not in spec)")
+
+	// Verify denylist includes imported domain
+	assert.True(t, mockClient.syncDenylistCalled)
+	require.Len(t, mockClient.denylistEntries, 1)
+	assert.Equal(t, "imported.example.com", mockClient.denylistEntries[0].Domain)
+
+	// Verify status tracks ConfigMap ResourceVersion
+	updatedProfile := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-profile", Namespace: "default"}, updatedProfile)
+	require.NoError(t, err)
+	assert.Equal(t, "42", updatedProfile.Status.ConfigImportResourceVersion)
+}
+
+func TestReconcile_ConfigImport_MissingConfigMap(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-creds",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-profile",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-creds",
+				Key:  "api-key",
+			},
+			ConfigImportRef: &nextdnsv1alpha1.ConfigImportRef{
+				Name: "nonexistent-config",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret, profile).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-profile", Namespace: "default"},
+	})
+
+	// Should requeue, not return error
+	assert.NoError(t, err)
+	assert.NotZero(t, result.RequeueAfter)
+}
+
+func TestFindProfilesForImportConfigMap(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "import-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Import Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "creds",
+			},
+			ConfigImportRef: &nextdnsv1alpha1.ConfigImportRef{
+				Name: "my-import-config",
+			},
+		},
+	}
+
+	profileNoImport := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "no-import-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "No Import Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "creds",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, profileNoImport).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	// ConfigMap matching configImportRef should trigger reconcile
+	importCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-import-config",
+			Namespace: "default",
+		},
+	}
+
+	requests := reconciler.findProfilesForConfigMap(ctx, importCM)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "import-profile", requests[0].Name)
+
+	// Unrelated ConfigMap should not trigger
+	unrelatedCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-other-config",
+			Namespace: "default",
+		},
+	}
+
+	requests = reconciler.findProfilesForConfigMap(ctx, unrelatedCM)
+	assert.Empty(t, requests)
 }

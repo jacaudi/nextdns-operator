@@ -17,6 +17,19 @@ type ConfigMapRef struct {
 	Name string `json:"name,omitempty"`
 }
 
+// ConfigImportRef references a ConfigMap containing profile configuration JSON
+type ConfigImportRef struct {
+	// Name is the name of the ConfigMap to import from
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Key is the key within the ConfigMap data containing the JSON
+	// +kubebuilder:default="config.json"
+	// +optional
+	Key string `json:"key,omitempty"`
+}
+
 // NextDNSProfileSpec defines the desired state of NextDNSProfile
 type NextDNSProfileSpec struct {
 	// Name is the human-readable name shown in NextDNS dashboard
@@ -92,6 +105,11 @@ type NextDNSProfileSpec struct {
 	// ConfigMapRef configures optional ConfigMap creation with connection details
 	// +optional
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"`
+
+	// ConfigImportRef references a ConfigMap containing profile configuration JSON
+	// Fields from the ConfigMap are applied as defaults; explicit spec fields take precedence
+	// +optional
+	ConfigImportRef *ConfigImportRef `json:"configImportRef,omitempty"`
 }
 
 // SecuritySpec defines security/threat protection settings
@@ -371,6 +389,11 @@ type NextDNSProfileStatus struct {
 	// ObservedGeneration is the generation last processed by the controller
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ConfigImportResourceVersion tracks the ResourceVersion of the imported ConfigMap
+	// Used to detect changes and trigger re-import
+	// +optional
+	ConfigImportResourceVersion string `json:"configImportResourceVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true

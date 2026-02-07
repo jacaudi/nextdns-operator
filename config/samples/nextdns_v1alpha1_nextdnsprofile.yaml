@@ -60,6 +60,12 @@ spec:
       cacheBoost: true
       cnameFlattening: true
 
+  # Optional: Import base configuration from a ConfigMap containing JSON
+  # Explicit spec fields above take precedence over imported values
+  # configImportRef:
+  #   name: my-profile-config
+  #   key: profile.json  # defaults to "config.json"
+
   # Optional: Create ConfigMap with DNS connection details
   # Useful for configuring DNS clients or injecting into pods
   configMapRef:
