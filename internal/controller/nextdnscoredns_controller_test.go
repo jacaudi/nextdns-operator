@@ -2205,3 +2205,76 @@ func TestNextDNSCoreDNSReconciler_UpdateStatus_MultusNoNetworkStatus(t *testing.
 	require.NoError(t, err)
 	assert.Empty(t, coreDNS.Status.MultusIPs)
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	replicas := int32(2)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "home-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Upstream:   &nextdnsv1alpha1.UpstreamConfig{Primary: nextdnsv1alpha1.DNSProtocolDoT},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+			},
+			Service: &nextdnsv1alpha1.CoreDNSServiceConfig{
+				Type: nextdnsv1alpha1.ServiceTypeClusterIP,
+			},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+				IPs:                         []string{"10.10.30.100", "10.10.30.101"},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	// Reconcile
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify Deployment was created with Multus annotation
+	deployment := &appsv1.Deployment{}
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "home-dns-abc123-coredns", Namespace: "default",
+	}, deployment)
+	require.NoError(t, err)
+
+	annotation := deployment.Spec.Template.Annotations["k8s.v1.cni.cncf.io/networks"]
+	require.NotEmpty(t, annotation)
+
+	var parsed []map[string]interface{}
+	err = json.Unmarshal([]byte(annotation), &parsed)
+	require.NoError(t, err)
+	assert.Len(t, parsed, 1)
+	assert.Equal(t, "vlan30-macvlan", parsed[0]["name"])
+	assert.Equal(t, "default", parsed[0]["namespace"])
+
+	ips, ok := parsed[0]["ips"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, ips, 2)
+}
