@@ -304,6 +304,10 @@ type NextDNSCoreDNSStatus struct {
 	// +optional
 	DNSIP string `json:"dnsIP,omitempty"`
 
+	// MultusIPs lists the IPs assigned to pods via Multus
+	// +optional
+	MultusIPs []string `json:"multusIPs,omitempty"`
+
 	// Upstream is the status of the NextDNS upstream connection
 	// +optional
 	Upstream *UpstreamStatus `json:"upstream,omitempty"`

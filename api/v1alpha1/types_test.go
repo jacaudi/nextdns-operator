@@ -556,6 +556,16 @@ func TestNextDNSProfileList(t *testing.T) {
 	assert.Equal(t, 2, len(list.Items))
 }
 
+func TestNextDNSCoreDNSStatus_MultusIPs(t *testing.T) {
+	status := NextDNSCoreDNSStatus{
+		MultusIPs: []string{"10.10.30.100", "10.10.30.101"},
+	}
+	assert.Equal(t, []string{"10.10.30.100", "10.10.30.101"}, status.MultusIPs)
+
+	empty := NextDNSCoreDNSStatus{}
+	assert.Nil(t, empty.MultusIPs)
+}
+
 func TestMultusConfig(t *testing.T) {
 	config := MultusConfig{
 		NetworkAttachmentDefinition: "vlan30-macvlan",
