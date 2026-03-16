@@ -1195,6 +1195,32 @@ spec:
                         type: string
                     type: object
                 type: object
+              multus:
+                description: Multus configures a secondary network interface via Multus
+                  CNI
+                properties:
+                  ips:
+                    description: |-
+                      IPs is an optional list of static IPs to request from IPAM
+                      When specified, the IPAM plugin assigns one per pod from this list
+                      The number of IPs should be >= the number of replicas
+                    items:
+                      type: string
+                    type: array
+                  namespace:
+                    description: |-
+                      Namespace is the namespace of the NetworkAttachmentDefinition
+                      Defaults to the namespace of the NextDNSCoreDNS resource
+                    type: string
+                  networkAttachmentDefinition:
+                    description: |-
+                      NetworkAttachmentDefinition is the name of the existing
+                      NetworkAttachmentDefinition CR to attach to CoreDNS pods
+                    minLength: 1
+                    type: string
+                required:
+                - networkAttachmentDefinition
+                type: object
               profileRef:
                 description: ProfileRef references the NextDNSProfile to use for DNS
                   resolution
@@ -1346,6 +1372,11 @@ spec:
                 description: LastUpdated is the time the status was last updated
                 format: date-time
                 type: string
+              multusIPs:
+                description: MultusIPs lists the IPs assigned to pods via Multus
+                items:
+                  type: string
+                type: array
               observedGeneration:
                 description: ObservedGeneration is the generation last processed by
                   the controller
