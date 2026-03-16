@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -419,7 +420,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, core
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: r.buildPodAnnotations(coreDNS),
+					Annotations: r.buildPodAnnotations(ctx, coreDNS),
 				},
 				Spec: r.buildPodSpec(coreDNS, resourceName),
 			},
@@ -467,7 +468,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileDaemonSet(ctx context.Context, coreD
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: r.buildPodAnnotations(coreDNS),
+					Annotations: r.buildPodAnnotations(ctx, coreDNS),
 				},
 				Spec: r.buildPodSpec(coreDNS, resourceName),
 			},
@@ -715,16 +716,55 @@ func (r *NextDNSCoreDNSReconciler) buildLabels(coreDNS *nextdnsv1alpha1.NextDNSC
 }
 
 // buildPodAnnotations returns annotations for CoreDNS pods
-func (r *NextDNSCoreDNSReconciler) buildPodAnnotations(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) map[string]string {
-	if coreDNS.Spec.Deployment == nil || coreDNS.Spec.Deployment.PodAnnotations == nil {
-		return nil
+func (r *NextDNSCoreDNSReconciler) buildPodAnnotations(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) map[string]string {
+	var annotations map[string]string
+
+	// Copy user-specified podAnnotations
+	if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.PodAnnotations != nil {
+		annotations = make(map[string]string, len(coreDNS.Spec.Deployment.PodAnnotations))
+		for k, v := range coreDNS.Spec.Deployment.PodAnnotations {
+			annotations[k] = v
+		}
 	}
-	// Return a copy to avoid modifying the original
-	annotations := make(map[string]string, len(coreDNS.Spec.Deployment.PodAnnotations))
-	for k, v := range coreDNS.Spec.Deployment.PodAnnotations {
-		annotations[k] = v
+
+	// Generate Multus annotation if configured (takes precedence over manual podAnnotations)
+	if coreDNS.Spec.Multus != nil {
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		const multusAnnotationKey = "k8s.v1.cni.cncf.io/networks"
+		if _, exists := annotations[multusAnnotationKey]; exists {
+			logger := log.FromContext(ctx)
+			logger.Info("WARNING: spec.deployment.podAnnotations contains k8s.v1.cni.cncf.io/networks which conflicts with spec.multus; operator-managed value takes precedence")
+		}
+		annotations[multusAnnotationKey] = r.buildMultusAnnotation(coreDNS.Spec.Multus, coreDNS.Namespace)
 	}
+
 	return annotations
+}
+
+// multusNetworkEntry represents a single entry in the Multus network annotation JSON array.
+type multusNetworkEntry struct {
+	Name      string   `json:"name"`
+	Namespace string   `json:"namespace"`
+	IPs       []string `json:"ips,omitempty"`
+}
+
+// buildMultusAnnotation generates the Multus network annotation JSON value
+func (r *NextDNSCoreDNSReconciler) buildMultusAnnotation(multus *nextdnsv1alpha1.MultusConfig, crNamespace string) string {
+	ns := multus.Namespace
+	if ns == "" {
+		ns = crNamespace
+	}
+
+	entry := multusNetworkEntry{
+		Name:      multus.NetworkAttachmentDefinition,
+		Namespace: ns,
+		IPs:       multus.IPs,
+	}
+
+	data, _ := json.Marshal([]multusNetworkEntry{entry})
+	return string(data)
 }
 
 // getResourceName returns the name for managed resources.

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -1612,7 +1613,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_NilDeployment(t *testing.T
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{},
 	}
 
-	result := r.buildPodAnnotations(coreDNS)
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
 	assert.Nil(t, result, "Should return nil when deployment config is nil")
 }
 
@@ -1624,7 +1625,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_NilAnnotations(t *testing.
 		},
 	}
 
-	result := r.buildPodAnnotations(coreDNS)
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
 	assert.Nil(t, result, "Should return nil when podAnnotations is nil")
 }
 
@@ -1640,7 +1641,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_WithMultus(t *testing.T) {
 		},
 	}
 
-	result := r.buildPodAnnotations(coreDNS)
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
 	assert.NotNil(t, result)
 	assert.Equal(t, "macvlan-conf", result["k8s.v1.cni.cncf.io/networks"])
 }
@@ -1656,10 +1657,118 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_ReturnsCopy(t *testing.T) 
 		},
 	}
 
-	result := r.buildPodAnnotations(coreDNS)
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
 	result["new-key"] = "new-value"
 
 	assert.NotContains(t, original, "new-key", "Modifying result should not affect original")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusWithIPs(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+				IPs:                         []string{"10.10.30.100", "10.10.30.101"},
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
+	require.NotNil(t, result)
+
+	annotation := result["k8s.v1.cni.cncf.io/networks"]
+	assert.Contains(t, annotation, "vlan30-macvlan")
+	assert.Contains(t, annotation, "default")
+	assert.Contains(t, annotation, "10.10.30.100")
+	assert.Contains(t, annotation, "10.10.30.101")
+
+	// Must be valid JSON
+	var parsed []map[string]interface{}
+	err := json.Unmarshal([]byte(annotation), &parsed)
+	require.NoError(t, err)
+	assert.Len(t, parsed, 1)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusWithoutIPs(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
+	require.NotNil(t, result)
+
+	annotation := result["k8s.v1.cni.cncf.io/networks"]
+	assert.Contains(t, annotation, "vlan30-macvlan")
+	assert.NotContains(t, annotation, "ips")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusWithExplicitNamespace(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+				Namespace:                   "networking",
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
+	annotation := result["k8s.v1.cni.cncf.io/networks"]
+	assert.Contains(t, annotation, "networking")
+	assert.NotContains(t, annotation, `"namespace":"default"`)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusConflictWithPodAnnotations(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				PodAnnotations: map[string]string{
+					"k8s.v1.cni.cncf.io/networks": "manual-value",
+				},
+			},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
+	annotation := result["k8s.v1.cni.cncf.io/networks"]
+	assert.NotEqual(t, "manual-value", annotation)
+	assert.Contains(t, annotation, "vlan30-macvlan")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusMergesWithOtherAnnotations(t *testing.T) {
+	r := &NextDNSCoreDNSReconciler{}
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				PodAnnotations: map[string]string{
+					"prometheus.io/scrape": "true",
+				},
+			},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	result := r.buildPodAnnotations(context.Background(), coreDNS)
+	assert.Equal(t, "true", result["prometheus.io/scrape"])
+	assert.Contains(t, result["k8s.v1.cni.cncf.io/networks"], "vlan30-macvlan")
 }
 
 func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithDomainOverrides(t *testing.T) {
