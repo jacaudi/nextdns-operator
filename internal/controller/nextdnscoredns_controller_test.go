@@ -2040,3 +2040,168 @@ func TestNextDNSCoreDNSReconciler_Reconcile_MultusInvalidIPFormat(t *testing.T) 
 	})
 	require.NoError(t, err)
 }
+
+func TestNextDNSCoreDNSReconciler_UpdateStatus_WithMultusIPs(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{ClusterIP: "10.96.0.10", Type: corev1.ServiceTypeClusterIP},
+	}
+
+	replicas := int32(2)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "home-dns-abc123-coredns-xyz",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     "coredns",
+				"app.kubernetes.io/instance": "home-dns",
+			},
+			Annotations: map[string]string{
+				"k8s.v1.cni.cncf.io/network-status": `[{"name":"default/cbr0","interface":"eth0","ips":["10.244.0.5"]},{"name":"default/vlan30-macvlan","interface":"net1","ips":["10.10.30.100"]}]`,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, profile, service, deployment, pod).
+		WithStatusSubresource(coreDNS).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	err := r.updateStatus(context.Background(), coreDNS, profile)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"10.10.30.100"}, coreDNS.Status.MultusIPs)
+
+	// Check Multus IPs appear in endpoints
+	var multusUDP, multusTCP bool
+	for _, ep := range coreDNS.Status.Endpoints {
+		if ep.IP == "10.10.30.100" && ep.Protocol == "UDP" {
+			multusUDP = true
+		}
+		if ep.IP == "10.10.30.100" && ep.Protocol == "TCP" {
+			multusTCP = true
+		}
+	}
+	assert.True(t, multusUDP, "Multus UDP endpoint should be in status")
+	assert.True(t, multusTCP, "Multus TCP endpoint should be in status")
+}
+
+func TestNextDNSCoreDNSReconciler_UpdateStatus_MultusNoPods(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status:     nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{ClusterIP: "10.96.0.10", Type: corev1.ServiceTypeClusterIP},
+	}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, profile, service, deployment).
+		WithStatusSubresource(coreDNS).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	err := r.updateStatus(context.Background(), coreDNS, profile)
+	require.NoError(t, err)
+	assert.Empty(t, coreDNS.Status.MultusIPs)
+}
+
+func TestNextDNSCoreDNSReconciler_UpdateStatus_MultusNoNetworkStatus(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status:     nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Multus: &nextdnsv1alpha1.MultusConfig{
+				NetworkAttachmentDefinition: "vlan30-macvlan",
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{ClusterIP: "10.96.0.10", Type: corev1.ServiceTypeClusterIP},
+	}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "home-dns-abc123-coredns", Namespace: "default"},
+	}
+
+	// Pod exists but no network-status annotation
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "home-dns-abc123-coredns-xyz",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     "coredns",
+				"app.kubernetes.io/instance": "home-dns",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, profile, service, deployment, pod).
+		WithStatusSubresource(coreDNS).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	err := r.updateStatus(context.Background(), coreDNS, profile)
+	require.NoError(t, err)
+	assert.Empty(t, coreDNS.Status.MultusIPs)
+}

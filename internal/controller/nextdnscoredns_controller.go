@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -794,6 +795,59 @@ func (r *NextDNSCoreDNSReconciler) buildMultusAnnotation(multus *nextdnsv1alpha1
 	return string(data)
 }
 
+// multusNetworkStatus represents one entry in the k8s.v1.cni.cncf.io/network-status annotation
+type multusNetworkStatus struct {
+	Name      string   `json:"name"`
+	Interface string   `json:"interface"`
+	IPs       []string `json:"ips"`
+}
+
+// extractMultusIPs reads Multus-assigned IPs from pod annotations
+func (r *NextDNSCoreDNSReconciler) extractMultusIPs(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) []string {
+	logger := log.FromContext(ctx)
+
+	podList := &corev1.PodList{}
+	labels := map[string]string{
+		"app.kubernetes.io/name":     "coredns",
+		"app.kubernetes.io/instance": coreDNS.Name,
+	}
+	if err := r.List(ctx, podList, client.InNamespace(coreDNS.Namespace), client.MatchingLabels(labels)); err != nil {
+		logger.Error(err, "Failed to list pods for Multus IP extraction")
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var multusIPs []string
+	for _, pod := range podList.Items {
+		networkStatusAnnotation, ok := pod.Annotations["k8s.v1.cni.cncf.io/network-status"]
+		if !ok {
+			continue
+		}
+
+		var statuses []multusNetworkStatus
+		if err := json.Unmarshal([]byte(networkStatusAnnotation), &statuses); err != nil {
+			logger.Error(err, "Failed to parse Multus network-status annotation", "pod", pod.Name)
+			continue
+		}
+
+		for _, status := range statuses {
+			// Skip the default network (eth0)
+			if status.Interface == "eth0" {
+				continue
+			}
+			for _, ip := range status.IPs {
+				if !seen[ip] {
+					seen[ip] = true
+					multusIPs = append(multusIPs, ip)
+				}
+			}
+		}
+	}
+
+	sort.Strings(multusIPs)
+	return multusIPs
+}
+
 // getResourceName returns the name for managed resources.
 // Names are truncated with a hash suffix if they exceed 63 characters.
 func (r *NextDNSCoreDNSReconciler) getResourceName(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) string {
@@ -875,6 +929,19 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 		}
 
 		coreDNS.Status.Endpoints = endpoints
+	}
+
+	// Extract Multus IPs from pod annotations if Multus is configured
+	if coreDNS.Spec.Multus != nil {
+		multusIPs := r.extractMultusIPs(ctx, coreDNS)
+		coreDNS.Status.MultusIPs = multusIPs
+
+		for _, ip := range multusIPs {
+			coreDNS.Status.Endpoints = append(coreDNS.Status.Endpoints,
+				nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "UDP"},
+				nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "TCP"},
+			)
+		}
 	}
 
 	// Get replica status
