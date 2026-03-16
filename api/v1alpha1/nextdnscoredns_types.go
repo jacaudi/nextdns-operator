@@ -195,6 +195,26 @@ type DomainOverride struct {
 	CacheTTL *int32 `json:"cacheTTL,omitempty"`
 }
 
+// MultusConfig configures secondary network attachment via Multus CNI
+type MultusConfig struct {
+	// NetworkAttachmentDefinition is the name of the existing
+	// NetworkAttachmentDefinition CR to attach to CoreDNS pods
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	NetworkAttachmentDefinition string `json:"networkAttachmentDefinition"`
+
+	// Namespace is the namespace of the NetworkAttachmentDefinition
+	// Defaults to the namespace of the NextDNSCoreDNS resource
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// IPs is an optional list of static IPs to request from IPAM
+	// When specified, the IPAM plugin assigns one per pod from this list
+	// The number of IPs should be >= the number of replicas
+	// +optional
+	IPs []string `json:"ips,omitempty"`
+}
+
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
 type NextDNSCoreDNSSpec struct {
 	// ProfileRef references the NextDNSProfile to use for DNS resolution
@@ -230,6 +250,10 @@ type NextDNSCoreDNSSpec struct {
 	// instead of NextDNS
 	// +optional
 	DomainOverrides []DomainOverride `json:"domainOverrides,omitempty"`
+
+	// Multus configures a secondary network interface via Multus CNI
+	// +optional
+	Multus *MultusConfig `json:"multus,omitempty"`
 }
 
 // DNSEndpoint represents a DNS endpoint exposed by the service
