@@ -27,6 +27,7 @@ rbac:
         - apiGroups:
             - ""
           resources:
+            - pods
             - secrets
           verbs:
             - get
