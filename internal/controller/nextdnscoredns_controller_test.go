@@ -1629,7 +1629,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_NilAnnotations(t *testing.
 	assert.Nil(t, result, "Should return nil when podAnnotations is nil")
 }
 
-func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_WithMultus(t *testing.T) {
+func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_ManualMultusViaPodAnnotations(t *testing.T) {
 	r := &NextDNSCoreDNSReconciler{}
 	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
