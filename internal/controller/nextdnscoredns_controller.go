@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,6 +40,9 @@ const (
 
 	// maxResourceNameLength is the maximum length for Kubernetes resource names
 	maxResourceNameLength = 63
+
+	// defaultReplicas is the default number of CoreDNS replicas
+	defaultReplicas int32 = 2
 )
 
 // NextDNSCoreDNSReconciler reconciles a NextDNSCoreDNS object
@@ -115,6 +119,29 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Profile is resolved and ready
 	r.setCondition(coreDNS, ConditionTypeProfileResolved, metav1.ConditionTrue, "ProfileResolved", "Referenced profile found and ready")
+
+	// Validate Multus configuration
+	if coreDNS.Spec.Multus != nil && len(coreDNS.Spec.Multus.IPs) > 0 {
+		// Validate IP formats
+		for _, ip := range coreDNS.Spec.Multus.IPs {
+			parsed := net.ParseIP(ip)
+			if parsed == nil || parsed.To4() == nil {
+				logger.Info("WARNING: invalid IPv4 address in spec.multus.ips",
+					"ip", ip)
+			}
+		}
+
+		// Warn if IPs < replicas
+		replicas := defaultReplicas
+		if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.Replicas != nil {
+			replicas = *coreDNS.Spec.Deployment.Replicas
+		}
+		if int32(len(coreDNS.Spec.Multus.IPs)) < replicas {
+			logger.Info("WARNING: fewer Multus IPs than replicas; some pods may fail IPAM allocation",
+				"multusIPs", len(coreDNS.Spec.Multus.IPs),
+				"replicas", replicas)
+		}
+	}
 
 	// Store profile information in status
 	coreDNS.Status.ProfileID = profile.Status.ProfileID
@@ -398,7 +425,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, core
 	labels := r.buildLabels(coreDNS, profile)
 
 	// Determine replicas
-	replicas := int32(2) // default
+	replicas := defaultReplicas
 	if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.Replicas != nil {
 		replicas = *coreDNS.Spec.Deployment.Replicas
 	}
