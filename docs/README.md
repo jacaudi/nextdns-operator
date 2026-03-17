@@ -18,6 +18,7 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
   - [Query Logging](#query-logging)
   - [Resource Requirements](#resource-requirements)
   - [Multus CNI Integration](#multus-cni-integration)
+  - [Device Identification](#device-identification)
   - [Domain Overrides](#domain-overrides)
 - [Drift Detection](#drift-detection)
 - [CRD Reference](#crd-reference)
@@ -531,6 +532,40 @@ The CoreDNS pods will have interfaces on both the cluster network and the VLAN, 
 
 > **Note:** If you set `k8s.v1.cni.cncf.io/networks` in `spec.deployment.podAnnotations` while also using `spec.multus`, the operator-managed value takes precedence and a warning is logged. Use one approach or the other.
 
+### Device Identification
+
+Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional `upstream.deviceName` field. When set, the device name is embedded in the upstream DNS endpoint so NextDNS can attribute queries to a specific deployment.
+
+```yaml
+upstream:
+  primary: DoT
+  deviceName: home-router
+```
+
+**How it works per protocol:**
+
+| Protocol | Behavior | Example endpoint |
+|----------|----------|-----------------|
+| DoT | Device name prepended to SNI hostname; spaces converted to `--` | `home-router-abc123.dns.nextdns.io` |
+| DoH | Device name URL-encoded and appended to path | `https://dns.nextdns.io/abc123/home-router` |
+| DNS | Ignored (plain DNS has no mechanism for device identification) | `45.90.28.0` |
+
+**Naming rules:**
+- Only alphanumeric characters, hyphens, and spaces are allowed
+- Maximum 63 characters
+- Spaces are converted to `--` for DoT (SNI hostname) and URL-encoded (`%20`) for DoH
+- The same device name is used for all pods in the deployment
+
+**Example with spaces:**
+
+```yaml
+upstream:
+  primary: DoT
+  deviceName: Home Router
+```
+
+This produces a DoT endpoint like `Home--Router-abc123.dns.nextdns.io` and a DoH endpoint like `https://dns.nextdns.io/abc123/Home%20Router`.
+
 ### Domain Overrides
 
 Configure domain-specific DNS upstream servers for split-horizon DNS:
@@ -812,6 +847,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `profileRef.name` | string | Yes | | Name of the NextDNSProfile to use |
 | `profileRef.namespace` | string | No | | Namespace (defaults to same namespace) |
 | `upstream.primary` | DNSProtocol | No | `DoT` | Upstream protocol: `DoT`, `DoH`, or `DNS` |
+| `upstream.deviceName` | string | No | | Device name for NextDNS Analytics (max 63 chars, alphanumeric/hyphens/spaces) |
 | `deployment.mode` | DeploymentMode | No | `Deployment` | `Deployment` or `DaemonSet` |
 | `deployment.replicas` | *int32 | No | `2` | Replicas (Deployment mode only, min: 1) |
 | `deployment.image` | string | No | `mirror.gcr.io/coredns/coredns:1.13.1` | CoreDNS container image |

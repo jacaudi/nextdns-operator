@@ -9,6 +9,7 @@ spec:
 
   upstream:
     primary: DoT
+    deviceName: home-router
 
   # Domain-specific DNS overrides for split-horizon DNS
   domainOverrides:

@@ -1265,6 +1265,17 @@ spec:
               upstream:
                 description: Upstream configures the upstream DNS connection to NextDNS
                 properties:
+                  deviceName:
+                    description: |-
+                      DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
+                      The name is embedded in the upstream endpoint: prepended to the DoT SNI
+                      hostname or appended to the DoH URL path.
+                      Only alphanumeric characters, hyphens, and spaces are allowed.
+                      Spaces are converted to -- for DoT and URL-encoded for DoH.
+                      Ignored when using plain DNS protocol.
+                    maxLength: 63
+                    pattern: ^[-a-zA-Z0-9 ]+$
+                    type: string
                   primary:
                     default: DoT
                     description: Primary specifies the primary protocol for DNS queries
