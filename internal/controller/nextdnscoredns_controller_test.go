@@ -1855,6 +1855,53 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_DuplicateDomainError(t *te
 	assert.Contains(t, err.Error(), "duplicate domain override")
 }
 
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithDeviceName(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary:    nextdnsv1alpha1.DNSProtocolDoT,
+				DeviceName: "Home Router",
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Equal(t, "Home Router", cfg.DeviceName)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutDeviceName(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary: nextdnsv1alpha1.DNSProtocolDoT,
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.DeviceName)
+}
+
 func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()

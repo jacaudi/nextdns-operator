@@ -301,6 +301,7 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	// Override primary protocol if specified
 	if coreDNS.Spec.Upstream != nil {
 		cfg.PrimaryProtocol = string(coreDNS.Spec.Upstream.Primary)
+		cfg.DeviceName = coreDNS.Spec.Upstream.DeviceName
 	}
 
 	// Override cache settings if specified
