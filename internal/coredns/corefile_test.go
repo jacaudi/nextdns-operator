@@ -371,6 +371,52 @@ func TestGetUpstreamEndpoint_DoHWithDeviceName(t *testing.T) {
 	assert.Contains(t, endpoint, "/abc123/Home%20Router")
 }
 
+func TestGetUpstreamEndpoint_DNSWithDeviceName(t *testing.T) {
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDNS, "Home Router")
+	// Plain DNS ignores device name
+	assert.NotContains(t, endpoint, "Home")
+	assert.Equal(t, "45.90.28.0, 45.90.30.0", endpoint)
+}
+
+func TestBuildDoTSNIHost(t *testing.T) {
+	tests := []struct {
+		name       string
+		profileID  string
+		deviceName string
+		expected   string
+	}{
+		{"no device name", "abc123", "", "abc123"},
+		{"simple name", "abc123", "router", "router-abc123"},
+		{"name with spaces", "abc123", "Home Router", "Home--Router-abc123"},
+		{"name with hyphens", "abc123", "my-device", "my-device-abc123"},
+		{"name with multiple spaces", "abc123", "My Home Router", "My--Home--Router-abc123"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, buildDoTSNIHost(tt.profileID, tt.deviceName))
+		})
+	}
+}
+
+func TestBuildDoHPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		profileID  string
+		deviceName string
+		expected   string
+	}{
+		{"no device name", "abc123", "", "abc123"},
+		{"simple name", "abc123", "router", "abc123/router"},
+		{"name with spaces", "abc123", "Home Router", "abc123/Home%20Router"},
+		{"name with hyphens", "abc123", "my-device", "abc123/my-device"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, buildDoHPath(tt.profileID, tt.deviceName))
+		})
+	}
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string
