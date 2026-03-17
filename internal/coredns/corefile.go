@@ -4,6 +4,7 @@ package coredns
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -39,6 +40,9 @@ type CorefileConfig struct {
 
 	// PrimaryProtocol specifies the primary DNS protocol (DoT, DoH, or DNS).
 	PrimaryProtocol string
+
+	// DeviceName is an optional device identifier for NextDNS analytics.
+	DeviceName string
 
 	// CacheTTL specifies the cache TTL in seconds.
 	CacheTTL int32
@@ -141,6 +145,11 @@ func writeDomainOverrideBlock(sb *strings.Builder, override *DomainOverrideConfi
 	sb.WriteString("}\n\n")
 }
 
+// formatDeviceNameDoT converts a device name for DoT SNI (spaces become --)
+func formatDeviceNameDoT(name string) string {
+	return strings.ReplaceAll(name, " ", "--")
+}
+
 // writeForwardPlugin writes the forward plugin configuration to the string builder.
 // Note: Cross-protocol fallback (e.g., DoT→DoH) is not supported because CoreDNS's
 // forward plugin cannot mix tls:// and https:// upstreams with a single tls_servername.
@@ -150,12 +159,20 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 		// DoT uses anycast IPs with TLS and tls_servername for SNI
 		// The profile ID is embedded in the SNI hostname for NextDNS routing
 		fmt.Fprintf(sb, "    forward . tls://%s tls://%s {\n", nextDNSAnycastIP1, nextDNSAnycastIP2)
-		fmt.Fprintf(sb, "        tls_servername %s.%s\n", cfg.ProfileID, nextDNSDoTServer)
+		sniHost := cfg.ProfileID
+		if cfg.DeviceName != "" {
+			sniHost = formatDeviceNameDoT(cfg.DeviceName) + "-" + cfg.ProfileID
+		}
+		fmt.Fprintf(sb, "        tls_servername %s.%s\n", sniHost, nextDNSDoTServer)
 		sb.WriteString("    }\n")
 
 	case ProtocolDoH:
 		// DoH uses https:// URL directly
-		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, cfg.ProfileID)
+		path := cfg.ProfileID
+		if cfg.DeviceName != "" {
+			path = cfg.ProfileID + "/" + url.PathEscape(cfg.DeviceName)
+		}
+		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, path)
 		fmt.Fprintf(sb, "    forward . %s\n", upstream)
 
 	case ProtocolDNS:
@@ -166,12 +183,20 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 
 // GetUpstreamEndpoint returns a human-readable endpoint string for the given
 // protocol, suitable for use in status reporting.
-func GetUpstreamEndpoint(profileID, protocol string) string {
+func GetUpstreamEndpoint(profileID, protocol, deviceName string) string {
 	switch protocol {
 	case ProtocolDoT:
-		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", nextDNSAnycastIP1, nextDNSAnycastIP2, profileID, nextDNSDoTServer)
+		sniHost := profileID
+		if deviceName != "" {
+			sniHost = formatDeviceNameDoT(deviceName) + "-" + profileID
+		}
+		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", nextDNSAnycastIP1, nextDNSAnycastIP2, sniHost, nextDNSDoTServer)
 	case ProtocolDoH:
-		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, profileID)
+		path := profileID
+		if deviceName != "" {
+			path = profileID + "/" + url.PathEscape(deviceName)
+		}
+		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, path)
 	case ProtocolDNS:
 		return fmt.Sprintf("%s, %s", nextDNSAnycastIP1, nextDNSAnycastIP2)
 	default:
