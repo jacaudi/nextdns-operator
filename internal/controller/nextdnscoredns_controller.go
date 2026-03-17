@@ -878,11 +878,9 @@ func (r *NextDNSCoreDNSReconciler) getServiceName(coreDNS *nextdnsv1alpha1.NextD
 func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	// Get upstream endpoint URL
 	primaryProtocol := coredns.ProtocolDoT
-	if coreDNS.Spec.Upstream != nil {
-		primaryProtocol = string(coreDNS.Spec.Upstream.Primary)
-	}
 	deviceName := ""
 	if coreDNS.Spec.Upstream != nil {
+		primaryProtocol = string(coreDNS.Spec.Upstream.Primary)
 		deviceName = coreDNS.Spec.Upstream.DeviceName
 	}
 	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName)
