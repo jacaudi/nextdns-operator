@@ -455,9 +455,9 @@ deployment:
 
 ### Multus CNI Integration
 
-For advanced networking scenarios, you can attach CoreDNS pods to additional networks using [Multus CNI](https://github.com/k8snetworkplumbingwg/multus-cni). This is useful for exposing DNS services directly on a VLAN or dedicated network interface.
+For advanced networking scenarios, you can attach CoreDNS pods to additional networks using [Multus CNI](https://github.com/k8snetworkplumbingwg/multus-cni). The operator provides first-class support for Multus via the `spec.multus` field, making it easy to expose DNS services directly on a VLAN or dedicated network interface.
 
-**Example: CoreDNS on a VLAN with primary and secondary IPs**
+**Example: CoreDNS on a VLAN with static IPs**
 
 First, create a NetworkAttachmentDefinition for your VLAN:
 
@@ -487,7 +487,7 @@ spec:
     }
 ```
 
-Then reference it in your NextDNSCoreDNS resource:
+Then reference it in your NextDNSCoreDNS resource using `spec.multus`:
 
 ```yaml
 apiVersion: nextdns.io/v1alpha1
@@ -501,16 +501,38 @@ spec:
   upstream:
     primary: DoT
 
+  multus:
+    networkAttachmentDefinition: dns-vlan
+    ips:
+      - 192.168.100.53
+      - 192.168.100.54
+
   deployment:
     mode: DaemonSet
-    podAnnotations:
-      k8s.v1.cni.cncf.io/networks: dns-vlan
+    replicas: 2
 
   service:
     type: ClusterIP  # Internal only; clients use Multus IPs directly
 ```
 
-The CoreDNS pods will now have interfaces on both the cluster network and the VLAN, accessible at `192.168.100.53` and `192.168.100.54`.
+The operator automatically:
+- Generates the `k8s.v1.cni.cncf.io/networks` annotation on pod templates in the correct Multus JSON format
+- Reads `k8s.v1.cni.cncf.io/network-status` from running pods to discover assigned IPs
+- Reports the Multus IPs in `status.multusIPs` and adds them to `status.endpoints`
+- Warns if the number of static IPs is less than the number of replicas
+- Validates that each IP is a valid IPv4 address
+
+The CoreDNS pods will have interfaces on both the cluster network and the VLAN, accessible at `192.168.100.53` and `192.168.100.54`.
+
+**MultusConfig fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `networkAttachmentDefinition` | string | Yes | Name of the existing NetworkAttachmentDefinition CR |
+| `namespace` | string | No | Namespace of the NAD (defaults to the CR's namespace) |
+| `ips` | string[] | No | Static IPs to request from IPAM (one per pod) |
+
+> **Note:** If you set `k8s.v1.cni.cncf.io/networks` in `spec.deployment.podAnnotations` while also using `spec.multus`, the operator-managed value takes precedence and a warning is logged. Use one approach or the other.
 
 ### Domain Overrides
 
@@ -800,7 +822,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `deployment.affinity` | Affinity | No | | Pod scheduling constraints |
 | `deployment.tolerations` | Toleration[] | No | | Pod tolerations |
 | `deployment.resources` | ResourceRequirements | No | | CPU/memory requests and limits |
-| `deployment.podAnnotations` | map[string]string | No | | Additional pod annotations (useful for Multus) |
+| `deployment.podAnnotations` | map[string]string | No | | Additional pod annotations (prefer `spec.multus` for Multus) |
 | `service.type` | CoreDNSServiceType | No | `ClusterIP` | `ClusterIP`, `LoadBalancer`, or `NodePort` |
 | `service.loadBalancerIP` | string | No | | Static IP for LoadBalancer (valid IPv4) |
 | `service.annotations` | map[string]string | No | | Additional service annotations |
@@ -814,6 +836,9 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
 | `logging.enabled` | *bool | No | `false` | Enable DNS query logging |
 | `domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
+| `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
+| `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
+| `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
 
 Each `DomainOverride` has:
 
@@ -831,6 +856,7 @@ Each `DomainOverride` has:
 | `fingerprint` | string | DNS fingerprint from the referenced profile |
 | `endpoints` | DNSEndpoint[] | DNS endpoints exposed by the service (`ip`, `port`, `protocol`) |
 | `dnsIP` | string | Primary DNS IP address for easy reference |
+| `multusIPs` | string[] | IPs assigned to pods via Multus (from network-status annotation) |
 | `upstream.url` | string | NextDNS upstream URL being used |
 | `replicas.desired` | int32 | Desired replica count |
 | `replicas.ready` | int32 | Ready replica count |
