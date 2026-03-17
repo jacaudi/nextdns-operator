@@ -669,3 +669,16 @@ func TestNextDNSProfileSpec_FullConfiguration(t *testing.T) {
 	assert.NotNil(t, spec.Settings)
 	assert.Equal(t, 1, len(spec.Rewrites))
 }
+
+func TestUpstreamConfig_DeviceName(t *testing.T) {
+	config := UpstreamConfig{
+		Primary:    DNSProtocolDoT,
+		DeviceName: "Home Router",
+	}
+	assert.Equal(t, DNSProtocolDoT, config.Primary)
+	assert.Equal(t, "Home Router", config.DeviceName)
+
+	// Zero value — no device name
+	empty := UpstreamConfig{Primary: DNSProtocolDoH}
+	assert.Equal(t, "", empty.DeviceName)
+}

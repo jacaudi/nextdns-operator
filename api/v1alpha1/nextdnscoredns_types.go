@@ -53,6 +53,16 @@ type UpstreamConfig struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default=DoT
 	Primary DNSProtocol `json:"primary"`
+
+	// DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
+	// The name is embedded in the upstream endpoint: prepended to the DoT SNI
+	// hostname or appended to the DoH URL path.
+	// Only alphanumeric characters, hyphens, and spaces are allowed.
+	// Spaces are converted to -- for DoT and URL-encoded for DoH.
+	// Ignored when using plain DNS protocol.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9 -]+$`
+	DeviceName string `json:"deviceName,omitempty"`
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment
