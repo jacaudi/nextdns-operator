@@ -123,7 +123,7 @@ The operator merges this with any existing `spec.deployment.podAnnotations`. If 
 
 At reconciliation time:
 - If `spec.multus.ips` is specified and `spec.deployment.replicas` is set, warn if `len(ips) < replicas` (more pods than IPs could cause IPAM failures)
-- IPs are validated as IPv4 addresses via kubebuilder regex validation
+- IPs are validated as IPv4 addresses at reconciliation time via `net.ParseIP()` (runtime validation provides better error messages than CRD-level regex and naturally supports future IPv6 extension)
 - `networkAttachmentDefinition` name is non-empty (enforced by `MinLength=1`)
 - No validation that the NetworkAttachmentDefinition exists — CNI reports errors at pod scheduling time via pod events
 

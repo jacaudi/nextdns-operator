@@ -791,7 +791,11 @@ func (r *NextDNSCoreDNSReconciler) buildMultusAnnotation(multus *nextdnsv1alpha1
 		IPs:       multus.IPs,
 	}
 
-	data, _ := json.Marshal([]multusNetworkEntry{entry})
+	data, err := json.Marshal([]multusNetworkEntry{entry})
+	if err != nil {
+		// Should never happen with simple string fields, but log defensively
+		return fmt.Sprintf(`[{"name":%q,"namespace":%q}]`, multus.NetworkAttachmentDefinition, ns)
+	}
 	return string(data)
 }
 
