@@ -61,7 +61,8 @@ type UpstreamConfig struct {
 	// Spaces are converted to -- for DoT and URL-encoded for DoH.
 	// Ignored when using plain DNS protocol.
 	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9 -]+$`
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[-a-zA-Z0-9 ]+$`
 	DeviceName string `json:"deviceName,omitempty"`
 }
 
