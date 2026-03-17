@@ -459,7 +459,7 @@ For advanced networking scenarios, you can attach CoreDNS pods to additional net
 
 **Example: CoreDNS on a VLAN with static IPs**
 
-First, create a NetworkAttachmentDefinition for your VLAN:
+First, create a NetworkAttachmentDefinition for your VLAN. When using `spec.multus.ips` to request specific IPs per pod, the operator passes them to Multus via the annotation's `ips` field. Use an IPAM plugin that supports runtime IP requests, such as `whereabouts`:
 
 ```yaml
 apiVersion: k8s.cni.cncf.io/v1
@@ -475,17 +475,14 @@ spec:
       "master": "eth0.100",
       "mode": "bridge",
       "ipam": {
-        "type": "static",
-        "addresses": [
-          { "address": "192.168.100.53/24" },
-          { "address": "192.168.100.54/24" }
-        ],
-        "routes": [
-          { "dst": "0.0.0.0/0", "gw": "192.168.100.1" }
-        ]
+        "type": "whereabouts",
+        "range": "192.168.100.0/24",
+        "gateway": "192.168.100.1"
       }
     }
 ```
+
+> **Note:** The IPAM plugin in the NAD must support per-pod IP requests via the Multus `ips` annotation field. Plugins like `whereabouts` and `static` (without hardcoded addresses) support this. If you omit `spec.multus.ips`, the IPAM plugin assigns IPs from its configured range automatically.
 
 Then reference it in your NextDNSCoreDNS resource using `spec.multus`:
 
