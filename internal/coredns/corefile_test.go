@@ -1,6 +1,8 @@
 package coredns
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -172,22 +174,22 @@ func TestGenerateCorefile_ZeroCacheTTL(t *testing.T) {
 }
 
 func TestGetUpstreamEndpoint_DoT(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT)
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "")
 	assert.Equal(t, "tls://45.90.28.0, tls://45.90.30.0 (SNI: abc123.dns.nextdns.io)", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DoH(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("def456", ProtocolDoH)
+	endpoint := GetUpstreamEndpoint("def456", ProtocolDoH, "")
 	assert.Equal(t, "https://dns.nextdns.io/def456", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DNS(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("ghi789", ProtocolDNS)
+	endpoint := GetUpstreamEndpoint("ghi789", ProtocolDNS, "")
 	assert.Equal(t, "45.90.28.0, 45.90.30.0", endpoint)
 }
 
 func TestGetUpstreamEndpoint_UnknownProtocol(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("xyz", "UNKNOWN")
+	endpoint := GetUpstreamEndpoint("xyz", "UNKNOWN", "")
 	// Should return empty string or some default for unknown protocols
 	assert.Empty(t, endpoint)
 }
@@ -318,6 +320,101 @@ func TestValidateDomainOverrides_Valid(t *testing.T) {
 func TestValidateDomainOverrides_Empty(t *testing.T) {
 	err := ValidateDomainOverrides(nil)
 	assert.NoError(t, err)
+}
+
+func TestGenerateCorefile_DoTWithDeviceName(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		DeviceName:      "Home Router",
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+	}
+	corefile := GenerateCorefile(cfg)
+	assert.Contains(t, corefile, "tls_servername Home--Router-abc123.dns.nextdns.io")
+}
+
+func TestGenerateCorefile_DoHWithDeviceName(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoH,
+		DeviceName:      "Home Router",
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+	}
+	corefile := GenerateCorefile(cfg)
+	expected := fmt.Sprintf("https://dns.nextdns.io/abc123/%s", url.PathEscape("Home Router"))
+	assert.Contains(t, corefile, expected)
+}
+
+func TestGenerateCorefile_DNSWithDeviceName(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDNS,
+		DeviceName:      "Home Router",
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+	}
+	corefile := GenerateCorefile(cfg)
+	// Plain DNS should NOT contain device name — no mechanism for it
+	assert.NotContains(t, corefile, "Home")
+	assert.Contains(t, corefile, "45.90.28.0")
+}
+
+func TestGetUpstreamEndpoint_DoTWithDeviceName(t *testing.T) {
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "Home Router")
+	assert.Contains(t, endpoint, "Home--Router-abc123.dns.nextdns.io")
+}
+
+func TestGetUpstreamEndpoint_DoHWithDeviceName(t *testing.T) {
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoH, "Home Router")
+	assert.Contains(t, endpoint, "/abc123/Home%20Router")
+}
+
+func TestGetUpstreamEndpoint_DNSWithDeviceName(t *testing.T) {
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDNS, "Home Router")
+	// Plain DNS ignores device name
+	assert.NotContains(t, endpoint, "Home")
+	assert.Equal(t, "45.90.28.0, 45.90.30.0", endpoint)
+}
+
+func TestBuildDoTSNIHost(t *testing.T) {
+	tests := []struct {
+		name       string
+		profileID  string
+		deviceName string
+		expected   string
+	}{
+		{"no device name", "abc123", "", "abc123"},
+		{"simple name", "abc123", "router", "router-abc123"},
+		{"name with spaces", "abc123", "Home Router", "Home--Router-abc123"},
+		{"name with hyphens", "abc123", "my-device", "my-device-abc123"},
+		{"name with multiple spaces", "abc123", "My Home Router", "My--Home--Router-abc123"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, buildDoTSNIHost(tt.profileID, tt.deviceName))
+		})
+	}
+}
+
+func TestBuildDoHPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		profileID  string
+		deviceName string
+		expected   string
+	}{
+		{"no device name", "abc123", "", "abc123"},
+		{"simple name", "abc123", "router", "abc123/router"},
+		{"name with spaces", "abc123", "Home Router", "abc123/Home%20Router"},
+		{"name with hyphens", "abc123", "my-device", "abc123/my-device"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, buildDoHPath(tt.profileID, tt.deviceName))
+		})
+	}
 }
 
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {

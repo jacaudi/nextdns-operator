@@ -9,6 +9,7 @@ spec:
 
   upstream:
     primary: DoT
+    deviceName: home-router
 
   # Domain-specific DNS overrides for split-horizon DNS
   domainOverrides:
@@ -20,6 +21,13 @@ spec:
     - domain: internal.local
       upstreams:
         - 192.168.1.1
+
+  # Secondary network interface via Multus CNI
+  multus:
+    networkAttachmentDefinition: vlan30-macvlan
+    ips:
+      - 10.10.30.100
+      - 10.10.30.101
 
   deployment:
     mode: Deployment

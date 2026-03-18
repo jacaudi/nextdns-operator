@@ -556,6 +556,32 @@ func TestNextDNSProfileList(t *testing.T) {
 	assert.Equal(t, 2, len(list.Items))
 }
 
+func TestNextDNSCoreDNSStatus_MultusIPs(t *testing.T) {
+	status := NextDNSCoreDNSStatus{
+		MultusIPs: []string{"10.10.30.100", "10.10.30.101"},
+	}
+	assert.Equal(t, []string{"10.10.30.100", "10.10.30.101"}, status.MultusIPs)
+
+	empty := NextDNSCoreDNSStatus{}
+	assert.Nil(t, empty.MultusIPs)
+}
+
+func TestMultusConfig(t *testing.T) {
+	config := MultusConfig{
+		NetworkAttachmentDefinition: "vlan30-macvlan",
+		Namespace:                   "networking",
+		IPs:                         []string{"10.10.30.100", "10.10.30.101"},
+	}
+	assert.Equal(t, "vlan30-macvlan", config.NetworkAttachmentDefinition)
+	assert.Equal(t, "networking", config.Namespace)
+	assert.Equal(t, []string{"10.10.30.100", "10.10.30.101"}, config.IPs)
+
+	// Zero value — no namespace, no IPs
+	empty := MultusConfig{NetworkAttachmentDefinition: "net1"}
+	assert.Equal(t, "", empty.Namespace)
+	assert.Nil(t, empty.IPs)
+}
+
 func TestNextDNSProfileSpec_FullConfiguration(t *testing.T) {
 	trueVal := true
 	falseVal := false
@@ -642,4 +668,17 @@ func TestNextDNSProfileSpec_FullConfiguration(t *testing.T) {
 	assert.NotNil(t, spec.ParentalControl)
 	assert.NotNil(t, spec.Settings)
 	assert.Equal(t, 1, len(spec.Rewrites))
+}
+
+func TestUpstreamConfig_DeviceName(t *testing.T) {
+	config := UpstreamConfig{
+		Primary:    DNSProtocolDoT,
+		DeviceName: "Home Router",
+	}
+	assert.Equal(t, DNSProtocolDoT, config.Primary)
+	assert.Equal(t, "Home Router", config.DeviceName)
+
+	// Zero value — no device name
+	empty := UpstreamConfig{Primary: DNSProtocolDoH}
+	assert.Equal(t, "", empty.DeviceName)
 }
