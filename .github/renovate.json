@@ -15,5 +15,22 @@
       "depNameTemplate": "sigs.k8s.io/controller-tools",
       "datasourceTemplate": "go"
     }
+  ],
+  "packageRules": [
+    {
+      "description": "Regenerate CRDs and sync to Helm chart after controller-tools updates",
+      "matchDepNames": ["sigs.k8s.io/controller-tools"],
+      "postUpgradeTasks": {
+        "commands": [
+          "make manifests",
+          "make sync-helm-crds"
+        ],
+        "fileFilters": [
+          "config/crd/bases/*.yaml",
+          "chart/crds/*.yaml"
+        ],
+        "executionMode": "branch"
+      }
+    }
   ]
 }
