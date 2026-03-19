@@ -2503,3 +2503,17 @@ func TestFindProfilesForImportConfigMap(t *testing.T) {
 	requests = reconciler.findProfilesForConfigMap(ctx, unrelatedCM)
 	assert.Empty(t, requests)
 }
+
+func TestProfileModeConstants(t *testing.T) {
+	assert.Equal(t, nextdnsv1alpha1.ProfileMode("observe"), nextdnsv1alpha1.ProfileModeObserve)
+	assert.Equal(t, nextdnsv1alpha1.ProfileMode("managed"), nextdnsv1alpha1.ProfileModeManaged)
+}
+
+func TestProfileSpecModeField(t *testing.T) {
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode: nextdnsv1alpha1.ProfileModeObserve,
+		},
+	}
+	assert.Equal(t, nextdnsv1alpha1.ProfileModeObserve, profile.Spec.Mode)
+}
