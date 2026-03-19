@@ -412,6 +412,11 @@ type NextDNSProfileStatus struct {
 	// Used to detect changes and trigger re-import
 	// +optional
 	ConfigImportResourceVersion string `json:"configImportResourceVersion,omitempty"`
+
+	// ObservedConfig contains the full observed state of the remote profile
+	// Populated in observe mode; cleared after first successful managed sync
+	// +optional
+	ObservedConfig *ObservedConfig `json:"observedConfig,omitempty"`
 }
 
 // +kubebuilder:object:root=true

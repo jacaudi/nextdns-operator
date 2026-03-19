@@ -2517,3 +2517,44 @@ func TestProfileSpecModeField(t *testing.T) {
 	}
 	assert.Equal(t, nextdnsv1alpha1.ProfileModeObserve, profile.Spec.Mode)
 }
+
+func TestObservedConfigTypes(t *testing.T) {
+	observed := &nextdnsv1alpha1.ObservedConfig{
+		Name: "Test Profile",
+		Security: &nextdnsv1alpha1.ObservedSecurity{
+			AIThreatDetection:  true,
+			GoogleSafeBrowsing: true,
+		},
+		Privacy: &nextdnsv1alpha1.ObservedPrivacy{
+			DisguisedTrackers: true,
+			Blocklists: []nextdnsv1alpha1.ObservedBlocklistEntry{
+				{ID: "nextdns-recommended"},
+			},
+		},
+		Denylist: []nextdnsv1alpha1.ObservedDomainEntry{
+			{Domain: "bad.com", Active: true},
+		},
+		Allowlist: []nextdnsv1alpha1.ObservedDomainEntry{
+			{Domain: "good.com", Active: true},
+		},
+		Settings: &nextdnsv1alpha1.ObservedSettings{
+			Web3: true,
+		},
+		Rewrites: []nextdnsv1alpha1.ObservedRewriteEntry{
+			{Name: "example.com", Content: "1.2.3.4"},
+		},
+	}
+
+	assert.Equal(t, "Test Profile", observed.Name)
+	assert.True(t, observed.Security.AIThreatDetection)
+	assert.Equal(t, 1, len(observed.Privacy.Blocklists))
+	assert.Equal(t, 1, len(observed.Denylist))
+}
+
+func TestObservedConfigInStatus(t *testing.T) {
+	profile := &nextdnsv1alpha1.NextDNSProfile{}
+	profile.Status.ObservedConfig = &nextdnsv1alpha1.ObservedConfig{
+		Name: "Observed Profile",
+	}
+	assert.Equal(t, "Observed Profile", profile.Status.ObservedConfig.Name)
+}
