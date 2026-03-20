@@ -53,6 +53,14 @@ type ClientInterface interface {
 
 	// Settings operations
 	UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error
+
+	// Read-only operations for observe mode
+	GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error)
+	GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*nextdns.PrivacyBlocklists, error)
+	GetPrivacyNatives(ctx context.Context, profileID string) ([]*nextdns.PrivacyNatives, error)
+	GetParentalControlCategories(ctx context.Context, profileID string) ([]*nextdns.ParentalControlCategories, error)
+	GetParentalControlServices(ctx context.Context, profileID string) ([]*nextdns.ParentalControlServices, error)
+	GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error)
 }
 
 // Ensure Client implements ClientInterface

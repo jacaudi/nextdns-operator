@@ -1925,6 +1925,30 @@ func (m *mockNextDNSClient) DeletePrivacyNative(ctx context.Context, profileID s
 	return nil
 }
 
+func (m *mockNextDNSClient) GetSettings(ctx context.Context, profileID string) (*sdknextdns.Settings, error) {
+	return &sdknextdns.Settings{}, nil
+}
+
+func (m *mockNextDNSClient) GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*sdknextdns.PrivacyBlocklists, error) {
+	return []*sdknextdns.PrivacyBlocklists{}, nil
+}
+
+func (m *mockNextDNSClient) GetPrivacyNatives(ctx context.Context, profileID string) ([]*sdknextdns.PrivacyNatives, error) {
+	return []*sdknextdns.PrivacyNatives{}, nil
+}
+
+func (m *mockNextDNSClient) GetParentalControlCategories(ctx context.Context, profileID string) ([]*sdknextdns.ParentalControlCategories, error) {
+	return []*sdknextdns.ParentalControlCategories{}, nil
+}
+
+func (m *mockNextDNSClient) GetParentalControlServices(ctx context.Context, profileID string) ([]*sdknextdns.ParentalControlServices, error) {
+	return []*sdknextdns.ParentalControlServices{}, nil
+}
+
+func (m *mockNextDNSClient) GetRewrites(ctx context.Context, profileID string) ([]*sdknextdns.Rewrites, error) {
+	return []*sdknextdns.Rewrites{}, nil
+}
+
 func TestReconcileConfigMap(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()
