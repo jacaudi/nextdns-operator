@@ -15,6 +15,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
     - jsonPath: .status.profileID
       name: Profile ID
       type: string
@@ -180,10 +183,19 @@ spec:
                   - name
                   type: object
                 type: array
+              mode:
+                default: managed
+                description: |-
+                  Mode controls whether the operator manages or only observes this profile
+                  In "observe" mode, the operator reads the remote profile into status without modifying it
+                  In "managed" mode (default), the operator syncs spec to the remote profile
+                enum:
+                - observe
+                - managed
+                type: string
               name:
                 description: Name is the human-readable name shown in NextDNS dashboard
                 maxLength: 100
-                minLength: 1
                 type: string
               parentalControl:
                 description: ParentalControl configures content filtering
@@ -435,7 +447,6 @@ spec:
                 type: array
             required:
             - credentialsRef
-            - name
             type: object
           status:
             description: NextDNSProfileStatus defines the observed state of NextDNSProfile
@@ -525,6 +536,221 @@ spec:
                   with NextDNS
                 format: date-time
                 type: string
+              observedConfig:
+                description: |-
+                  ObservedConfig contains the full observed state of the remote profile
+                  Populated in observe mode; cleared after first successful managed sync
+                properties:
+                  allowlist:
+                    description: Allowlist contains observed allowed domains
+                    items:
+                      description: ObservedDomainEntry represents an observed domain
+                        with active state
+                      properties:
+                        active:
+                          type: boolean
+                        domain:
+                          type: string
+                      required:
+                      - active
+                      - domain
+                      type: object
+                    type: array
+                  blockedTLDs:
+                    description: BlockedTLDs contains observed blocked TLDs
+                    items:
+                      type: string
+                    type: array
+                  denylist:
+                    description: Denylist contains observed denied domains
+                    items:
+                      description: ObservedDomainEntry represents an observed domain
+                        with active state
+                      properties:
+                        active:
+                          type: boolean
+                        domain:
+                          type: string
+                      required:
+                      - active
+                      - domain
+                      type: object
+                    type: array
+                  name:
+                    description: Name is the profile name as shown in NextDNS dashboard
+                    type: string
+                  parentalControl:
+                    description: ParentalControl contains observed parental control
+                      settings
+                    properties:
+                      categories:
+                        items:
+                          description: ObservedCategoryEntry represents an observed
+                            content category
+                          properties:
+                            active:
+                              type: boolean
+                            id:
+                              type: string
+                          required:
+                          - active
+                          - id
+                          type: object
+                        type: array
+                      safeSearch:
+                        type: boolean
+                      services:
+                        items:
+                          description: ObservedServiceEntry represents an observed
+                            blocked service
+                          properties:
+                            active:
+                              type: boolean
+                            id:
+                              type: string
+                          required:
+                          - active
+                          - id
+                          type: object
+                        type: array
+                      youtubeRestrictedMode:
+                        type: boolean
+                    required:
+                    - safeSearch
+                    - youtubeRestrictedMode
+                    type: object
+                  privacy:
+                    description: Privacy contains observed privacy settings
+                    properties:
+                      allowAffiliate:
+                        type: boolean
+                      blocklists:
+                        items:
+                          description: ObservedBlocklistEntry represents an observed
+                            privacy blocklist
+                          properties:
+                            id:
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                      disguisedTrackers:
+                        type: boolean
+                      natives:
+                        items:
+                          description: ObservedNativeEntry represents an observed
+                            native tracker protection
+                          properties:
+                            id:
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                    required:
+                    - allowAffiliate
+                    - disguisedTrackers
+                    type: object
+                  rewrites:
+                    description: Rewrites contains observed DNS rewrites
+                    items:
+                      description: ObservedRewriteEntry represents an observed DNS
+                        rewrite
+                      properties:
+                        content:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - content
+                      - name
+                      type: object
+                    type: array
+                  security:
+                    description: Security contains observed security settings
+                    properties:
+                      aiThreatDetection:
+                        type: boolean
+                      cryptojacking:
+                        type: boolean
+                      csam:
+                        type: boolean
+                      ddns:
+                        type: boolean
+                      dga:
+                        type: boolean
+                      dnsRebinding:
+                        type: boolean
+                      googleSafeBrowsing:
+                        type: boolean
+                      idnHomographs:
+                        type: boolean
+                      nrd:
+                        type: boolean
+                      parking:
+                        type: boolean
+                      threatIntelligenceFeeds:
+                        type: boolean
+                      typosquatting:
+                        type: boolean
+                    required:
+                    - aiThreatDetection
+                    - cryptojacking
+                    - csam
+                    - ddns
+                    - dga
+                    - dnsRebinding
+                    - googleSafeBrowsing
+                    - idnHomographs
+                    - nrd
+                    - parking
+                    - threatIntelligenceFeeds
+                    - typosquatting
+                    type: object
+                  settings:
+                    description: Settings contains observed general settings
+                    properties:
+                      blockPage:
+                        description: ObservedBlockPage represents observed block page
+                          settings
+                        properties:
+                          enabled:
+                            type: boolean
+                        required:
+                        - enabled
+                        type: object
+                      logs:
+                        description: ObservedLogs represents observed logging settings
+                        properties:
+                          enabled:
+                            type: boolean
+                          retention:
+                            type: integer
+                        required:
+                        - enabled
+                        type: object
+                      performance:
+                        description: ObservedPerformance represents observed performance
+                          settings
+                        properties:
+                          cacheBoost:
+                            type: boolean
+                          cnameFlattening:
+                            type: boolean
+                          ecs:
+                            type: boolean
+                        required:
+                        - cacheBoost
+                        - cnameFlattening
+                        - ecs
+                        type: object
+                      web3:
+                        type: boolean
+                    required:
+                    - web3
+                    type: object
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the generation last processed by
                   the controller

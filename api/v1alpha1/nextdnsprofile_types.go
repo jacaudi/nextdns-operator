@@ -4,6 +4,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ProfileMode defines the operational mode of a NextDNSProfile
+// +kubebuilder:validation:Enum=observe;managed
+type ProfileMode string
+
+const (
+	// ProfileModeObserve reads the remote profile without modifying it
+	ProfileModeObserve ProfileMode = "observe"
+
+	// ProfileModeManaged is the default mode that syncs spec to the remote profile
+	ProfileModeManaged ProfileMode = "managed"
+)
+
 // ConfigMapRef configures the optional ConfigMap containing connection details
 type ConfigMapRef struct {
 	// Enabled enables creation of the ConfigMap
@@ -33,10 +45,16 @@ type ConfigImportRef struct {
 // NextDNSProfileSpec defines the desired state of NextDNSProfile
 type NextDNSProfileSpec struct {
 	// Name is the human-readable name shown in NextDNS dashboard
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=100
-	Name string `json:"name"`
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Mode controls whether the operator manages or only observes this profile
+	// In "observe" mode, the operator reads the remote profile into status without modifying it
+	// In "managed" mode (default), the operator syncs spec to the remote profile
+	// +kubebuilder:default=managed
+	// +optional
+	Mode ProfileMode `json:"mode,omitempty"`
 
 	// CredentialsRef references a Secret containing the NextDNS API key
 	// +kubebuilder:validation:Required
@@ -394,10 +412,16 @@ type NextDNSProfileStatus struct {
 	// Used to detect changes and trigger re-import
 	// +optional
 	ConfigImportResourceVersion string `json:"configImportResourceVersion,omitempty"`
+
+	// ObservedConfig contains the full observed state of the remote profile
+	// Populated in observe mode; cleared after first successful managed sync
+	// +optional
+	ObservedConfig *ObservedConfig `json:"observedConfig,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.mode`
 // +kubebuilder:printcolumn:name="Profile ID",type=string,JSONPath=`.status.profileID`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

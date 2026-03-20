@@ -51,6 +51,12 @@ type MockClient struct {
 	// ParentalControlServices stores services per profile
 	ParentalControlServices map[string][]*nextdns.ParentalControlServices
 
+	// Settings stores full mock settings per profile
+	Settings map[string]*nextdns.Settings
+
+	// Rewrites stores mock rewrites per profile
+	Rewrites map[string][]*nextdns.Rewrites
+
 	// Error injection for testing error paths
 	CreateProfileError         error
 	GetProfileError            error
@@ -70,7 +76,13 @@ type MockClient struct {
 	GetDenylistError           error
 	GetAllowlistError          error
 	GetSecurityTLDsError       error
-	UpdateSettingsError        error
+	UpdateSettingsError                error
+	GetSettingsError                   error
+	GetPrivacyBlocklistsError          error
+	GetPrivacyNativesError             error
+	GetParentalControlCategoriesError  error
+	GetParentalControlServicesError    error
+	GetRewritesError                   error
 
 	// Call tracking
 	Calls []MockCall
@@ -101,6 +113,8 @@ func NewMockClient() *MockClient {
 		SettingsBlockPage:         make(map[string]*nextdns.SettingsBlockPage),
 		ParentalControlCategories: make(map[string][]*nextdns.ParentalControlCategories),
 		ParentalControlServices:   make(map[string][]*nextdns.ParentalControlServices),
+		Settings:                  make(map[string]*nextdns.Settings),
+		Rewrites:                  make(map[string][]*nextdns.Rewrites),
 		Calls:                     make([]MockCall, 0),
 		NextProfileID:             1,
 	}
@@ -595,6 +609,89 @@ func (m *MockClient) DeletePrivacyNative(ctx context.Context, profileID string, 
 	return nil
 }
 
+// GetSettings retrieves mock settings
+func (m *MockClient) GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error) {
+	m.recordCall("GetSettings", profileID)
+	if m.GetSettingsError != nil {
+		return nil, m.GetSettingsError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	settings, exists := m.Settings[profileID]
+	if !exists {
+		return &nextdns.Settings{}, nil
+	}
+
+	return settings, nil
+}
+
+// GetPrivacyBlocklists retrieves mock privacy blocklists
+func (m *MockClient) GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*nextdns.PrivacyBlocklists, error) {
+	m.recordCall("GetPrivacyBlocklists", profileID)
+	if m.GetPrivacyBlocklistsError != nil {
+		return nil, m.GetPrivacyBlocklistsError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.PrivacyBlocklists[profileID], nil
+}
+
+// GetPrivacyNatives retrieves mock privacy natives
+func (m *MockClient) GetPrivacyNatives(ctx context.Context, profileID string) ([]*nextdns.PrivacyNatives, error) {
+	m.recordCall("GetPrivacyNatives", profileID)
+	if m.GetPrivacyNativesError != nil {
+		return nil, m.GetPrivacyNativesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.PrivacyNatives[profileID], nil
+}
+
+// GetParentalControlCategories retrieves mock parental control categories
+func (m *MockClient) GetParentalControlCategories(ctx context.Context, profileID string) ([]*nextdns.ParentalControlCategories, error) {
+	m.recordCall("GetParentalControlCategories", profileID)
+	if m.GetParentalControlCategoriesError != nil {
+		return nil, m.GetParentalControlCategoriesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.ParentalControlCategories[profileID], nil
+}
+
+// GetParentalControlServices retrieves mock parental control services
+func (m *MockClient) GetParentalControlServices(ctx context.Context, profileID string) ([]*nextdns.ParentalControlServices, error) {
+	m.recordCall("GetParentalControlServices", profileID)
+	if m.GetParentalControlServicesError != nil {
+		return nil, m.GetParentalControlServicesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.ParentalControlServices[profileID], nil
+}
+
+// GetRewrites retrieves mock rewrites
+func (m *MockClient) GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error) {
+	m.recordCall("GetRewrites", profileID)
+	if m.GetRewritesError != nil {
+		return nil, m.GetRewritesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.Rewrites[profileID], nil
+}
+
 // GetCallCount returns the number of calls to a specific method
 func (m *MockClient) GetCallCount(method string) int {
 	m.mu.RLock()
@@ -644,6 +741,8 @@ func (m *MockClient) Reset() {
 	m.SettingsBlockPage = make(map[string]*nextdns.SettingsBlockPage)
 	m.ParentalControlCategories = make(map[string][]*nextdns.ParentalControlCategories)
 	m.ParentalControlServices = make(map[string][]*nextdns.ParentalControlServices)
+	m.Settings = make(map[string]*nextdns.Settings)
+	m.Rewrites = make(map[string][]*nextdns.Rewrites)
 	m.Calls = make([]MockCall, 0)
 	m.NextProfileID = 1
 
@@ -667,6 +766,12 @@ func (m *MockClient) Reset() {
 	m.GetAllowlistError = nil
 	m.GetSecurityTLDsError = nil
 	m.UpdateSettingsError = nil
+	m.GetSettingsError = nil
+	m.GetPrivacyBlocklistsError = nil
+	m.GetPrivacyNativesError = nil
+	m.GetParentalControlCategoriesError = nil
+	m.GetParentalControlServicesError = nil
+	m.GetRewritesError = nil
 }
 
 // Ensure MockClient implements ClientInterface
