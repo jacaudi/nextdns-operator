@@ -1,0 +1,12 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: nextdns-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: nextdnsprofile-observe-sample
+spec:
+  mode: observe
+  profileID: "abc123"
+  credentialsRef:
+    name: nextdns-credentials
