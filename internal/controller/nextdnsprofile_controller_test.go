@@ -864,6 +864,7 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "Synced", ConditionTypeSynced)
 	assert.Equal(t, "ReferencesResolved", ConditionTypeReferencesResolved)
 	assert.Equal(t, "ConfigImported", ConditionTypeConfigImported)
+	assert.Equal(t, "ObserveOnly", ConditionTypeObserveOnly)
 }
 
 func TestFindProfilesForAllowlist_InvalidType(t *testing.T) {
@@ -2685,6 +2686,16 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Allowlist))
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
 
+	// Verify conditions
+	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionTrue, readyCondition.Status)
+	assert.Equal(t, "Observed", readyCondition.Reason)
+
+	observeCondition := findCondition(updated.Status.Conditions, ConditionTypeObserveOnly)
+	require.NotNil(t, observeCondition)
+	assert.Equal(t, metav1.ConditionTrue, observeCondition.Status)
+
 	// Verify no write methods were called
 	assert.False(t, mockNDS.WasMethodCalled("UpdateSecurity"))
 	assert.False(t, mockNDS.WasMethodCalled("UpdatePrivacy"))
@@ -2984,4 +2995,79 @@ func TestHandleDeletion_ObserveMode(t *testing.T) {
 
 	// DeleteProfile should NOT have been called — observe mode doesn't own the profile
 	assert.False(t, mockNDS.WasMethodCalled("DeleteProfile"))
+}
+
+func TestSpecHasConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     nextdnsv1alpha1.NextDNSProfileSpec
+		expected bool
+	}{
+		{
+			name:     "empty spec",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{},
+			expected: false,
+		},
+		{
+			name:     "only name and mode (no config)",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Name: "test", Mode: nextdnsv1alpha1.ProfileModeManaged},
+			expected: false,
+		},
+		{
+			name:     "security set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Security: &nextdnsv1alpha1.SecuritySpec{}},
+			expected: true,
+		},
+		{
+			name:     "privacy set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Privacy: &nextdnsv1alpha1.PrivacySpec{}},
+			expected: true,
+		},
+		{
+			name:     "parental control set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{ParentalControl: &nextdnsv1alpha1.ParentalControlSpec{}},
+			expected: true,
+		},
+		{
+			name:     "settings set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Settings: &nextdnsv1alpha1.SettingsSpec{}},
+			expected: true,
+		},
+		{
+			name: "denylist set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{Denylist: []nextdnsv1alpha1.DomainEntry{{Domain: "bad.com"}}},
+			expected: true,
+		},
+		{
+			name: "allowlist set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{Allowlist: []nextdnsv1alpha1.DomainEntry{{Domain: "good.com"}}},
+			expected: true,
+		},
+		{
+			name: "rewrites set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{Rewrites: []nextdnsv1alpha1.RewriteEntry{{From: "a", To: "b"}}},
+			expected: true,
+		},
+		{
+			name: "denylist refs set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{DenylistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			expected: true,
+		},
+		{
+			name: "allowlist refs set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{AllowlistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			expected: true,
+		},
+		{
+			name: "tld list refs set",
+			spec: nextdnsv1alpha1.NextDNSProfileSpec{TLDListRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, specHasConfig(&tt.spec))
+		})
+	}
 }
