@@ -2582,3 +2582,406 @@ func TestObservedConfigInStatus(t *testing.T) {
 	}
 	assert.Equal(t, "Observed Profile", profile.Status.ObservedConfig.Name)
 }
+
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}
+
+func TestReconcile_ObserveMode_Success(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observe",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeObserve,
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Remote Profile", "abc123.dns.nextdns.io")
+	mockNDS.Security["abc123"] = &sdknextdns.Security{
+		AiThreatDetection:  true,
+		GoogleSafeBrowsing: true,
+	}
+	mockNDS.Privacy["abc123"] = &sdknextdns.Privacy{
+		DisguisedTrackers: true,
+	}
+	mockNDS.ParentalControl["abc123"] = &sdknextdns.ParentalControl{
+		SafeSearch: true,
+	}
+	mockNDS.Denylists["abc123"] = []*sdknextdns.Denylist{
+		{ID: "bad.com", Active: true},
+	}
+	mockNDS.Allowlists["abc123"] = []*sdknextdns.Allowlist{
+		{ID: "good.com", Active: true},
+	}
+	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
+		Logs:      &sdknextdns.SettingsLogs{Enabled: true, Retention: 7},
+		BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
+		Performance: &sdknextdns.SettingsPerformance{
+			Ecs:             true,
+			CacheBoost:      true,
+			CnameFlattening: true,
+		},
+		Web3: false,
+	}
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-observe", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.RequeueAfter > 0)
+
+	// Verify status was updated
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-observe", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	assert.Equal(t, "abc123", updated.Status.ProfileID)
+	assert.NotNil(t, updated.Status.ObservedConfig)
+	assert.Equal(t, "Remote Profile", updated.Status.ObservedConfig.Name)
+	assert.True(t, updated.Status.ObservedConfig.Security.AIThreatDetection)
+	assert.True(t, updated.Status.ObservedConfig.Privacy.DisguisedTrackers)
+	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Denylist))
+	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Allowlist))
+	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
+
+	// Verify no write methods were called
+	assert.False(t, mockNDS.WasMethodCalled("UpdateSecurity"))
+	assert.False(t, mockNDS.WasMethodCalled("UpdatePrivacy"))
+	assert.False(t, mockNDS.WasMethodCalled("UpdateProfile"))
+	assert.False(t, mockNDS.WasMethodCalled("CreateProfile"))
+}
+
+func TestReconcile_ObserveMode_MissingProfileID(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observe-no-id",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode: nextdnsv1alpha1.ProfileModeObserve,
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-observe-no-id", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.RequeueAfter > 0)
+
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-observe-no-id", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	assert.Equal(t, "ProfileIDRequired", readyCondition.Reason)
+}
+
+func TestReconcile_TransitionBlocked(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-transition",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeManaged,
+			Name:      "Test Profile",
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ObservedConfig: &nextdnsv1alpha1.ObservedConfig{
+				Name: "Remote Profile",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-transition", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.RequeueAfter > 0)
+
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-transition", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	assert.Equal(t, "TransitionBlocked", readyCondition.Reason)
+}
+
+func TestReconcile_ManagedMode_MissingName(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-no-name",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode: nextdnsv1alpha1.ProfileModeManaged,
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-no-name", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.RequeueAfter > 0)
+
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-no-name", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	assert.Equal(t, "NameRequired", readyCondition.Reason)
+}
+
+func TestReconcile_ObserveMode_APIError(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observe-error",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeObserve,
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Remote Profile", "abc123.dns.nextdns.io")
+	mockNDS.GetSecurityError = fmt.Errorf("API rate limited")
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-observe-error", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.RequeueAfter > 0)
+
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-observe-error", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	assert.Equal(t, "ObserveFailed", readyCondition.Reason)
+}
+
+func TestHandleDeletion_ObserveMode(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+	now := metav1.Now()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-observe-delete",
+			Namespace:         "default",
+			Finalizers:        []string{FinalizerName},
+			DeletionTimestamp: &now,
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeObserve,
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	mockNDS := nextdns.NewMockClient()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-observe-delete", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// DeleteProfile should NOT have been called — observe mode doesn't own the profile
+	assert.False(t, mockNDS.WasMethodCalled("DeleteProfile"))
+}
