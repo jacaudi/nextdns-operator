@@ -973,8 +973,9 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
 	for _, rw := range observed.Rewrites {
 		suggested.Rewrites = append(suggested.Rewrites, nextdnsv1alpha1.RewriteEntry{
-			From: rw.Name,
-			To:   rw.Content,
+			From:   rw.Name,
+			To:     rw.Content,
+			Active: boolPtr(true),
 		})
 	}
 

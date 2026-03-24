@@ -2658,8 +2658,8 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	}
 
 	reconciler := &NextDNSProfileReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:     fakeClient,
+		Scheme:     scheme,
 		SyncPeriod: 5 * time.Minute,
 		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 			return mockNDS, nil
@@ -3054,33 +3054,33 @@ func TestSpecHasConfig(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "denylist set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{Denylist: []nextdnsv1alpha1.DomainEntry{{Domain: "bad.com"}}},
+			name:     "denylist set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Denylist: []nextdnsv1alpha1.DomainEntry{{Domain: "bad.com"}}},
 			expected: true,
 		},
 		{
-			name: "allowlist set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{Allowlist: []nextdnsv1alpha1.DomainEntry{{Domain: "good.com"}}},
+			name:     "allowlist set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Allowlist: []nextdnsv1alpha1.DomainEntry{{Domain: "good.com"}}},
 			expected: true,
 		},
 		{
-			name: "rewrites set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{Rewrites: []nextdnsv1alpha1.RewriteEntry{{From: "a", To: "b"}}},
+			name:     "rewrites set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{Rewrites: []nextdnsv1alpha1.RewriteEntry{{From: "a", To: "b"}}},
 			expected: true,
 		},
 		{
-			name: "denylist refs set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{DenylistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			name:     "denylist refs set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{DenylistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
 			expected: true,
 		},
 		{
-			name: "allowlist refs set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{AllowlistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			name:     "allowlist refs set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{AllowlistRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
 			expected: true,
 		},
 		{
-			name: "tld list refs set",
-			spec: nextdnsv1alpha1.NextDNSProfileSpec{TLDListRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
+			name:     "tld list refs set",
+			spec:     nextdnsv1alpha1.NextDNSProfileSpec{TLDListRefs: []nextdnsv1alpha1.ListReference{{Name: "ref"}}},
 			expected: true,
 		},
 	}
@@ -3253,6 +3253,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	require.Equal(t, 1, len(suggested.Rewrites))
 	assert.Equal(t, "app.example.com", suggested.Rewrites[0].From)
 	assert.Equal(t, "192.168.1.1", suggested.Rewrites[0].To)
+	assert.Equal(t, boolPtr(true), suggested.Rewrites[0].Active)
 
 	// BlockedTLDs
 	assert.Equal(t, []string{"xyz", "tk"}, suggested.BlockedTLDs)
@@ -3331,8 +3332,8 @@ func TestReconcile_TransitionClearsSuggestedSpec(t *testing.T) {
 		Build()
 
 	reconciler := &NextDNSProfileReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:     fakeClient,
+		Scheme:     scheme,
 		SyncPeriod: 5 * time.Minute,
 		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 			return mockNDS, nil
