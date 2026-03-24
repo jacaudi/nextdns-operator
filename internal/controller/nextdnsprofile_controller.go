@@ -883,6 +883,128 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	return observed, nil
 }
 
+// buildSuggestedSpec translates an ObservedConfig into spec-compatible types
+// that users can copy directly into their NextDNSProfile spec.
+// Fields not available from the API are omitted (threatIntelligenceFeeds, logClientsIPs, logDomains).
+func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alpha1.SuggestedSpec {
+	if observed == nil {
+		return nil
+	}
+
+	suggested := &nextdnsv1alpha1.SuggestedSpec{
+		Name:        observed.Name,
+		BlockedTLDs: observed.BlockedTLDs,
+	}
+
+	// Security: bool -> *bool, omit ThreatIntelligenceFeeds (can't reconstruct []string from bool)
+	if observed.Security != nil {
+		suggested.Security = &nextdnsv1alpha1.SecuritySpec{
+			AIThreatDetection:  boolPtr(observed.Security.AIThreatDetection),
+			GoogleSafeBrowsing: boolPtr(observed.Security.GoogleSafeBrowsing),
+			Cryptojacking:      boolPtr(observed.Security.Cryptojacking),
+			DNSRebinding:       boolPtr(observed.Security.DNSRebinding),
+			IDNHomographs:      boolPtr(observed.Security.IDNHomographs),
+			Typosquatting:      boolPtr(observed.Security.Typosquatting),
+			DGA:                boolPtr(observed.Security.DGA),
+			NRD:                boolPtr(observed.Security.NRD),
+			DDNS:               boolPtr(observed.Security.DDNS),
+			Parking:            boolPtr(observed.Security.Parking),
+			CSAM:               boolPtr(observed.Security.CSAM),
+			// ThreatIntelligenceFeeds intentionally omitted
+		}
+	}
+
+	// Privacy: bool -> *bool, blocklists/natives default Active to true
+	if observed.Privacy != nil {
+		suggested.Privacy = &nextdnsv1alpha1.PrivacySpec{
+			DisguisedTrackers: boolPtr(observed.Privacy.DisguisedTrackers),
+			AllowAffiliate:    boolPtr(observed.Privacy.AllowAffiliate),
+		}
+		for _, bl := range observed.Privacy.Blocklists {
+			suggested.Privacy.Blocklists = append(suggested.Privacy.Blocklists, nextdnsv1alpha1.BlocklistEntry{
+				ID:     bl.ID,
+				Active: boolPtr(true),
+			})
+		}
+		for _, n := range observed.Privacy.Natives {
+			suggested.Privacy.Natives = append(suggested.Privacy.Natives, nextdnsv1alpha1.NativeEntry{
+				ID:     n.ID,
+				Active: boolPtr(true),
+			})
+		}
+	}
+
+	// ParentalControl: bool -> *bool, categories/services preserve Active as *bool
+	if observed.ParentalControl != nil {
+		suggested.ParentalControl = &nextdnsv1alpha1.ParentalControlSpec{
+			SafeSearch:            boolPtr(observed.ParentalControl.SafeSearch),
+			YouTubeRestrictedMode: boolPtr(observed.ParentalControl.YouTubeRestrictedMode),
+		}
+		for _, cat := range observed.ParentalControl.Categories {
+			suggested.ParentalControl.Categories = append(suggested.ParentalControl.Categories, nextdnsv1alpha1.CategoryEntry{
+				ID:     cat.ID,
+				Active: boolPtr(cat.Active),
+			})
+		}
+		for _, svc := range observed.ParentalControl.Services {
+			suggested.ParentalControl.Services = append(suggested.ParentalControl.Services, nextdnsv1alpha1.ServiceEntry{
+				ID:     svc.ID,
+				Active: boolPtr(svc.Active),
+			})
+		}
+	}
+
+	// Denylist/Allowlist: Active bool -> *bool
+	for _, d := range observed.Denylist {
+		suggested.Denylist = append(suggested.Denylist, nextdnsv1alpha1.DomainEntry{
+			Domain: d.Domain,
+			Active: boolPtr(d.Active),
+		})
+	}
+	for _, a := range observed.Allowlist {
+		suggested.Allowlist = append(suggested.Allowlist, nextdnsv1alpha1.DomainEntry{
+			Domain: a.Domain,
+			Active: boolPtr(a.Active),
+		})
+	}
+
+	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
+	for _, rw := range observed.Rewrites {
+		suggested.Rewrites = append(suggested.Rewrites, nextdnsv1alpha1.RewriteEntry{
+			From: rw.Name,
+			To:   rw.Content,
+		})
+	}
+
+	// Settings: bool -> *bool, retention int -> string
+	if observed.Settings != nil {
+		suggested.Settings = &nextdnsv1alpha1.SettingsSpec{
+			Web3: boolPtr(observed.Settings.Web3),
+		}
+		if observed.Settings.Logs != nil {
+			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{
+				Enabled:   boolPtr(observed.Settings.Logs.Enabled),
+				Retention: formatRetentionString(observed.Settings.Logs.Retention),
+				// LogClientsIPs and LogDomains intentionally omitted (not available from API)
+			}
+		}
+		if observed.Settings.BlockPage != nil {
+			suggested.Settings.BlockPage = &nextdnsv1alpha1.BlockPageSpec{
+				Enabled: boolPtr(observed.Settings.BlockPage.Enabled),
+			}
+		}
+		if observed.Settings.Performance != nil {
+			suggested.Settings.Performance = &nextdnsv1alpha1.PerformanceSpec{
+				ECS:             boolPtr(observed.Settings.Performance.ECS),
+				CacheBoost:      boolPtr(observed.Settings.Performance.CacheBoost),
+				CNAMEFlattening: boolPtr(observed.Settings.Performance.CNAMEFlattening),
+			}
+		}
+	}
+
+	return suggested
+}
+
 // specHasConfig checks if the spec has any configuration sections populated
 func specHasConfig(spec *nextdnsv1alpha1.NextDNSProfileSpec) bool {
 	return spec.Security != nil ||
@@ -1015,6 +1137,11 @@ func parseRetentionDays(retention string) int {
 	}
 
 	return 7 // default
+}
+
+// boolPtr returns a pointer to a bool value
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 // formatRetentionString converts a retention value in days to the spec string format

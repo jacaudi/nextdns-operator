@@ -3094,3 +3094,164 @@ func TestFormatRetentionString(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSuggestedSpec(t *testing.T) {
+	observed := &nextdnsv1alpha1.ObservedConfig{
+		Name: "Test Profile",
+		Security: &nextdnsv1alpha1.ObservedSecurity{
+			AIThreatDetection:       true,
+			ThreatIntelligenceFeeds: true,
+			GoogleSafeBrowsing:      true,
+			Cryptojacking:           false,
+			DNSRebinding:            true,
+			IDNHomographs:           true,
+			Typosquatting:           true,
+			DGA:                     true,
+			NRD:                     false,
+			DDNS:                    false,
+			Parking:                 true,
+			CSAM:                    true,
+		},
+		Privacy: &nextdnsv1alpha1.ObservedPrivacy{
+			DisguisedTrackers: true,
+			AllowAffiliate:    false,
+			Blocklists: []nextdnsv1alpha1.ObservedBlocklistEntry{
+				{ID: "nextdns-recommended"},
+				{ID: "oisd"},
+			},
+			Natives: []nextdnsv1alpha1.ObservedNativeEntry{
+				{ID: "apple"},
+				{ID: "windows"},
+			},
+		},
+		ParentalControl: &nextdnsv1alpha1.ObservedParentalControl{
+			SafeSearch:            true,
+			YouTubeRestrictedMode: false,
+			Categories: []nextdnsv1alpha1.ObservedCategoryEntry{
+				{ID: "gambling", Active: true},
+				{ID: "adult", Active: false},
+			},
+			Services: []nextdnsv1alpha1.ObservedServiceEntry{
+				{ID: "tiktok", Active: true},
+			},
+		},
+		Denylist: []nextdnsv1alpha1.ObservedDomainEntry{
+			{Domain: "bad.com", Active: true},
+			{Domain: "worse.com", Active: false},
+		},
+		Allowlist: []nextdnsv1alpha1.ObservedDomainEntry{
+			{Domain: "good.com", Active: true},
+		},
+		Settings: &nextdnsv1alpha1.ObservedSettings{
+			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30},
+			BlockPage: &nextdnsv1alpha1.ObservedBlockPage{Enabled: true},
+			Performance: &nextdnsv1alpha1.ObservedPerformance{
+				ECS:             true,
+				CacheBoost:      true,
+				CNAMEFlattening: false,
+			},
+			Web3: true,
+		},
+		Rewrites: []nextdnsv1alpha1.ObservedRewriteEntry{
+			{Name: "app.example.com", Content: "192.168.1.1"},
+		},
+		BlockedTLDs: []string{"xyz", "tk"},
+	}
+
+	suggested := buildSuggestedSpec(observed)
+
+	// Name
+	assert.Equal(t, "Test Profile", suggested.Name)
+
+	// Security: bool -> *bool, ThreatIntelligenceFeeds omitted
+	require.NotNil(t, suggested.Security)
+	assert.Equal(t, boolPtr(true), suggested.Security.AIThreatDetection)
+	assert.Equal(t, boolPtr(true), suggested.Security.GoogleSafeBrowsing)
+	assert.Equal(t, boolPtr(false), suggested.Security.Cryptojacking)
+	assert.Equal(t, boolPtr(true), suggested.Security.DNSRebinding)
+	assert.Equal(t, boolPtr(true), suggested.Security.IDNHomographs)
+	assert.Equal(t, boolPtr(true), suggested.Security.Typosquatting)
+	assert.Equal(t, boolPtr(true), suggested.Security.DGA)
+	assert.Equal(t, boolPtr(false), suggested.Security.NRD)
+	assert.Equal(t, boolPtr(false), suggested.Security.DDNS)
+	assert.Equal(t, boolPtr(true), suggested.Security.Parking)
+	assert.Equal(t, boolPtr(true), suggested.Security.CSAM)
+	assert.Nil(t, suggested.Security.ThreatIntelligenceFeeds) // Cannot reconstruct from bool
+
+	// Privacy: bool -> *bool, blocklists/natives get Active: true
+	require.NotNil(t, suggested.Privacy)
+	assert.Equal(t, boolPtr(true), suggested.Privacy.DisguisedTrackers)
+	assert.Equal(t, boolPtr(false), suggested.Privacy.AllowAffiliate)
+	require.Equal(t, 2, len(suggested.Privacy.Blocklists))
+	assert.Equal(t, "nextdns-recommended", suggested.Privacy.Blocklists[0].ID)
+	assert.Equal(t, boolPtr(true), suggested.Privacy.Blocklists[0].Active)
+	assert.Equal(t, "oisd", suggested.Privacy.Blocklists[1].ID)
+	assert.Equal(t, boolPtr(true), suggested.Privacy.Blocklists[1].Active)
+	require.Equal(t, 2, len(suggested.Privacy.Natives))
+	assert.Equal(t, "apple", suggested.Privacy.Natives[0].ID)
+	assert.Equal(t, boolPtr(true), suggested.Privacy.Natives[0].Active)
+
+	// ParentalControl: bool -> *bool, categories/services preserve Active
+	require.NotNil(t, suggested.ParentalControl)
+	assert.Equal(t, boolPtr(true), suggested.ParentalControl.SafeSearch)
+	assert.Equal(t, boolPtr(false), suggested.ParentalControl.YouTubeRestrictedMode)
+	require.Equal(t, 2, len(suggested.ParentalControl.Categories))
+	assert.Equal(t, "gambling", suggested.ParentalControl.Categories[0].ID)
+	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Categories[0].Active)
+	assert.Equal(t, "adult", suggested.ParentalControl.Categories[1].ID)
+	assert.Equal(t, boolPtr(false), suggested.ParentalControl.Categories[1].Active)
+	require.Equal(t, 1, len(suggested.ParentalControl.Services))
+	assert.Equal(t, "tiktok", suggested.ParentalControl.Services[0].ID)
+	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Services[0].Active)
+
+	// Denylist/Allowlist: Active preserved as *bool
+	require.Equal(t, 2, len(suggested.Denylist))
+	assert.Equal(t, "bad.com", suggested.Denylist[0].Domain)
+	assert.Equal(t, boolPtr(true), suggested.Denylist[0].Active)
+	assert.Equal(t, "worse.com", suggested.Denylist[1].Domain)
+	assert.Equal(t, boolPtr(false), suggested.Denylist[1].Active)
+	require.Equal(t, 1, len(suggested.Allowlist))
+	assert.Equal(t, "good.com", suggested.Allowlist[0].Domain)
+	assert.Equal(t, boolPtr(true), suggested.Allowlist[0].Active)
+
+	// Settings: retention int -> string, bool -> *bool
+	require.NotNil(t, suggested.Settings)
+	require.NotNil(t, suggested.Settings.Logs)
+	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.Enabled)
+	assert.Equal(t, "30d", suggested.Settings.Logs.Retention)
+	assert.Nil(t, suggested.Settings.Logs.LogClientsIPs) // Not available from API
+	assert.Nil(t, suggested.Settings.Logs.LogDomains)    // Not available from API
+	require.NotNil(t, suggested.Settings.BlockPage)
+	assert.Equal(t, boolPtr(true), suggested.Settings.BlockPage.Enabled)
+	require.NotNil(t, suggested.Settings.Performance)
+	assert.Equal(t, boolPtr(true), suggested.Settings.Performance.ECS)
+	assert.Equal(t, boolPtr(true), suggested.Settings.Performance.CacheBoost)
+	assert.Equal(t, boolPtr(false), suggested.Settings.Performance.CNAMEFlattening)
+	assert.Equal(t, boolPtr(true), suggested.Settings.Web3)
+
+	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
+	require.Equal(t, 1, len(suggested.Rewrites))
+	assert.Equal(t, "app.example.com", suggested.Rewrites[0].From)
+	assert.Equal(t, "192.168.1.1", suggested.Rewrites[0].To)
+
+	// BlockedTLDs
+	assert.Equal(t, []string{"xyz", "tk"}, suggested.BlockedTLDs)
+}
+
+func TestBuildSuggestedSpec_NilSections(t *testing.T) {
+	observed := &nextdnsv1alpha1.ObservedConfig{
+		Name: "Minimal Profile",
+	}
+
+	suggested := buildSuggestedSpec(observed)
+
+	assert.Equal(t, "Minimal Profile", suggested.Name)
+	assert.Nil(t, suggested.Security)
+	assert.Nil(t, suggested.Privacy)
+	assert.Nil(t, suggested.ParentalControl)
+	assert.Nil(t, suggested.Settings)
+	assert.Empty(t, suggested.Denylist)
+	assert.Empty(t, suggested.Allowlist)
+	assert.Empty(t, suggested.Rewrites)
+	assert.Empty(t, suggested.BlockedTLDs)
+}
