@@ -2568,8 +2568,8 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 		Build()
 
 	reconciler := &NextDNSProfileReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:     fakeClient,
+		Scheme:     scheme,
 		SyncPeriod: 5 * time.Minute,
 		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 			return mockNDS, nil
@@ -2641,8 +2641,8 @@ func TestSyncWithNextDNS_Rewrites(t *testing.T) {
 		Build()
 
 	reconciler := &NextDNSProfileReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:     fakeClient,
+		Scheme:     scheme,
 		SyncPeriod: 5 * time.Minute,
 		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 			return mockNDS, nil
