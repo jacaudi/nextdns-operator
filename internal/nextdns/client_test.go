@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	sdknextdns "github.com/jacaudi/nextdns-go/nextdns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1020,4 +1021,53 @@ func TestMockClient_IndividualOperations_EmptyProfile(t *testing.T) {
 
 	err = mock.DeletePrivacyNative(context.Background(), "new-profile", "apple")
 	require.NoError(t, err)
+}
+
+func TestSyncRewrites(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	// Set up existing rewrites
+	mockClient.Rewrites["test-profile"] = []*sdknextdns.Rewrites{
+		{ID: "rw1", Name: "old.example.com", Content: "1.2.3.4"},
+		{ID: "rw2", Name: "keep.example.com", Content: "5.6.7.8"},
+	}
+
+	// Desired state: keep one, add one, remove one
+	desired := []RewriteEntry{
+		{Name: "keep.example.com", Content: "5.6.7.8"},
+		{Name: "new.example.com", Content: "9.10.11.12"},
+	}
+
+	err := mockClient.SyncRewrites(ctx, "test-profile", desired)
+	require.NoError(t, err)
+
+	result, err := mockClient.GetRewrites(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+
+	names := make(map[string]string)
+	for _, rw := range result {
+		names[rw.Name] = rw.Content
+	}
+	assert.Equal(t, "5.6.7.8", names["keep.example.com"])
+	assert.Equal(t, "9.10.11.12", names["new.example.com"])
+	_, hasOld := names["old.example.com"]
+	assert.False(t, hasOld, "old.example.com should have been removed")
+}
+
+func TestSyncRewrites_EmptyDesired(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.Rewrites["test-profile"] = []*sdknextdns.Rewrites{
+		{ID: "rw1", Name: "old.example.com", Content: "1.2.3.4"},
+	}
+
+	err := mockClient.SyncRewrites(ctx, "test-profile", []RewriteEntry{})
+	require.NoError(t, err)
+
+	result, err := mockClient.GetRewrites(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(result))
 }

@@ -90,6 +90,12 @@ type DomainEntry struct {
 	Active bool
 }
 
+// RewriteEntry represents a DNS rewrite for syncing to NextDNS
+type RewriteEntry struct {
+	Name    string
+	Content string
+}
+
 // CreateProfile creates a new NextDNS profile and returns the profile ID
 func (c *Client) CreateProfile(ctx context.Context, name string) (string, error) {
 	start := time.Now()
@@ -220,6 +226,77 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 	}
 
 	return nil
+}
+
+// SyncRewrites synchronizes DNS rewrites for a profile using diff-based create/delete.
+// The NextDNS API does not support update for rewrites, so we delete removed entries
+// and create new ones.
+func (c *Client) SyncRewrites(ctx context.Context, profileID string, entries []RewriteEntry) error {
+	start := time.Now()
+
+	// Get current rewrites
+	listRequest := &nextdns.ListRewritesRequest{ProfileID: profileID}
+	current, err := c.client.Rewrites.List(ctx, listRequest)
+	if err != nil {
+		metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+		return fmt.Errorf("failed to list rewrites: %w", err)
+	}
+
+	// Build desired set keyed by name+content
+	type rewriteKey struct{ Name, Content string }
+	desired := make(map[rewriteKey]bool, len(entries))
+	for _, e := range entries {
+		desired[rewriteKey{e.Name, e.Content}] = true
+	}
+
+	// Find entries to delete (in current but not in desired)
+	currentSet := make(map[rewriteKey]bool, len(current))
+	for _, rw := range current {
+		key := rewriteKey{rw.Name, rw.Content}
+		currentSet[key] = true
+		if !desired[key] {
+			deleteReq := &nextdns.DeleteRewritesRequest{ProfileID: profileID, ID: rw.ID}
+			if err := c.client.Rewrites.Delete(ctx, deleteReq); err != nil {
+				metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+				return fmt.Errorf("failed to delete rewrite %s: %w", rw.Name, err)
+			}
+		}
+	}
+
+	// Create entries not in current state
+	for _, e := range entries {
+		key := rewriteKey{e.Name, e.Content}
+		if !currentSet[key] {
+			createReq := &nextdns.CreateRewritesRequest{
+				ProfileID: profileID,
+				Rewrites:  &nextdns.Rewrites{Name: e.Name, Content: e.Content},
+			}
+			if _, err := c.client.Rewrites.Create(ctx, createReq); err != nil {
+				metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+				return fmt.Errorf("failed to create rewrite %s: %w", e.Name, err)
+			}
+		}
+	}
+
+	metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), true)
+	return nil
+}
+
+// GetRewrites retrieves the current rewrites for a profile
+func (c *Client) GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error) {
+	start := time.Now()
+	request := &nextdns.ListRewritesRequest{
+		ProfileID: profileID,
+	}
+
+	list, err := c.client.Rewrites.List(ctx, request)
+	metrics.RecordAPIRequest("GetRewrites", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rewrites: %w", err)
+	}
+
+	return list, nil
 }
 
 // SyncDenylist synchronizes the denylist for a profile

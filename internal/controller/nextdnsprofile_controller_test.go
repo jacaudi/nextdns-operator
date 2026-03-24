@@ -1925,6 +1925,14 @@ func (m *mockNextDNSClient) DeletePrivacyNative(ctx context.Context, profileID s
 	return nil
 }
 
+func (m *mockNextDNSClient) SyncRewrites(ctx context.Context, profileID string, entries []nextdns.RewriteEntry) error {
+	return nil
+}
+
+func (m *mockNextDNSClient) GetRewrites(ctx context.Context, profileID string) ([]*sdknextdns.Rewrites, error) {
+	return []*sdknextdns.Rewrites{}, nil
+}
+
 func TestReconcileConfigMap(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()

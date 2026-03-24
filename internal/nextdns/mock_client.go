@@ -54,6 +54,9 @@ type MockClient struct {
 	// ParentalControlServices stores services per profile
 	ParentalControlServices map[string][]*nextdns.ParentalControlServices
 
+	// Rewrites stores mock rewrites per profile
+	Rewrites map[string][]*nextdns.Rewrites
+
 	// Error injection for testing error paths
 	CreateProfileError         error
 	GetProfileError            error
@@ -74,6 +77,8 @@ type MockClient struct {
 	GetAllowlistError          error
 	GetSecurityTLDsError       error
 	UpdateSettingsError        error
+	SyncRewritesError          error
+	GetRewritesError           error
 
 	// Call tracking
 	Calls []MockCall
@@ -105,6 +110,7 @@ func NewMockClient() *MockClient {
 		SettingsBlockPage:         make(map[string]*nextdns.SettingsBlockPage),
 		ParentalControlCategories: make(map[string][]*nextdns.ParentalControlCategories),
 		ParentalControlServices:   make(map[string][]*nextdns.ParentalControlServices),
+		Rewrites:                  make(map[string][]*nextdns.Rewrites),
 		Calls:                     make([]MockCall, 0),
 		NextProfileID:             1,
 	}
@@ -616,6 +622,60 @@ func (m *MockClient) DeletePrivacyNative(ctx context.Context, profileID string, 
 	return nil
 }
 
+// SyncRewrites syncs mock rewrites using diff-based create/delete
+func (m *MockClient) SyncRewrites(ctx context.Context, profileID string, entries []RewriteEntry) error {
+	m.recordCall("SyncRewrites", profileID, entries)
+	if m.SyncRewritesError != nil {
+		return m.SyncRewritesError
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	type rewriteKey struct{ Name, Content string }
+	desired := make(map[rewriteKey]bool, len(entries))
+	for _, e := range entries {
+		desired[rewriteKey{e.Name, e.Content}] = true
+	}
+
+	currentSet := make(map[rewriteKey]bool)
+	var kept []*nextdns.Rewrites
+	for _, rw := range m.Rewrites[profileID] {
+		key := rewriteKey{rw.Name, rw.Content}
+		if desired[key] {
+			kept = append(kept, rw)
+			currentSet[key] = true
+		}
+	}
+
+	for _, e := range entries {
+		key := rewriteKey{e.Name, e.Content}
+		if !currentSet[key] {
+			kept = append(kept, &nextdns.Rewrites{
+				ID:      fmt.Sprintf("rw-%s", e.Name),
+				Name:    e.Name,
+				Content: e.Content,
+			})
+		}
+	}
+
+	m.Rewrites[profileID] = kept
+	return nil
+}
+
+// GetRewrites retrieves mock rewrites
+func (m *MockClient) GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error) {
+	m.recordCall("GetRewrites", profileID)
+	if m.GetRewritesError != nil {
+		return nil, m.GetRewritesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.Rewrites[profileID], nil
+}
+
 // GetCallCount returns the number of calls to a specific method
 func (m *MockClient) GetCallCount(method string) int {
 	m.mu.RLock()
@@ -666,6 +726,7 @@ func (m *MockClient) Reset() {
 	m.SettingsBlockPage = make(map[string]*nextdns.SettingsBlockPage)
 	m.ParentalControlCategories = make(map[string][]*nextdns.ParentalControlCategories)
 	m.ParentalControlServices = make(map[string][]*nextdns.ParentalControlServices)
+	m.Rewrites = make(map[string][]*nextdns.Rewrites)
 	m.Calls = make([]MockCall, 0)
 	m.NextProfileID = 1
 
@@ -689,6 +750,8 @@ func (m *MockClient) Reset() {
 	m.GetAllowlistError = nil
 	m.GetSecurityTLDsError = nil
 	m.UpdateSettingsError = nil
+	m.SyncRewritesError = nil
+	m.GetRewritesError = nil
 }
 
 // Ensure MockClient implements ClientInterface

@@ -51,6 +51,10 @@ type ClientInterface interface {
 	AddPrivacyNative(ctx context.Context, profileID string, nativeID string) error
 	DeletePrivacyNative(ctx context.Context, profileID string, nativeID string) error
 
+	// Rewrite operations
+	SyncRewrites(ctx context.Context, profileID string, entries []RewriteEntry) error
+	GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error)
+
 	// Settings operations
 	UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error
 }
