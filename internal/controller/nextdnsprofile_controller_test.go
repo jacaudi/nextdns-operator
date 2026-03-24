@@ -3183,7 +3183,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	// Name
 	assert.Equal(t, "Test Profile", suggested.Name)
 
-	// Security: bool -> *bool, ThreatIntelligenceFeeds omitted
+	// Security: bool -> *bool
 	require.NotNil(t, suggested.Security)
 	assert.Equal(t, boolPtr(true), suggested.Security.AIThreatDetection)
 	assert.Equal(t, boolPtr(true), suggested.Security.GoogleSafeBrowsing)
@@ -3196,7 +3196,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	assert.Equal(t, boolPtr(false), suggested.Security.DDNS)
 	assert.Equal(t, boolPtr(true), suggested.Security.Parking)
 	assert.Equal(t, boolPtr(true), suggested.Security.CSAM)
-	assert.Nil(t, suggested.Security.ThreatIntelligenceFeeds) // Cannot reconstruct from bool
+	assert.Equal(t, boolPtr(true), suggested.Security.ThreatIntelligenceFeeds)
 
 	// Privacy: bool -> *bool, blocklists/natives get Active: true
 	require.NotNil(t, suggested.Privacy)

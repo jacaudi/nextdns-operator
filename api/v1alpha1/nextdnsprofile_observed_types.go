@@ -134,14 +134,13 @@ type ObservedRewriteEntry struct {
 
 // SuggestedSpec provides a spec-compatible translation of observed remote config.
 // Users can copy fields from this into their spec when transitioning to managed mode.
-// Fields that cannot be derived from the API are omitted (e.g., threatIntelligenceFeeds, logClientsIPs, logDomains).
+// Fields that cannot be derived from the API are omitted (e.g., logClientsIPs, logDomains).
 type SuggestedSpec struct {
 	// Name is the profile name
 	// +optional
 	Name string `json:"name,omitempty"`
 
 	// Security contains suggested security settings
-	// Note: threatIntelligenceFeeds is omitted (API only exposes enabled/disabled, not feed IDs)
 	// +optional
 	Security *SecuritySpec `json:"security,omitempty"`
 

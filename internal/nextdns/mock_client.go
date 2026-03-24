@@ -58,31 +58,31 @@ type MockClient struct {
 	Rewrites map[string][]*nextdns.Rewrites
 
 	// Error injection for testing error paths
-	CreateProfileError         error
-	GetProfileError            error
-	UpdateProfileError         error
-	DeleteProfileError         error
-	UpdateSecurityError        error
-	GetSecurityError           error
-	UpdatePrivacyError         error
-	GetPrivacyError            error
-	SyncPrivacyBlocklistsError error
-	SyncPrivacyNativesError    error
-	UpdateParentalControlError error
-	GetParentalControlError    error
-	SyncDenylistError          error
-	SyncAllowlistError         error
-	SyncSecurityTLDsError      error
-	GetDenylistError           error
-	GetAllowlistError          error
-	GetSecurityTLDsError       error
-	UpdateSettingsError                error
-	GetSettingsError                   error
-	GetPrivacyBlocklistsError          error
-	GetPrivacyNativesError             error
-	GetParentalControlCategoriesError  error
-	GetParentalControlServicesError    error
-	GetRewritesError                   error
+	CreateProfileError                error
+	GetProfileError                   error
+	UpdateProfileError                error
+	DeleteProfileError                error
+	UpdateSecurityError               error
+	GetSecurityError                  error
+	UpdatePrivacyError                error
+	GetPrivacyError                   error
+	SyncPrivacyBlocklistsError        error
+	SyncPrivacyNativesError           error
+	UpdateParentalControlError        error
+	GetParentalControlError           error
+	SyncDenylistError                 error
+	SyncAllowlistError                error
+	SyncSecurityTLDsError             error
+	GetDenylistError                  error
+	GetAllowlistError                 error
+	GetSecurityTLDsError              error
+	UpdateSettingsError               error
+	GetSettingsError                  error
+	GetPrivacyBlocklistsError         error
+	GetPrivacyNativesError            error
+	GetParentalControlCategoriesError error
+	GetParentalControlServicesError   error
+	GetRewritesError                  error
 
 	// Call tracking
 	Calls []MockCall

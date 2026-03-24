@@ -362,11 +362,10 @@ spec:
                     description: Parking blocks parked domains
                     type: boolean
                   threatIntelligenceFeeds:
-                    description: ThreatIntelligenceFeeds specifies which threat feeds
-                      to use
-                    items:
-                      type: string
-                    type: array
+                    default: true
+                    description: ThreatIntelligenceFeeds enables threat intelligence
+                      feeds
+                    type: boolean
                   typosquatting:
                     default: true
                     description: Typosquatting blocks typosquatting domains
@@ -1019,9 +1018,7 @@ spec:
                       type: object
                     type: array
                   security:
-                    description: |-
-                      Security contains suggested security settings
-                      Note: threatIntelligenceFeeds is omitted (API only exposes enabled/disabled, not feed IDs)
+                    description: Security contains suggested security settings
                     properties:
                       aiThreatDetection:
                         default: true
@@ -1065,11 +1062,10 @@ spec:
                         description: Parking blocks parked domains
                         type: boolean
                       threatIntelligenceFeeds:
-                        description: ThreatIntelligenceFeeds specifies which threat
-                          feeds to use
-                        items:
-                          type: string
-                        type: array
+                        default: true
+                        description: ThreatIntelligenceFeeds enables threat intelligence
+                          feeds
+                        type: boolean
                       typosquatting:
                         default: true
                         description: Typosquatting blocks typosquatting domains

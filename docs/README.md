@@ -289,7 +289,6 @@ kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.suggestedSp
 The `suggestedSpec` field contains a spec-compatible translation of the observed configuration. You can copy fields directly from `suggestedSpec` into your CR spec when transitioning to managed mode.
 
 > **Limitations:** Some fields cannot be derived from the NextDNS API and are omitted from `suggestedSpec`:
-> - `security.threatIntelligenceFeeds` -- API only reports enabled/disabled, not specific feed IDs
 > - `settings.logs.logClientsIPs` and `settings.logs.logDomains` -- not exposed by the API
 > - `blockedTLDs` are included for reference but must be placed in a `NextDNSTLDList` CR and referenced via `spec.tldListRefs`
 

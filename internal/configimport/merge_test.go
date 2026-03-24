@@ -107,45 +107,26 @@ func TestMergeSecurity(t *testing.T) {
 		assert.Nil(t, spec.Security)
 	})
 
-	t.Run("threatIntelligenceFeeds merged with dedup", func(t *testing.T) {
-		spec := &nextdnsv1alpha1.NextDNSProfileSpec{
-			Security: &nextdnsv1alpha1.SecuritySpec{
-				ThreatIntelligenceFeeds: []string{"feed-a", "feed-b"},
-			},
-		}
-		imported := &ProfileConfigJSON{
-			Security: &SecurityJSON{
-				ThreatIntelligenceFeeds: []string{"feed-b", "feed-c"},
-			},
-		}
-		MergeIntoSpec(spec, imported)
-
-		require.Len(t, spec.Security.ThreatIntelligenceFeeds, 3)
-		assert.Equal(t, "feed-a", spec.Security.ThreatIntelligenceFeeds[0])
-		assert.Equal(t, "feed-b", spec.Security.ThreatIntelligenceFeeds[1])
-		assert.Equal(t, "feed-c", spec.Security.ThreatIntelligenceFeeds[2])
-	})
-
-	t.Run("threatIntelligenceFeeds import fills empty spec", func(t *testing.T) {
+	t.Run("threatIntelligenceFeeds enabled when import has feeds", func(t *testing.T) {
 		spec := &nextdnsv1alpha1.NextDNSProfileSpec{
 			Security: &nextdnsv1alpha1.SecuritySpec{},
 		}
 		imported := &ProfileConfigJSON{
 			Security: &SecurityJSON{
-				ThreatIntelligenceFeeds: []string{"feed-x", "feed-y"},
+				ThreatIntelligenceFeeds: []string{"feed-a", "feed-b"},
 			},
 		}
 		MergeIntoSpec(spec, imported)
 
-		require.Len(t, spec.Security.ThreatIntelligenceFeeds, 2)
-		assert.Equal(t, "feed-x", spec.Security.ThreatIntelligenceFeeds[0])
-		assert.Equal(t, "feed-y", spec.Security.ThreatIntelligenceFeeds[1])
+		require.NotNil(t, spec.Security.ThreatIntelligenceFeeds)
+		assert.True(t, *spec.Security.ThreatIntelligenceFeeds)
 	})
 
 	t.Run("threatIntelligenceFeeds spec preserved when import empty", func(t *testing.T) {
+		enabled := true
 		spec := &nextdnsv1alpha1.NextDNSProfileSpec{
 			Security: &nextdnsv1alpha1.SecuritySpec{
-				ThreatIntelligenceFeeds: []string{"feed-a"},
+				ThreatIntelligenceFeeds: &enabled,
 			},
 		}
 		imported := &ProfileConfigJSON{
@@ -153,8 +134,26 @@ func TestMergeSecurity(t *testing.T) {
 		}
 		MergeIntoSpec(spec, imported)
 
-		require.Len(t, spec.Security.ThreatIntelligenceFeeds, 1)
-		assert.Equal(t, "feed-a", spec.Security.ThreatIntelligenceFeeds[0])
+		require.NotNil(t, spec.Security.ThreatIntelligenceFeeds)
+		assert.True(t, *spec.Security.ThreatIntelligenceFeeds)
+	})
+
+	t.Run("threatIntelligenceFeeds not overwritten when already set", func(t *testing.T) {
+		disabled := false
+		spec := &nextdnsv1alpha1.NextDNSProfileSpec{
+			Security: &nextdnsv1alpha1.SecuritySpec{
+				ThreatIntelligenceFeeds: &disabled,
+			},
+		}
+		imported := &ProfileConfigJSON{
+			Security: &SecurityJSON{
+				ThreatIntelligenceFeeds: []string{"feed-x"},
+			},
+		}
+		MergeIntoSpec(spec, imported)
+
+		require.NotNil(t, spec.Security.ThreatIntelligenceFeeds)
+		assert.False(t, *spec.Security.ThreatIntelligenceFeeds) // spec value preserved
 	})
 }
 
@@ -197,7 +196,7 @@ func TestMergePrivacy(t *testing.T) {
 			Privacy: &PrivacyJSON{
 				Blocklists: []BlocklistEntryJSON{
 					{ID: "nextdns-recommended", Active: ptrBool(false)}, // dup - should be skipped
-					{ID: "adguard", Active: ptrBool(true)},             // new - should be added
+					{ID: "adguard", Active: ptrBool(true)},              // new - should be added
 				},
 			},
 		}

@@ -57,17 +57,10 @@ func mergeSecurity(spec *nextdnsv1alpha1.NextDNSProfileSpec, src *SecurityJSON) 
 	mergeBoolPtr(&s.Parking, src.Parking)
 	mergeBoolPtr(&s.CSAM, src.CSAM)
 
-	// Merge ThreatIntelligenceFeeds
-	if len(src.ThreatIntelligenceFeeds) > 0 {
-		seen := make(map[string]struct{}, len(s.ThreatIntelligenceFeeds))
-		for _, f := range s.ThreatIntelligenceFeeds {
-			seen[f] = struct{}{}
-		}
-		for _, f := range src.ThreatIntelligenceFeeds {
-			if _, exists := seen[f]; !exists {
-				s.ThreatIntelligenceFeeds = append(s.ThreatIntelligenceFeeds, f)
-			}
-		}
+	// Merge ThreatIntelligenceFeeds: if JSON lists any feeds, enable the toggle
+	if len(src.ThreatIntelligenceFeeds) > 0 && s.ThreatIntelligenceFeeds == nil {
+		enabled := true
+		s.ThreatIntelligenceFeeds = &enabled
 	}
 }
 

@@ -137,9 +137,10 @@ type SecuritySpec struct {
 	// +optional
 	AIThreatDetection *bool `json:"aiThreatDetection,omitempty"`
 
-	// ThreatIntelligenceFeeds specifies which threat feeds to use
+	// ThreatIntelligenceFeeds enables threat intelligence feeds
+	// +kubebuilder:default=true
 	// +optional
-	ThreatIntelligenceFeeds []string `json:"threatIntelligenceFeeds,omitempty"`
+	ThreatIntelligenceFeeds *bool `json:"threatIntelligenceFeeds,omitempty"`
 
 	// GoogleSafeBrowsing enables Google Safe Browsing protection
 	// +kubebuilder:default=true

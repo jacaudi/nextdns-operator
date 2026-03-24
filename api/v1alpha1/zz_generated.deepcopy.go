@@ -1606,8 +1606,8 @@ func (in *SecuritySpec) DeepCopyInto(out *SecuritySpec) {
 	}
 	if in.ThreatIntelligenceFeeds != nil {
 		in, out := &in.ThreatIntelligenceFeeds, &out.ThreatIntelligenceFeeds
-		*out = make([]string, len(*in))
-		copy(*out, *in)
+		*out = new(bool)
+		**out = **in
 	}
 	if in.GoogleSafeBrowsing != nil {
 		in, out := &in.GoogleSafeBrowsing, &out.GoogleSafeBrowsing

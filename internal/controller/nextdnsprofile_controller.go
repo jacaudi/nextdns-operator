@@ -525,17 +525,18 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 	// Sync security settings
 	if profile.Spec.Security != nil {
 		securityConfig := &nextdns.SecurityConfig{
-			AIThreatDetection:  boolValue(profile.Spec.Security.AIThreatDetection, true),
-			GoogleSafeBrowsing: boolValue(profile.Spec.Security.GoogleSafeBrowsing, true),
-			Cryptojacking:      boolValue(profile.Spec.Security.Cryptojacking, true),
-			DNSRebinding:       boolValue(profile.Spec.Security.DNSRebinding, true),
-			IDNHomographs:      boolValue(profile.Spec.Security.IDNHomographs, true),
-			Typosquatting:      boolValue(profile.Spec.Security.Typosquatting, true),
-			DGA:                boolValue(profile.Spec.Security.DGA, true),
-			NRD:                boolValue(profile.Spec.Security.NRD, false),
-			DDNS:               boolValue(profile.Spec.Security.DDNS, false),
-			Parking:            boolValue(profile.Spec.Security.Parking, true),
-			CSAM:               boolValue(profile.Spec.Security.CSAM, true),
+			ThreatIntelligenceFeeds: boolValue(profile.Spec.Security.ThreatIntelligenceFeeds, true),
+			AIThreatDetection:       boolValue(profile.Spec.Security.AIThreatDetection, true),
+			GoogleSafeBrowsing:      boolValue(profile.Spec.Security.GoogleSafeBrowsing, true),
+			Cryptojacking:           boolValue(profile.Spec.Security.Cryptojacking, true),
+			DNSRebinding:            boolValue(profile.Spec.Security.DNSRebinding, true),
+			IDNHomographs:           boolValue(profile.Spec.Security.IDNHomographs, true),
+			Typosquatting:           boolValue(profile.Spec.Security.Typosquatting, true),
+			DGA:                     boolValue(profile.Spec.Security.DGA, true),
+			NRD:                     boolValue(profile.Spec.Security.NRD, false),
+			DDNS:                    boolValue(profile.Spec.Security.DDNS, false),
+			Parking:                 boolValue(profile.Spec.Security.Parking, true),
+			CSAM:                    boolValue(profile.Spec.Security.CSAM, true),
 		}
 		if err := client.UpdateSecurity(ctx, profileID, securityConfig); err != nil {
 			return fmt.Errorf("failed to update security settings: %w", err)
@@ -898,21 +899,21 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 		BlockedTLDs: observed.BlockedTLDs,
 	}
 
-	// Security: bool -> *bool, omit ThreatIntelligenceFeeds (can't reconstruct []string from bool)
+	// Security: bool -> *bool
 	if observed.Security != nil {
 		suggested.Security = &nextdnsv1alpha1.SecuritySpec{
-			AIThreatDetection:  boolPtr(observed.Security.AIThreatDetection),
-			GoogleSafeBrowsing: boolPtr(observed.Security.GoogleSafeBrowsing),
-			Cryptojacking:      boolPtr(observed.Security.Cryptojacking),
-			DNSRebinding:       boolPtr(observed.Security.DNSRebinding),
-			IDNHomographs:      boolPtr(observed.Security.IDNHomographs),
-			Typosquatting:      boolPtr(observed.Security.Typosquatting),
-			DGA:                boolPtr(observed.Security.DGA),
-			NRD:                boolPtr(observed.Security.NRD),
-			DDNS:               boolPtr(observed.Security.DDNS),
-			Parking:            boolPtr(observed.Security.Parking),
-			CSAM:               boolPtr(observed.Security.CSAM),
-			// ThreatIntelligenceFeeds intentionally omitted
+			ThreatIntelligenceFeeds: boolPtr(observed.Security.ThreatIntelligenceFeeds),
+			AIThreatDetection:       boolPtr(observed.Security.AIThreatDetection),
+			GoogleSafeBrowsing:      boolPtr(observed.Security.GoogleSafeBrowsing),
+			Cryptojacking:           boolPtr(observed.Security.Cryptojacking),
+			DNSRebinding:            boolPtr(observed.Security.DNSRebinding),
+			IDNHomographs:           boolPtr(observed.Security.IDNHomographs),
+			Typosquatting:           boolPtr(observed.Security.Typosquatting),
+			DGA:                     boolPtr(observed.Security.DGA),
+			NRD:                     boolPtr(observed.Security.NRD),
+			DDNS:                    boolPtr(observed.Security.DDNS),
+			Parking:                 boolPtr(observed.Security.Parking),
+			CSAM:                    boolPtr(observed.Security.CSAM),
 		}
 	}
 
