@@ -78,6 +78,10 @@ type SettingsConfig struct {
 	LogRetention    int
 	BlockPageEnable bool
 	Web3            bool
+	// Performance settings
+	Ecs             bool
+	CacheBoost      bool
+	CnameFlattening bool
 }
 
 // DomainEntry represents a domain with its active state for syncing to NextDNS
@@ -426,36 +430,41 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 
 	start := time.Now()
 
-	// Update logs settings
-	logsRequest := &nextdns.UpdateSettingsLogsRequest{
-		ProfileID: profileID,
-		SettingsLogs: &nextdns.SettingsLogs{
+	// Build the full settings object for a single PATCH call.
+	// Note: LogClientsIPs and LogDomains use positive logic in the operator spec
+	// (true = log them), but the NextDNS API uses inverted logic via the Drop struct
+	// (true = don't log them). We invert here at the client boundary.
+	settings := &nextdns.Settings{
+		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
 			Retention: config.LogRetention,
+			Drop: &nextdns.SettingsLogsDrop{
+				IP:     !config.LogClientsIPs,
+				Domain: !config.LogDomains,
+			},
 		},
-	}
-
-	err := c.client.SettingsLogs.Update(ctx, logsRequest)
-	if err != nil {
-		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to update logs settings: %w", err)
-	}
-
-	// Update block page settings
-	blockPageRequest := &nextdns.UpdateSettingsBlockPageRequest{
-		ProfileID: profileID,
-		SettingsBlockPage: &nextdns.SettingsBlockPage{
+		BlockPage: &nextdns.SettingsBlockPage{
 			Enabled: config.BlockPageEnable,
 		},
+		Performance: &nextdns.SettingsPerformance{
+			Ecs:             config.Ecs,
+			CacheBoost:      config.CacheBoost,
+			CnameFlattening: config.CnameFlattening,
+		},
+		Web3: config.Web3,
 	}
 
-	err = c.client.SettingsBlockPage.Update(ctx, blockPageRequest)
+	request := &nextdns.UpdateSettingsRequest{
+		ProfileID: profileID,
+		Settings:  settings,
+	}
+
+	err := c.client.Settings.Update(ctx, request)
+	metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), err == nil)
 	if err != nil {
-		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to update block page settings: %w", err)
+		return fmt.Errorf("failed to update settings: %w", err)
 	}
 
-	metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), true)
 	return nil
 }
 

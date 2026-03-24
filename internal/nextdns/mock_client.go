@@ -39,6 +39,9 @@ type MockClient struct {
 	// PrivacyNatives stores mock privacy natives per profile
 	PrivacyNatives map[string][]*nextdns.PrivacyNatives
 
+	// Settings stores mock settings per profile (full Settings struct)
+	Settings map[string]*nextdns.Settings
+
 	// SettingsLogs stores mock settings logs per profile
 	SettingsLogs map[string]*nextdns.SettingsLogs
 
@@ -97,6 +100,7 @@ func NewMockClient() *MockClient {
 		SecurityTLDs:              make(map[string][]*nextdns.SecurityTlds),
 		PrivacyBlocklists:         make(map[string][]*nextdns.PrivacyBlocklists),
 		PrivacyNatives:            make(map[string][]*nextdns.PrivacyNatives),
+		Settings:                  make(map[string]*nextdns.Settings),
 		SettingsLogs:              make(map[string]*nextdns.SettingsLogs),
 		SettingsBlockPage:         make(map[string]*nextdns.SettingsBlockPage),
 		ParentalControlCategories: make(map[string][]*nextdns.ParentalControlCategories),
@@ -461,7 +465,7 @@ func (m *MockClient) GetSecurityTLDs(ctx context.Context, profileID string) ([]*
 
 // UpdateSettings updates mock settings
 func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error {
-	m.recordCall("UpdateSettings", profileID, config)
+	m.recordCall("UpdateSettings")
 	if m.UpdateSettingsError != nil {
 		return m.UpdateSettingsError
 	}
@@ -472,13 +476,30 @@ func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, confi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.SettingsLogs[profileID] = &nextdns.SettingsLogs{
-		Enabled:   config.LogsEnabled,
-		Retention: config.LogRetention,
+	// Mirror the real client's inversion of LogClientsIPs/LogDomains to Drop fields
+	m.Settings[profileID] = &nextdns.Settings{
+		Logs: &nextdns.SettingsLogs{
+			Enabled:   config.LogsEnabled,
+			Retention: config.LogRetention,
+			Drop: &nextdns.SettingsLogsDrop{
+				IP:     !config.LogClientsIPs,
+				Domain: !config.LogDomains,
+			},
+		},
+		BlockPage: &nextdns.SettingsBlockPage{
+			Enabled: config.BlockPageEnable,
+		},
+		Performance: &nextdns.SettingsPerformance{
+			Ecs:             config.Ecs,
+			CacheBoost:      config.CacheBoost,
+			CnameFlattening: config.CnameFlattening,
+		},
+		Web3: config.Web3,
 	}
-	m.SettingsBlockPage[profileID] = &nextdns.SettingsBlockPage{
-		Enabled: config.BlockPageEnable,
-	}
+
+	// Also update legacy per-sub-service maps for backward compatibility with existing tests
+	m.SettingsLogs[profileID] = m.Settings[profileID].Logs
+	m.SettingsBlockPage[profileID] = m.Settings[profileID].BlockPage
 
 	return nil
 }
@@ -640,6 +661,7 @@ func (m *MockClient) Reset() {
 	m.SecurityTLDs = make(map[string][]*nextdns.SecurityTlds)
 	m.PrivacyBlocklists = make(map[string][]*nextdns.PrivacyBlocklists)
 	m.PrivacyNatives = make(map[string][]*nextdns.PrivacyNatives)
+	m.Settings = make(map[string]*nextdns.Settings)
 	m.SettingsLogs = make(map[string]*nextdns.SettingsLogs)
 	m.SettingsBlockPage = make(map[string]*nextdns.SettingsBlockPage)
 	m.ParentalControlCategories = make(map[string][]*nextdns.ParentalControlCategories)

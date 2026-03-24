@@ -943,6 +943,68 @@ func TestMockClient_DeletePrivacyNative(t *testing.T) {
 	assert.Equal(t, 1, len(mock.PrivacyNatives["profile-1"]))
 }
 
+func TestUpdateSettings_FullConfig(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.SetProfile("test-profile", "Test", "test.dns.nextdns.io")
+
+	config := &SettingsConfig{
+		LogsEnabled:     true,
+		LogClientsIPs:   true,
+		LogDomains:      true,
+		LogRetention:    30,
+		BlockPageEnable: true,
+		Web3:            true,
+		Ecs:             true,
+		CacheBoost:      true,
+		CnameFlattening: false,
+	}
+
+	err := mockClient.UpdateSettings(ctx, "test-profile", config)
+	require.NoError(t, err)
+
+	settings := mockClient.Settings["test-profile"]
+	require.NotNil(t, settings)
+	assert.True(t, settings.Web3)
+	require.NotNil(t, settings.Performance)
+	assert.True(t, settings.Performance.Ecs)
+	assert.True(t, settings.Performance.CacheBoost)
+	assert.False(t, settings.Performance.CnameFlattening)
+	require.NotNil(t, settings.Logs)
+	assert.True(t, settings.Logs.Enabled)
+	assert.Equal(t, 30, settings.Logs.Retention)
+	// LogClientsIPs=true means Drop.IP=false (inverted logic)
+	require.NotNil(t, settings.Logs.Drop)
+	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
+	assert.False(t, settings.Logs.Drop.Domain, "LogDomains=true should mean Drop.Domain=false")
+}
+
+func TestUpdateSettings_InvertedDropLogic(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.SetProfile("test-profile", "Test", "test.dns.nextdns.io")
+
+	// When LogClientsIPs=false and LogDomains=false, Drop.IP and Drop.Domain should be true
+	config := &SettingsConfig{
+		LogsEnabled:   true,
+		LogClientsIPs: false,
+		LogDomains:    false,
+		LogRetention:  7,
+	}
+
+	err := mockClient.UpdateSettings(ctx, "test-profile", config)
+	require.NoError(t, err)
+
+	settings := mockClient.Settings["test-profile"]
+	require.NotNil(t, settings)
+	require.NotNil(t, settings.Logs)
+	require.NotNil(t, settings.Logs.Drop)
+	assert.True(t, settings.Logs.Drop.IP, "LogClientsIPs=false should mean Drop.IP=true")
+	assert.True(t, settings.Logs.Drop.Domain, "LogDomains=false should mean Drop.Domain=true")
+}
+
 func TestMockClient_IndividualOperations_EmptyProfile(t *testing.T) {
 	mock := NewMockClient()
 
