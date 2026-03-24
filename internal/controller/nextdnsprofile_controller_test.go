@@ -2686,6 +2686,23 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Allowlist))
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
 
+	// Verify suggestedSpec was populated
+	require.NotNil(t, updated.Status.SuggestedSpec)
+	assert.Equal(t, "Remote Profile", updated.Status.SuggestedSpec.Name)
+	require.NotNil(t, updated.Status.SuggestedSpec.Security)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Security.AIThreatDetection)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Security.GoogleSafeBrowsing)
+	require.NotNil(t, updated.Status.SuggestedSpec.Privacy)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Privacy.DisguisedTrackers)
+	require.Equal(t, 1, len(updated.Status.SuggestedSpec.Denylist))
+	assert.Equal(t, "bad.com", updated.Status.SuggestedSpec.Denylist[0].Domain)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Denylist[0].Active)
+	require.Equal(t, 1, len(updated.Status.SuggestedSpec.Allowlist))
+	require.NotNil(t, updated.Status.SuggestedSpec.Settings)
+	require.NotNil(t, updated.Status.SuggestedSpec.Settings.Logs)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.Enabled)
+	assert.Equal(t, "7d", updated.Status.SuggestedSpec.Settings.Logs.Retention)
+
 	// Verify conditions
 	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
 	require.NotNil(t, readyCondition)
@@ -2778,6 +2795,9 @@ func TestReconcile_TransitionBlocked(t *testing.T) {
 		},
 		Status: nextdnsv1alpha1.NextDNSProfileStatus{
 			ObservedConfig: &nextdnsv1alpha1.ObservedConfig{
+				Name: "Remote Profile",
+			},
+			SuggestedSpec: &nextdnsv1alpha1.SuggestedSpec{
 				Name: "Remote Profile",
 			},
 		},
@@ -3258,4 +3278,76 @@ func TestBuildSuggestedSpec_NilSections(t *testing.T) {
 	assert.Empty(t, suggested.Allowlist)
 	assert.Empty(t, suggested.Rewrites)
 	assert.Empty(t, suggested.BlockedTLDs)
+}
+
+func TestReconcile_TransitionClearsSuggestedSpec(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-transition-clear",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeManaged,
+			Name:      "Test Profile",
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+			Security: &nextdnsv1alpha1.SecuritySpec{
+				AIThreatDetection: boolPtr(true),
+			},
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ObservedConfig: &nextdnsv1alpha1.ObservedConfig{
+				Name: "Remote Profile",
+			},
+			SuggestedSpec: &nextdnsv1alpha1.SuggestedSpec{
+				Name: "Remote Profile",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Test Profile", "abc123.dns.nextdns.io")
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-transition-clear", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	updated := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-transition-clear", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	assert.Nil(t, updated.Status.ObservedConfig, "observedConfig should be cleared after transition")
+	assert.Nil(t, updated.Status.SuggestedSpec, "suggestedSpec should be cleared after transition")
 }

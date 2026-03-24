@@ -160,6 +160,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Clear observedConfig on first successful managed reconciliation
 	if profile.Status.ObservedConfig != nil {
 		profile.Status.ObservedConfig = nil
+		profile.Status.SuggestedSpec = nil
 		r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionFalse, "ManagedMode",
 			"Profile transitioned to managed mode")
 	}
@@ -692,6 +693,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	profile.Status.ProfileID = profile.Spec.ProfileID
 	profile.Status.Fingerprint = profile.Spec.ProfileID + ".dns.nextdns.io"
 	profile.Status.ObservedConfig = observed
+	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
 	now := metav1.Now()
 	profile.Status.LastSyncTime = &now
 	profile.Status.ObservedGeneration = profile.Generation
