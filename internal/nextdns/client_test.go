@@ -252,6 +252,23 @@ func TestMockClient_UpdatePrivacy(t *testing.T) {
 	assert.False(t, privacy.AllowAffiliate)
 }
 
+func TestSyncDenylist_NoPrefetch(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	entries := []DomainEntry{
+		{Domain: "bad.com", Active: true},
+		{Domain: "worse.com", Active: false},
+	}
+
+	err := mockClient.SyncDenylist(ctx, "test-profile", entries)
+	require.NoError(t, err)
+
+	result, err := mockClient.GetDenylist(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+}
+
 func TestMockClient_SyncDenylist(t *testing.T) {
 	mock := NewMockClient()
 

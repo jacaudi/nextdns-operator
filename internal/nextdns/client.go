@@ -222,23 +222,6 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error {
 	start := time.Now()
 
-	// Get current denylist
-	listRequest := &nextdns.ListDenylistRequest{
-		ProfileID: profileID,
-	}
-
-	currentList, err := c.client.Denylist.List(ctx, listRequest)
-	if err != nil {
-		metrics.RecordAPIRequest("SyncDenylist", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to get current denylist: %w", err)
-	}
-
-	// Build map of current domains
-	currentDomains := make(map[string]bool)
-	for _, entry := range currentList {
-		currentDomains[entry.ID] = true
-	}
-
 	// Build the desired denylist
 	var denylist []*nextdns.Denylist
 	for _, entry := range entries {
@@ -248,7 +231,7 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []D
 		})
 	}
 
-	// Create/update the denylist (PUT replaces the entire list)
+	// PUT replaces the entire list
 	createRequest := &nextdns.CreateDenylistRequest{
 		ProfileID: profileID,
 		Denylist:  denylist,
