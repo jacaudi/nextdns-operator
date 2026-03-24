@@ -3239,6 +3239,10 @@ func TestBuildSuggestedSpec(t *testing.T) {
 }
 
 func TestBuildSuggestedSpec_NilSections(t *testing.T) {
+	// nil observed returns nil
+	assert.Nil(t, buildSuggestedSpec(nil))
+
+	// minimal observed with nil sub-sections
 	observed := &nextdnsv1alpha1.ObservedConfig{
 		Name: "Minimal Profile",
 	}
