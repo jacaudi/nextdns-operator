@@ -2511,3 +2511,151 @@ func TestFindProfilesForImportConfigMap(t *testing.T) {
 	requests = reconciler.findProfilesForConfigMap(ctx, unrelatedCM)
 	assert.Empty(t, requests)
 }
+
+func TestSyncWithNextDNS_FullSettings(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-full-settings",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name:      "Full Settings Profile",
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+			Settings: &nextdnsv1alpha1.SettingsSpec{
+				Logs: &nextdnsv1alpha1.LogsSpec{
+					Enabled:       boolPtr(true),
+					LogClientsIPs: boolPtr(true),
+					LogDomains:    boolPtr(false),
+					Retention:     "30d",
+				},
+				BlockPage: &nextdnsv1alpha1.BlockPageSpec{
+					Enabled: boolPtr(true),
+				},
+				Performance: &nextdnsv1alpha1.PerformanceSpec{
+					ECS:             boolPtr(true),
+					CacheBoost:      boolPtr(false),
+					CNAMEFlattening: boolPtr(true),
+				},
+				Web3: boolPtr(true),
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Full Settings Profile", "abc123.dns.nextdns.io")
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-full-settings", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	assert.True(t, mockNDS.WasMethodCalled("UpdateSettings"))
+
+	settings := mockNDS.Settings["abc123"]
+	require.NotNil(t, settings)
+	assert.True(t, settings.Web3)
+	require.NotNil(t, settings.Performance)
+	assert.True(t, settings.Performance.Ecs)
+	assert.False(t, settings.Performance.CacheBoost)
+	assert.True(t, settings.Performance.CnameFlattening)
+	require.NotNil(t, settings.Logs)
+	require.NotNil(t, settings.Logs.Drop)
+	// LogClientsIPs=true -> Drop.IP=false (inverted)
+	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
+	// LogDomains=false -> Drop.Domain=true (inverted)
+	assert.True(t, settings.Logs.Drop.Domain, "LogDomains=false should mean Drop.Domain=true")
+}
+
+func TestSyncWithNextDNS_Rewrites(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-rewrites",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name:      "Rewrites Profile",
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+			Rewrites: []nextdnsv1alpha1.RewriteEntry{
+				{From: "app.example.com", To: "192.168.1.1"},
+				{From: "api.example.com", To: "192.168.1.2"},
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Rewrites Profile", "abc123.dns.nextdns.io")
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	_, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-rewrites", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	assert.True(t, mockNDS.WasMethodCalled("SyncRewrites"))
+
+	rewrites := mockNDS.Rewrites["abc123"]
+	require.Equal(t, 2, len(rewrites))
+}
