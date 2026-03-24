@@ -417,6 +417,12 @@ type NextDNSProfileStatus struct {
 	// Populated in observe mode; cleared after first successful managed sync
 	// +optional
 	ObservedConfig *ObservedConfig `json:"observedConfig,omitempty"`
+
+	// SuggestedSpec contains a spec-compatible translation of the observed config
+	// Copy fields from this into spec when transitioning from observe to managed mode
+	// Populated in observe mode; cleared after first successful managed sync
+	// +optional
+	SuggestedSpec *SuggestedSpec `json:"suggestedSpec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -131,3 +131,47 @@ type ObservedRewriteEntry struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
 }
+
+// SuggestedSpec provides a spec-compatible translation of observed remote config.
+// Users can copy fields from this into their spec when transitioning to managed mode.
+// Fields that cannot be derived from the API are omitted (e.g., threatIntelligenceFeeds, logClientsIPs, logDomains).
+type SuggestedSpec struct {
+	// Name is the profile name
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Security contains suggested security settings
+	// Note: threatIntelligenceFeeds is omitted (API only exposes enabled/disabled, not feed IDs)
+	// +optional
+	Security *SecuritySpec `json:"security,omitempty"`
+
+	// Privacy contains suggested privacy settings
+	// +optional
+	Privacy *PrivacySpec `json:"privacy,omitempty"`
+
+	// ParentalControl contains suggested parental control settings
+	// +optional
+	ParentalControl *ParentalControlSpec `json:"parentalControl,omitempty"`
+
+	// Denylist contains suggested denied domains
+	// +optional
+	Denylist []DomainEntry `json:"denylist,omitempty"`
+
+	// Allowlist contains suggested allowed domains
+	// +optional
+	Allowlist []DomainEntry `json:"allowlist,omitempty"`
+
+	// Rewrites contains suggested DNS rewrites
+	// +optional
+	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
+
+	// Settings contains suggested general settings
+	// Note: logClientsIPs and logDomains are omitted (not exposed by API)
+	// +optional
+	Settings *SettingsSpec `json:"settings,omitempty"`
+
+	// BlockedTLDs lists TLDs from the remote profile
+	// These must be placed in a NextDNSTLDList CR and referenced via spec.tldListRefs
+	// +optional
+	BlockedTLDs []string `json:"blockedTLDs,omitempty"`
+}

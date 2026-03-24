@@ -1017,6 +1017,20 @@ func parseRetentionDays(retention string) int {
 	return 7 // default
 }
 
+// formatRetentionString converts a retention value in days to the spec string format
+func formatRetentionString(days int) string {
+	switch days {
+	case 0:
+		return ""
+	case 365:
+		return "1y"
+	case 730:
+		return "2y"
+	default:
+		return fmt.Sprintf("%dd", days)
+	}
+}
+
 // setCondition sets a condition on the profile
 func (r *NextDNSProfileReconciler) setCondition(profile *nextdnsv1alpha1.NextDNSProfile, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&profile.Status.Conditions, metav1.Condition{

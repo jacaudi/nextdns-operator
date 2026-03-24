@@ -3071,3 +3071,26 @@ func TestSpecHasConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatRetentionString(t *testing.T) {
+	tests := []struct {
+		name     string
+		days     int
+		expected string
+	}{
+		{name: "zero returns empty", days: 0, expected: ""},
+		{name: "1 day", days: 1, expected: "1d"},
+		{name: "7 days", days: 7, expected: "7d"},
+		{name: "30 days", days: 30, expected: "30d"},
+		{name: "90 days", days: 90, expected: "90d"},
+		{name: "365 days is 1y", days: 365, expected: "1y"},
+		{name: "730 days is 2y", days: 730, expected: "2y"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatRetentionString(tt.days)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
