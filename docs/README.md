@@ -280,12 +280,25 @@ kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.observedCon
 
 This returns the complete remote profile configuration, including security settings, privacy blocklists, deny/allowlists, rewrites, parental controls, and settings.
 
+**Use the suggested spec for easy transition:**
+
+```bash
+kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.suggestedSpec}' | jq .
+```
+
+The `suggestedSpec` field contains a spec-compatible translation of the observed configuration. You can copy fields directly from `suggestedSpec` into your CR spec when transitioning to managed mode.
+
+> **Limitations:** Some fields cannot be derived from the NextDNS API and are omitted from `suggestedSpec`:
+> - `security.threatIntelligenceFeeds` -- API only reports enabled/disabled, not specific feed IDs
+> - `settings.logs.logClientsIPs` and `settings.logs.logDomains` -- not exposed by the API
+> - `blockedTLDs` are included for reference but must be placed in a `NextDNSTLDList` CR and referenced via `spec.tldListRefs`
+
 #### Transitioning to Managed Mode
 
 Once you have inspected the observed configuration and are ready to manage the profile declaratively, follow these steps:
 
-1. **Inspect `status.observedConfig`** to see the current remote configuration.
-2. **Copy the desired configuration sections** from `status.observedConfig` into the `spec` of your NextDNSProfile CR.
+1. **Inspect `status.suggestedSpec`** to see the spec-compatible translation of the remote configuration.
+2. **Copy the desired configuration sections** from `status.suggestedSpec` into the `spec` of your NextDNSProfile CR. The `suggestedSpec` provides values in the correct spec format. Use `status.observedConfig` as a reference for the raw API values.
 3. **Add `spec.name`** with the profile name.
 4. **Change `spec.mode` to `managed`** (or remove it entirely, since `managed` is the default).
 
