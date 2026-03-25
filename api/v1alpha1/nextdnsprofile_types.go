@@ -301,7 +301,8 @@ type LogsSpec struct {
 	// +optional
 	LogDomains *bool `json:"logDomains,omitempty"`
 
-	// Retention specifies log retention period (1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y)
+	// Retention specifies log retention period
+	// +kubebuilder:validation:Enum="1h";"6h";"1d";"7d";"30d";"90d";"1y";"2y"
 	// +kubebuilder:default="7d"
 	// +optional
 	Retention string `json:"retention,omitempty"`

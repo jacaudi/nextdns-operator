@@ -54,9 +54,10 @@ func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	ClientFactory ClientFactory
-	SyncPeriod    time.Duration
+	Scheme             *runtime.Scheme
+	ClientFactory      ClientFactory
+	SyncPeriod         time.Duration
+	lastMetricsUpdate  time.Time
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -73,8 +74,11 @@ type NextDNSProfileReconciler struct {
 func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Update resource count metrics
-	r.updateResourceMetrics(ctx)
+	// Update resource count metrics (throttled to once per sync period)
+	if time.Since(r.lastMetricsUpdate) > r.SyncPeriod {
+		r.updateResourceMetrics(ctx)
+		r.lastMetricsUpdate = time.Now()
+	}
 
 	// Fetch the NextDNSProfile instance
 	profile := &nextdnsv1alpha1.NextDNSProfile{}
