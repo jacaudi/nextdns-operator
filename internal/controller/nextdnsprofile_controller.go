@@ -28,7 +28,7 @@ import (
 
 const (
 	// FinalizerName is the finalizer used by this controller
-	FinalizerName = "nextdns.io/finalizer"
+	FinalizerName = "nextdns.io/profile-finalizer"
 
 	// ConditionTypeReady indicates the profile is ready
 	ConditionTypeReady = "Ready"

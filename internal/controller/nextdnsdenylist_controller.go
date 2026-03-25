@@ -21,7 +21,7 @@ import (
 
 const (
 	// DenylistFinalizerName is the finalizer added to NextDNSDenylist resources
-	DenylistFinalizerName = "nextdns.jacaudi.com/denylist-finalizer"
+	DenylistFinalizerName = "nextdns.io/denylist-finalizer"
 )
 
 // NextDNSDenylistReconciler reconciles a NextDNSDenylist object

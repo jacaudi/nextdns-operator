@@ -859,7 +859,7 @@ func TestSetCondition(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	assert.Equal(t, "nextdns.io/finalizer", FinalizerName)
+	assert.Equal(t, "nextdns.io/profile-finalizer", FinalizerName)
 	assert.Equal(t, "Ready", ConditionTypeReady)
 	assert.Equal(t, "Synced", ConditionTypeSynced)
 	assert.Equal(t, "ReferencesResolved", ConditionTypeReferencesResolved)

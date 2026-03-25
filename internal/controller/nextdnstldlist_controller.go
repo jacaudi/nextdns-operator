@@ -21,7 +21,7 @@ import (
 
 const (
 	// TLDListFinalizerName is the finalizer added to NextDNSTLDList resources
-	TLDListFinalizerName = "nextdns.jacaudi.com/tldlist-finalizer"
+	TLDListFinalizerName = "nextdns.io/tldlist-finalizer"
 )
 
 // NextDNSTLDListReconciler reconciles a NextDNSTLDList object
