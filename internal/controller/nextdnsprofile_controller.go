@@ -95,6 +95,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Deep copy to avoid mutating the controller-runtime cache
 	profile = profile.DeepCopy()
 
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, profile, "nextdns.io/finalizer", FinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+
 	// Check if the resource is being deleted
 	if !profile.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, profile)

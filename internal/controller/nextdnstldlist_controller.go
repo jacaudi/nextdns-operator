@@ -46,6 +46,13 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, &list, "nextdns.jacaudi.com/tldlist-finalizer", TLDListFinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+
 	// Handle deletion
 	if !list.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, &list)
