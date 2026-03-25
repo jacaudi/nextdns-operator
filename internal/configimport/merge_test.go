@@ -197,7 +197,7 @@ func TestMergePrivacy(t *testing.T) {
 			Privacy: &PrivacyJSON{
 				Blocklists: []BlocklistEntryJSON{
 					{ID: "nextdns-recommended", Active: ptrBool(false)}, // dup - should be skipped
-					{ID: "adguard", Active: ptrBool(true)},             // new - should be added
+					{ID: "adguard", Active: ptrBool(true)},              // new - should be added
 				},
 			},
 		}

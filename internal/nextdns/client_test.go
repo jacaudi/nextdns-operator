@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	sdknextdns "github.com/jacaudi/nextdns-go/nextdns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -250,6 +251,23 @@ func TestMockClient_UpdatePrivacy(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, privacy.DisguisedTrackers)
 	assert.False(t, privacy.AllowAffiliate)
+}
+
+func TestSyncDenylist_NoPrefetch(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	entries := []DomainEntry{
+		{Domain: "bad.com", Active: true},
+		{Domain: "worse.com", Active: false},
+	}
+
+	err := mockClient.SyncDenylist(ctx, "test-profile", entries)
+	require.NoError(t, err)
+
+	result, err := mockClient.GetDenylist(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(result))
 }
 
 func TestMockClient_SyncDenylist(t *testing.T) {
@@ -926,6 +944,68 @@ func TestMockClient_DeletePrivacyNative(t *testing.T) {
 	assert.Equal(t, 1, len(mock.PrivacyNatives["profile-1"]))
 }
 
+func TestUpdateSettings_FullConfig(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.SetProfile("test-profile", "Test", "test.dns.nextdns.io")
+
+	config := &SettingsConfig{
+		LogsEnabled:     true,
+		LogClientsIPs:   true,
+		LogDomains:      true,
+		LogRetention:    30,
+		BlockPageEnable: true,
+		Web3:            true,
+		Ecs:             true,
+		CacheBoost:      true,
+		CnameFlattening: false,
+	}
+
+	err := mockClient.UpdateSettings(ctx, "test-profile", config)
+	require.NoError(t, err)
+
+	settings := mockClient.Settings["test-profile"]
+	require.NotNil(t, settings)
+	assert.True(t, settings.Web3)
+	require.NotNil(t, settings.Performance)
+	assert.True(t, settings.Performance.Ecs)
+	assert.True(t, settings.Performance.CacheBoost)
+	assert.False(t, settings.Performance.CnameFlattening)
+	require.NotNil(t, settings.Logs)
+	assert.True(t, settings.Logs.Enabled)
+	assert.Equal(t, 30, settings.Logs.Retention)
+	// LogClientsIPs=true means Drop.IP=false (inverted logic)
+	require.NotNil(t, settings.Logs.Drop)
+	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
+	assert.False(t, settings.Logs.Drop.Domain, "LogDomains=true should mean Drop.Domain=false")
+}
+
+func TestUpdateSettings_InvertedDropLogic(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.SetProfile("test-profile", "Test", "test.dns.nextdns.io")
+
+	// When LogClientsIPs=false and LogDomains=false, Drop.IP and Drop.Domain should be true
+	config := &SettingsConfig{
+		LogsEnabled:   true,
+		LogClientsIPs: false,
+		LogDomains:    false,
+		LogRetention:  7,
+	}
+
+	err := mockClient.UpdateSettings(ctx, "test-profile", config)
+	require.NoError(t, err)
+
+	settings := mockClient.Settings["test-profile"]
+	require.NotNil(t, settings)
+	require.NotNil(t, settings.Logs)
+	require.NotNil(t, settings.Logs.Drop)
+	assert.True(t, settings.Logs.Drop.IP, "LogClientsIPs=false should mean Drop.IP=true")
+	assert.True(t, settings.Logs.Drop.Domain, "LogDomains=false should mean Drop.Domain=true")
+}
+
 func TestMockClient_IndividualOperations_EmptyProfile(t *testing.T) {
 	mock := NewMockClient()
 
@@ -941,4 +1021,53 @@ func TestMockClient_IndividualOperations_EmptyProfile(t *testing.T) {
 
 	err = mock.DeletePrivacyNative(context.Background(), "new-profile", "apple")
 	require.NoError(t, err)
+}
+
+func TestSyncRewrites(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	// Set up existing rewrites
+	mockClient.Rewrites["test-profile"] = []*sdknextdns.Rewrites{
+		{ID: "rw1", Name: "old.example.com", Content: "1.2.3.4"},
+		{ID: "rw2", Name: "keep.example.com", Content: "5.6.7.8"},
+	}
+
+	// Desired state: keep one, add one, remove one
+	desired := []RewriteEntry{
+		{Name: "keep.example.com", Content: "5.6.7.8"},
+		{Name: "new.example.com", Content: "9.10.11.12"},
+	}
+
+	err := mockClient.SyncRewrites(ctx, "test-profile", desired)
+	require.NoError(t, err)
+
+	result, err := mockClient.GetRewrites(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+
+	names := make(map[string]string)
+	for _, rw := range result {
+		names[rw.Name] = rw.Content
+	}
+	assert.Equal(t, "5.6.7.8", names["keep.example.com"])
+	assert.Equal(t, "9.10.11.12", names["new.example.com"])
+	_, hasOld := names["old.example.com"]
+	assert.False(t, hasOld, "old.example.com should have been removed")
+}
+
+func TestSyncRewrites_EmptyDesired(t *testing.T) {
+	mockClient := NewMockClient()
+	ctx := context.Background()
+
+	mockClient.Rewrites["test-profile"] = []*sdknextdns.Rewrites{
+		{ID: "rw1", Name: "old.example.com", Content: "1.2.3.4"},
+	}
+
+	err := mockClient.SyncRewrites(ctx, "test-profile", []RewriteEntry{})
+	require.NoError(t, err)
+
+	result, err := mockClient.GetRewrites(ctx, "test-profile")
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(result))
 }

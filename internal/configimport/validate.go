@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	MaxImportDenylistEntries   = 1000
-	MaxImportAllowlistEntries  = 1000
-	MaxImportRewriteEntries    = 500
-	MaxImportBlocklistEntries  = 100
+	MaxImportDenylistEntries  = 1000
+	MaxImportAllowlistEntries = 1000
+	MaxImportRewriteEntries   = 500
+	MaxImportBlocklistEntries = 100
 
 	maxDomainLength = 253
 )
