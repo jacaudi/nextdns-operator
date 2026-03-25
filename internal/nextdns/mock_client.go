@@ -471,7 +471,7 @@ func (m *MockClient) GetSecurityTLDs(ctx context.Context, profileID string) ([]*
 
 // UpdateSettings updates mock settings
 func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error {
-	m.recordCall("UpdateSettings")
+	m.recordCall("UpdateSettings", profileID, config)
 	if m.UpdateSettingsError != nil {
 		return m.UpdateSettingsError
 	}

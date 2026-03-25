@@ -592,8 +592,8 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 		}
 	}
 
-	// Sync rewrites
-	if len(profile.Spec.Rewrites) > 0 {
+	// Sync rewrites (nil = field omitted, don't touch remote; empty = explicit clear)
+	if profile.Spec.Rewrites != nil {
 		rewriteEntries := make([]nextdns.RewriteEntry, 0, len(profile.Spec.Rewrites))
 		for _, rw := range profile.Spec.Rewrites {
 			if rw.Active == nil || *rw.Active {

@@ -2617,6 +2617,7 @@ func TestSyncWithNextDNS_Rewrites(t *testing.T) {
 			Rewrites: []nextdnsv1alpha1.RewriteEntry{
 				{From: "app.example.com", To: "192.168.1.1"},
 				{From: "api.example.com", To: "192.168.1.2"},
+				{From: "inactive.example.com", To: "10.0.0.1", Active: boolPtr(false)},
 			},
 		},
 	}
