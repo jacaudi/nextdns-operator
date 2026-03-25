@@ -186,7 +186,9 @@ spec:
                 minLength: 1
                 type: string
               parentalControl:
-                description: ParentalControl configures content filtering
+                description: |-
+                  ParentalControl configures content filtering.
+                  Omitting this section leaves remote parental control settings unchanged.
                 properties:
                   categories:
                     description: Categories specifies content categories to block
@@ -233,7 +235,9 @@ spec:
                     type: boolean
                 type: object
               privacy:
-                description: Privacy configures tracker and ad blocking
+                description: |-
+                  Privacy configures tracker and ad blocking.
+                  Omitting this section leaves remote privacy settings unchanged.
                 properties:
                   allowAffiliate:
                     default: false
@@ -287,7 +291,10 @@ spec:
                   If not set, a new profile will be created
                 type: string
               rewrites:
-                description: Rewrites specifies DNS rewrites
+                description: |-
+                  Rewrites specifies DNS rewrites.
+                  Omitting this field leaves remote rewrites unchanged.
+                  Setting an empty list explicitly clears all remote rewrites.
                 items:
                   description: RewriteEntry defines a DNS rewrite rule
                   properties:
@@ -307,7 +314,9 @@ spec:
                   type: object
                 type: array
               security:
-                description: Security configures threat protection settings
+                description: |-
+                  Security configures threat protection settings.
+                  Omitting this section leaves remote security settings unchanged.
                 properties:
                   aiThreatDetection:
                     default: true
@@ -361,7 +370,9 @@ spec:
                     type: boolean
                 type: object
               settings:
-                description: Settings configures logging, performance, and other options
+                description: |-
+                  Settings configures logging, performance, and other options.
+                  Omitting this section leaves remote settings unchanged.
                 properties:
                   blockPage:
                     description: BlockPage configures the block page
@@ -389,8 +400,16 @@ spec:
                         type: boolean
                       retention:
                         default: 7d
-                        description: Retention specifies log retention period (1h,
-                          6h, 1d, 7d, 30d, 90d, 1y, 2y)
+                        description: Retention specifies log retention period
+                        enum:
+                        - 1h
+                        - 6h
+                        - 1d
+                        - 7d
+                        - 30d
+                        - 90d
+                        - 1y
+                        - 2y
                         type: string
                     type: object
                   performance:
