@@ -21,7 +21,7 @@ import (
 
 const (
 	// TLDListFinalizerName is the finalizer added to NextDNSTLDList resources
-	TLDListFinalizerName = "nextdns.jacaudi.com/tldlist-finalizer"
+	TLDListFinalizerName = "nextdns.io/tldlist-finalizer"
 )
 
 // NextDNSTLDListReconciler reconciles a NextDNSTLDList object
@@ -44,6 +44,13 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	var list nextdnsv1alpha1.NextDNSTLDList
 	if err := r.Get(ctx, req.NamespacedName, &list); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, &list, "nextdns.jacaudi.com/tldlist-finalizer", TLDListFinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Handle deletion

@@ -22,7 +22,7 @@ import (
 
 const (
 	// AllowlistFinalizerName is the finalizer added to NextDNSAllowlist resources
-	AllowlistFinalizerName = "nextdns.jacaudi.com/allowlist-finalizer"
+	AllowlistFinalizerName = "nextdns.io/allowlist-finalizer"
 )
 
 // NextDNSAllowlistReconciler reconciles a NextDNSAllowlist object
@@ -45,6 +45,13 @@ func (r *NextDNSAllowlistReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	var list nextdnsv1alpha1.NextDNSAllowlist
 	if err := r.Get(ctx, req.NamespacedName, &list); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, &list, "nextdns.jacaudi.com/allowlist-finalizer", AllowlistFinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Handle deletion

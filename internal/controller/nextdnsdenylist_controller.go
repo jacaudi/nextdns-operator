@@ -21,7 +21,7 @@ import (
 
 const (
 	// DenylistFinalizerName is the finalizer added to NextDNSDenylist resources
-	DenylistFinalizerName = "nextdns.jacaudi.com/denylist-finalizer"
+	DenylistFinalizerName = "nextdns.io/denylist-finalizer"
 )
 
 // NextDNSDenylistReconciler reconciles a NextDNSDenylist object
@@ -44,6 +44,13 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	var list nextdnsv1alpha1.NextDNSDenylist
 	if err := r.Get(ctx, req.NamespacedName, &list); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, &list, "nextdns.jacaudi.com/denylist-finalizer", DenylistFinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Handle deletion

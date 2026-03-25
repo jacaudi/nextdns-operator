@@ -82,23 +82,29 @@ type NextDNSProfileSpec struct {
 	// Other Settings
 	// ===========================================
 
-	// Security configures threat protection settings
+	// Security configures threat protection settings.
+	// Omitting this section leaves remote security settings unchanged.
 	// +optional
 	Security *SecuritySpec `json:"security,omitempty"`
 
-	// Privacy configures tracker and ad blocking
+	// Privacy configures tracker and ad blocking.
+	// Omitting this section leaves remote privacy settings unchanged.
 	// +optional
 	Privacy *PrivacySpec `json:"privacy,omitempty"`
 
-	// ParentalControl configures content filtering
+	// ParentalControl configures content filtering.
+	// Omitting this section leaves remote parental control settings unchanged.
 	// +optional
 	ParentalControl *ParentalControlSpec `json:"parentalControl,omitempty"`
 
-	// Rewrites specifies DNS rewrites
+	// Rewrites specifies DNS rewrites.
+	// Omitting this field leaves remote rewrites unchanged.
+	// Setting an empty list explicitly clears all remote rewrites.
 	// +optional
 	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
 
-	// Settings configures logging, performance, and other options
+	// Settings configures logging, performance, and other options.
+	// Omitting this section leaves remote settings unchanged.
 	// +optional
 	Settings *SettingsSpec `json:"settings,omitempty"`
 
@@ -301,7 +307,8 @@ type LogsSpec struct {
 	// +optional
 	LogDomains *bool `json:"logDomains,omitempty"`
 
-	// Retention specifies log retention period (1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y)
+	// Retention specifies log retention period
+	// +kubebuilder:validation:Enum="1h";"6h";"1d";"7d";"30d";"90d";"1y";"2y"
 	// +kubebuilder:default="7d"
 	// +optional
 	Retention string `json:"retention,omitempty"`

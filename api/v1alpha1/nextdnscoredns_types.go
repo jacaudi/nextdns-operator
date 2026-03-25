@@ -129,9 +129,10 @@ type CoreDNSServiceConfig struct {
 	NameOverride string `json:"nameOverride,omitempty"`
 }
 
-// ServiceMonitorConfig configures Prometheus ServiceMonitor creation
-// TODO: Implement ServiceMonitor reconciliation in the controller.
-// Currently this struct is defined but not used.
+// ServiceMonitorConfig configures Prometheus ServiceMonitor creation.
+// Note: The operator controller does not reconcile ServiceMonitor resources.
+// ServiceMonitor creation is handled by the Helm chart via the bjw-s common library.
+// This struct exists in the CRD for Helm values passthrough.
 type ServiceMonitorConfig struct {
 	// Enabled creates a ServiceMonitor for Prometheus Operator
 	// +kubebuilder:default=false

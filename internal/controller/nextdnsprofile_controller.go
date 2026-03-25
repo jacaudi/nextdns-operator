@@ -28,7 +28,7 @@ import (
 
 const (
 	// FinalizerName is the finalizer used by this controller
-	FinalizerName = "nextdns.io/finalizer"
+	FinalizerName = "nextdns.io/profile-finalizer"
 
 	// ConditionTypeReady indicates the profile is ready
 	ConditionTypeReady = "Ready"
@@ -54,9 +54,10 @@ func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	ClientFactory ClientFactory
-	SyncPeriod    time.Duration
+	Scheme             *runtime.Scheme
+	ClientFactory      ClientFactory
+	SyncPeriod         time.Duration
+	lastMetricsUpdate  time.Time
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -73,8 +74,11 @@ type NextDNSProfileReconciler struct {
 func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Update resource count metrics
-	r.updateResourceMetrics(ctx)
+	// Update resource count metrics (throttled to once per sync period)
+	if time.Since(r.lastMetricsUpdate) > r.SyncPeriod {
+		r.updateResourceMetrics(ctx)
+		r.lastMetricsUpdate = time.Now()
+	}
 
 	// Fetch the NextDNSProfile instance
 	profile := &nextdnsv1alpha1.NextDNSProfile{}
@@ -90,6 +94,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Deep copy to avoid mutating the controller-runtime cache
 	profile = profile.DeepCopy()
+
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, profile, "nextdns.io/finalizer", FinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
 
 	// Check if the resource is being deleted
 	if !profile.DeletionTimestamp.IsZero() {
