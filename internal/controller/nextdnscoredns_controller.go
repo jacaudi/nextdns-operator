@@ -181,7 +181,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Reconcile the workload (Deployment or DaemonSet)
-	if err := r.reconcileWorkload(ctx, coreDNS); err != nil {
+	if err := r.reconcileWorkload(ctx, coreDNS, profile); err != nil {
 		logger.Error(err, "Failed to reconcile workload")
 		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "WorkloadFailed", err.Error())
 		coreDNS.Status.Ready = false
@@ -192,7 +192,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Reconcile the Service
-	if err := r.reconcileService(ctx, coreDNS); err != nil {
+	if err := r.reconcileService(ctx, coreDNS, profile); err != nil {
 		logger.Error(err, "Failed to reconcile Service")
 		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "ServiceFailed", err.Error())
 		coreDNS.Status.Ready = false
@@ -367,7 +367,7 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 }
 
 // reconcileWorkload dispatches to Deployment or DaemonSet reconciliation based on mode
-func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	mode := nextdnsv1alpha1.DeploymentModeDeployment // default
 	if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.Mode != "" {
 		mode = coreDNS.Spec.Deployment.Mode
@@ -376,32 +376,24 @@ func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDN
 	switch mode {
 	case nextdnsv1alpha1.DeploymentModeDaemonSet:
 		// Clean up any existing Deployment before creating DaemonSet
-		if err := r.cleanupDeployment(ctx, coreDNS); err != nil {
+		if err := r.cleanupDeployment(ctx, coreDNS, profile); err != nil {
 			return err
 		}
-		return r.reconcileDaemonSet(ctx, coreDNS)
+		return r.reconcileDaemonSet(ctx, coreDNS, profile)
 	default:
 		// Clean up any existing DaemonSet before creating Deployment
-		if err := r.cleanupDaemonSet(ctx, coreDNS); err != nil {
+		if err := r.cleanupDaemonSet(ctx, coreDNS, profile); err != nil {
 			return err
 		}
-		return r.reconcileDeployment(ctx, coreDNS)
+		return r.reconcileDeployment(ctx, coreDNS, profile)
 	}
 }
 
 // cleanupDeployment removes any existing Deployment when switching to DaemonSet mode
-func (r *NextDNSCoreDNSReconciler) cleanupDeployment(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
-	profile, err := r.resolveProfile(ctx, coreDNS)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil // Profile not found, nothing to clean up
-		}
-		return err // Unexpected error, propagate it
-	}
-
+func (r *NextDNSCoreDNSReconciler) cleanupDeployment(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	resourceName := r.getResourceName(coreDNS, profile)
 	deployment := &appsv1.Deployment{}
-	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: coreDNS.Namespace}, deployment)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: coreDNS.Namespace}, deployment)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -413,18 +405,10 @@ func (r *NextDNSCoreDNSReconciler) cleanupDeployment(ctx context.Context, coreDN
 }
 
 // cleanupDaemonSet removes any existing DaemonSet when switching to Deployment mode
-func (r *NextDNSCoreDNSReconciler) cleanupDaemonSet(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
-	profile, err := r.resolveProfile(ctx, coreDNS)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil // Profile not found, nothing to clean up
-		}
-		return err // Unexpected error, propagate it
-	}
-
+func (r *NextDNSCoreDNSReconciler) cleanupDaemonSet(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	resourceName := r.getResourceName(coreDNS, profile)
 	daemonSet := &appsv1.DaemonSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: coreDNS.Namespace}, daemonSet)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: coreDNS.Namespace}, daemonSet)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -436,13 +420,8 @@ func (r *NextDNSCoreDNSReconciler) cleanupDaemonSet(ctx context.Context, coreDNS
 }
 
 // reconcileDeployment creates or updates the CoreDNS Deployment
-func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	logger := log.FromContext(ctx)
-
-	profile, err := r.resolveProfile(ctx, coreDNS)
-	if err != nil {
-		return err
-	}
 
 	resourceName := r.getResourceName(coreDNS, profile)
 	labels := r.buildLabels(coreDNS, profile)
@@ -491,13 +470,8 @@ func (r *NextDNSCoreDNSReconciler) reconcileDeployment(ctx context.Context, core
 }
 
 // reconcileDaemonSet creates or updates the CoreDNS DaemonSet
-func (r *NextDNSCoreDNSReconciler) reconcileDaemonSet(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+func (r *NextDNSCoreDNSReconciler) reconcileDaemonSet(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	logger := log.FromContext(ctx)
-
-	profile, err := r.resolveProfile(ctx, coreDNS)
-	if err != nil {
-		return err
-	}
 
 	resourceName := r.getResourceName(coreDNS, profile)
 	labels := r.buildLabels(coreDNS, profile)
@@ -668,13 +642,8 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 }
 
 // reconcileService creates or updates the CoreDNS Service
-func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	logger := log.FromContext(ctx)
-
-	profile, err := r.resolveProfile(ctx, coreDNS)
-	if err != nil {
-		return err
-	}
 
 	serviceName := r.getServiceName(coreDNS, profile)
 	labels := r.buildLabels(coreDNS, profile)
