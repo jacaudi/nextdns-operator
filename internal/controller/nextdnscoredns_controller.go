@@ -36,6 +36,9 @@ const (
 	// ConditionTypeProfileResolved indicates the referenced profile is resolved
 	ConditionTypeProfileResolved = "ProfileResolved"
 
+	// ConditionTypeMultusIPWarning indicates Multus IP configuration issues
+	ConditionTypeMultusIPWarning = "MultusIPWarning"
+
 	// CorefileKey is the key in the ConfigMap for the Corefile
 	CorefileKey = "Corefile"
 
@@ -123,13 +126,22 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Validate Multus configuration
 	if coreDNS.Spec.Multus != nil && len(coreDNS.Spec.Multus.IPs) > 0 {
+		multusWarning := false
+
 		// Validate IP formats
+		var invalidIPs []string
 		for _, ip := range coreDNS.Spec.Multus.IPs {
 			parsed := net.ParseIP(ip)
 			if parsed == nil || parsed.To4() == nil {
+				invalidIPs = append(invalidIPs, ip)
 				logger.Info("WARNING: invalid IPv4 address in spec.multus.ips",
 					"ip", ip)
 			}
+		}
+		if len(invalidIPs) > 0 {
+			multusWarning = true
+			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionTrue, "InvalidIPs",
+				fmt.Sprintf("Invalid IPv4 addresses in spec.multus.ips: %v", invalidIPs))
 		}
 
 		// Warn if IPs < replicas
@@ -138,9 +150,18 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			replicas = *coreDNS.Spec.Deployment.Replicas
 		}
 		if int32(len(coreDNS.Spec.Multus.IPs)) < replicas {
+			multusWarning = true
 			logger.Info("WARNING: fewer Multus IPs than replicas; some pods may fail IPAM allocation",
 				"multusIPs", len(coreDNS.Spec.Multus.IPs),
 				"replicas", replicas)
+			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionTrue, "InsufficientIPs",
+				fmt.Sprintf("Fewer Multus IPs (%d) than replicas (%d); some pods may fail IPAM allocation",
+					len(coreDNS.Spec.Multus.IPs), replicas))
+		}
+
+		// Clear warning if validation passed
+		if !multusWarning {
+			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionFalse, "ValidationPassed", "All Multus IPs are valid and sufficient for replicas")
 		}
 	}
 
