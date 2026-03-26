@@ -3102,7 +3102,7 @@ func TestFormatRetentionString(t *testing.T) {
 		days     int
 		expected string
 	}{
-		{name: "zero returns empty", days: 0, expected: ""},
+		{name: "zero maps to 1h (sub-day retention)", days: 0, expected: "1h"},
 		{name: "1 day", days: 1, expected: "1d"},
 		{name: "7 days", days: 7, expected: "7d"},
 		{name: "30 days", days: 30, expected: "30d"},

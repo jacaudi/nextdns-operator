@@ -1197,7 +1197,9 @@ func boolPtr(b bool) *bool {
 func formatRetentionString(days int) string {
 	switch days {
 	case 0:
-		return ""
+		// Sub-day retentions (1h, 6h) round to 0 days in the API.
+		// Map to 1h as the most conservative sub-day value.
+		return "1h"
 	case 365:
 		return "1y"
 	case 730:
