@@ -60,8 +60,7 @@ func TestNextDNSTLDListReconciler_countActiveTLDs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reconciler := &NextDNSTLDListReconciler{}
-			result := reconciler.countActiveTLDs(tt.tlds)
+			result := countActiveTLDs(tt.tlds)
 			assert.Equal(t, tt.expected, result, "countActiveTLDs() returned unexpected count")
 		})
 	}

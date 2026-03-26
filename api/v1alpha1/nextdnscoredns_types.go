@@ -115,8 +115,10 @@ type CoreDNSServiceConfig struct {
 	Type CoreDNSServiceType `json:"type,omitempty"`
 
 	// LoadBalancerIP specifies the IP address for LoadBalancer type services.
-	// Must be a valid IPv4 address if specified.
-	// +kubebuilder:validation:Pattern=`^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`
+	// Accepts any valid IPv4 or IPv6 address.
+	// Deprecated: This field is deprecated since Kubernetes v1.24 but is still
+	// honored by most cloud providers. Future versions may migrate to
+	// Service annotations or a gateway API mechanism.
 	// +optional
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 

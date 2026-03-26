@@ -2,12 +2,8 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -70,7 +66,7 @@ func (r *NextDNSAllowlistReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Count active domains
-	count := r.countActiveDomains(list.Spec.Domains)
+	count := countActiveDomains(list.Spec.Domains)
 
 	// Find profile references
 	profileRefs, err := r.findProfileReferences(ctx, &list)
@@ -84,7 +80,7 @@ func (r *NextDNSAllowlistReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	list.Status.ProfileRefs = profileRefs
 
 	// Set conditions
-	r.setConditions(&list, count, len(profileRefs))
+	setListConditions(&list.Status.Conditions, count, len(profileRefs), "domains")
 
 	// Update status subresource
 	if err := r.Status().Update(ctx, &list); err != nil {
@@ -133,49 +129,17 @@ func (r *NextDNSAllowlistReconciler) findAllowlistsForProfile(ctx context.Contex
 	return requests
 }
 
-// countActiveDomains counts the number of domains where Active is nil or true
-func (r *NextDNSAllowlistReconciler) countActiveDomains(domains []nextdnsv1alpha1.DomainEntry) int {
-	count := 0
-	for _, domain := range domains {
-		// If Active is nil or true, the domain is active
-		if domain.Active == nil || *domain.Active {
-			count++
-		}
-	}
-	return count
-}
-
-// findProfileReferences finds all profiles that reference this allowlist
-// Note: Searches cluster-wide to support cross-namespace references
+// findProfileReferences finds all profiles that reference this allowlist.
+// Note: Searches cluster-wide to support cross-namespace references.
 func (r *NextDNSAllowlistReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSAllowlist) ([]nextdnsv1alpha1.ResourceReference, error) {
 	var profiles nextdnsv1alpha1.NextDNSProfileList
-	// List all profiles cluster-wide to support cross-namespace references
 	if err := r.List(ctx, &profiles); err != nil {
 		return nil, err
 	}
 
-	var refs []nextdnsv1alpha1.ResourceReference
-
-	for _, profile := range profiles.Items {
-		for _, ref := range profile.Spec.AllowlistRefs {
-			// Determine the namespace of the referenced list
-			namespace := ref.Namespace
-			if namespace == "" {
-				namespace = profile.Namespace
-			}
-
-			// Check if this profile references our list
-			if ref.Name == list.Name && namespace == list.Namespace {
-				refs = append(refs, nextdnsv1alpha1.ResourceReference{
-					Name:      profile.Name,
-					Namespace: profile.Namespace,
-				})
-				break
-			}
-		}
-	}
-
-	return refs, nil
+	return findRefsForList(profiles.Items, list.Name, list.Namespace, func(spec *nextdnsv1alpha1.NextDNSProfileSpec) []nextdnsv1alpha1.ListReference {
+		return spec.AllowlistRefs
+	}), nil
 }
 
 // handleDeletion handles the deletion of an allowlist
@@ -186,13 +150,7 @@ func (r *NextDNSAllowlistReconciler) handleDeletion(ctx context.Context, list *n
 	if len(list.Status.ProfileRefs) > 0 {
 		logger.Info("Deletion blocked - list is in use", "profileRefs", list.Status.ProfileRefs)
 
-		// Set DeletionBlocked condition
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "DeletionBlocked",
-			Status:  metav1.ConditionTrue,
-			Reason:  "InUseByProfiles",
-			Message: fmt.Sprintf("Cannot delete: used by profiles %s. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
-		})
+		setDeletionBlockedCondition(&list.Status.Conditions, list.Status.ProfileRefs)
 
 		// Update status and requeue
 		if err := r.Status().Update(ctx, list); err != nil {
@@ -211,48 +169,3 @@ func (r *NextDNSAllowlistReconciler) handleDeletion(ctx context.Context, list *n
 	return ctrl.Result{}, nil
 }
 
-// setConditions sets status conditions based on current state
-func (r *NextDNSAllowlistReconciler) setConditions(list *nextdnsv1alpha1.NextDNSAllowlist, count, refCount int) {
-	// Valid condition
-	meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-		Type:    "Valid",
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllDomainsValid",
-		Message: fmt.Sprintf("All %d domains are valid", count),
-	})
-
-	// InUse condition
-	if refCount > 0 {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionTrue,
-			Reason:  "ReferencedByProfiles",
-			Message: fmt.Sprintf("Used by %d profile(s)", refCount),
-		})
-	} else {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionFalse,
-			Reason:  "NotReferenced",
-			Message: "Not used by any profiles",
-		})
-	}
-
-	// Clear DeletionBlocked if it was set
-	if refCount == 0 {
-		meta.RemoveStatusCondition(&list.Status.Conditions, "DeletionBlocked")
-	}
-}
-
-// formatProfileRefs formats profile references for display
-func formatProfileRefs(refs []nextdnsv1alpha1.ResourceReference) string {
-	var names []string
-	for _, ref := range refs {
-		if ref.Namespace != "" {
-			names = append(names, fmt.Sprintf("%s/%s", ref.Namespace, ref.Name))
-		} else {
-			names = append(names, ref.Name)
-		}
-	}
-	return fmt.Sprintf("[%s]", strings.Join(names, ", "))
-}
