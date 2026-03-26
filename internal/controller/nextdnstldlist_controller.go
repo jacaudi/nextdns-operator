@@ -2,11 +2,8 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -69,7 +66,7 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Count active TLDs
-	count := r.countActiveTLDs(list.Spec.TLDs)
+	count := countActiveTLDs(list.Spec.TLDs)
 
 	// Find profile references
 	profileRefs, err := r.findProfileReferences(ctx, &list)
@@ -83,7 +80,7 @@ func (r *NextDNSTLDListReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	list.Status.ProfileRefs = profileRefs
 
 	// Set conditions
-	r.setConditions(&list, count, len(profileRefs))
+	setListConditions(&list.Status.Conditions, count, len(profileRefs), "TLDs")
 
 	// Update status subresource
 	if err := r.Status().Update(ctx, &list); err != nil {
@@ -132,52 +129,20 @@ func (r *NextDNSTLDListReconciler) findTLDListsForProfile(ctx context.Context, o
 	return requests
 }
 
-// countActiveTLDs counts the number of TLDs where Active is nil or true
-func (r *NextDNSTLDListReconciler) countActiveTLDs(tlds []nextdnsv1alpha1.TLDEntry) int {
-	count := 0
-	for _, tld := range tlds {
-		// If Active is nil or true, the TLD is active
-		if tld.Active == nil || *tld.Active {
-			count++
-		}
-	}
-	return count
-}
-
-// findProfileReferences finds all profiles that reference this tldlist
-// Note: Searches cluster-wide to support cross-namespace references
+// findProfileReferences finds all profiles that reference this TLD list.
+// Note: Searches cluster-wide to support cross-namespace references.
 func (r *NextDNSTLDListReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSTLDList) ([]nextdnsv1alpha1.ResourceReference, error) {
 	var profiles nextdnsv1alpha1.NextDNSProfileList
-	// List all profiles cluster-wide to support cross-namespace references
 	if err := r.List(ctx, &profiles); err != nil {
 		return nil, err
 	}
 
-	var refs []nextdnsv1alpha1.ResourceReference
-
-	for _, profile := range profiles.Items {
-		for _, ref := range profile.Spec.TLDListRefs {
-			// Determine the namespace of the referenced list
-			namespace := ref.Namespace
-			if namespace == "" {
-				namespace = profile.Namespace
-			}
-
-			// Check if this profile references our list
-			if ref.Name == list.Name && namespace == list.Namespace {
-				refs = append(refs, nextdnsv1alpha1.ResourceReference{
-					Name:      profile.Name,
-					Namespace: profile.Namespace,
-				})
-				break
-			}
-		}
-	}
-
-	return refs, nil
+	return findRefsForList(profiles.Items, list.Name, list.Namespace, func(spec *nextdnsv1alpha1.NextDNSProfileSpec) []nextdnsv1alpha1.ListReference {
+		return spec.TLDListRefs
+	}), nil
 }
 
-// handleDeletion handles the deletion of an tldlist
+// handleDeletion handles the deletion of a TLD list
 func (r *NextDNSTLDListReconciler) handleDeletion(ctx context.Context, list *nextdnsv1alpha1.NextDNSTLDList) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -185,13 +150,7 @@ func (r *NextDNSTLDListReconciler) handleDeletion(ctx context.Context, list *nex
 	if len(list.Status.ProfileRefs) > 0 {
 		logger.Info("Deletion blocked - list is in use", "profileRefs", list.Status.ProfileRefs)
 
-		// Set DeletionBlocked condition
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "DeletionBlocked",
-			Status:  metav1.ConditionTrue,
-			Reason:  "InUseByProfiles",
-			Message: fmt.Sprintf("Cannot delete: used by profiles %s. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
-		})
+		setDeletionBlockedCondition(&list.Status.Conditions, list.Status.ProfileRefs)
 
 		// Update status and requeue
 		if err := r.Status().Update(ctx, list); err != nil {
@@ -210,35 +169,3 @@ func (r *NextDNSTLDListReconciler) handleDeletion(ctx context.Context, list *nex
 	return ctrl.Result{}, nil
 }
 
-// setConditions sets status conditions based on current state
-func (r *NextDNSTLDListReconciler) setConditions(list *nextdnsv1alpha1.NextDNSTLDList, count, refCount int) {
-	// Valid condition
-	meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-		Type:    "Valid",
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllDomainsValid",
-		Message: fmt.Sprintf("All %d TLDs are valid", count),
-	})
-
-	// InUse condition
-	if refCount > 0 {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionTrue,
-			Reason:  "ReferencedByProfiles",
-			Message: fmt.Sprintf("Used by %d profile(s)", refCount),
-		})
-	} else {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionFalse,
-			Reason:  "NotReferenced",
-			Message: "Not used by any profiles",
-		})
-	}
-
-	// Clear DeletionBlocked if it was set
-	if refCount == 0 {
-		meta.RemoveStatusCondition(&list.Status.Conditions, "DeletionBlocked")
-	}
-}

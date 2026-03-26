@@ -60,8 +60,7 @@ func TestCountActiveDomains(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reconciler := &NextDNSAllowlistReconciler{}
-			result := reconciler.countActiveDomains(tt.domains)
+			result := countActiveDomains(tt.domains)
 			assert.Equal(t, tt.expected, result, "countActiveDomains() returned unexpected count")
 		})
 	}

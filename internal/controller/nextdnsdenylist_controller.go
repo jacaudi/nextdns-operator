@@ -2,11 +2,8 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -69,7 +66,7 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Count active domains
-	count := r.countActiveDomains(list.Spec.Domains)
+	count := countActiveDomains(list.Spec.Domains)
 
 	// Find profile references
 	profileRefs, err := r.findProfileReferences(ctx, &list)
@@ -83,7 +80,7 @@ func (r *NextDNSDenylistReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	list.Status.ProfileRefs = profileRefs
 
 	// Set conditions
-	r.setConditions(&list, count, len(profileRefs))
+	setListConditions(&list.Status.Conditions, count, len(profileRefs), "domains")
 
 	// Update status subresource
 	if err := r.Status().Update(ctx, &list); err != nil {
@@ -132,52 +129,20 @@ func (r *NextDNSDenylistReconciler) findDenylistsForProfile(ctx context.Context,
 	return requests
 }
 
-// countActiveDomains counts the number of domains where Active is nil or true
-func (r *NextDNSDenylistReconciler) countActiveDomains(domains []nextdnsv1alpha1.DomainEntry) int {
-	count := 0
-	for _, domain := range domains {
-		// If Active is nil or true, the domain is active
-		if domain.Active == nil || *domain.Active {
-			count++
-		}
-	}
-	return count
-}
-
-// findProfileReferences finds all profiles that reference this denylist
-// Note: Searches cluster-wide to support cross-namespace references
+// findProfileReferences finds all profiles that reference this denylist.
+// Note: Searches cluster-wide to support cross-namespace references.
 func (r *NextDNSDenylistReconciler) findProfileReferences(ctx context.Context, list *nextdnsv1alpha1.NextDNSDenylist) ([]nextdnsv1alpha1.ResourceReference, error) {
 	var profiles nextdnsv1alpha1.NextDNSProfileList
-	// List all profiles cluster-wide to support cross-namespace references
 	if err := r.List(ctx, &profiles); err != nil {
 		return nil, err
 	}
 
-	var refs []nextdnsv1alpha1.ResourceReference
-
-	for _, profile := range profiles.Items {
-		for _, ref := range profile.Spec.DenylistRefs {
-			// Determine the namespace of the referenced list
-			namespace := ref.Namespace
-			if namespace == "" {
-				namespace = profile.Namespace
-			}
-
-			// Check if this profile references our list
-			if ref.Name == list.Name && namespace == list.Namespace {
-				refs = append(refs, nextdnsv1alpha1.ResourceReference{
-					Name:      profile.Name,
-					Namespace: profile.Namespace,
-				})
-				break
-			}
-		}
-	}
-
-	return refs, nil
+	return findRefsForList(profiles.Items, list.Name, list.Namespace, func(spec *nextdnsv1alpha1.NextDNSProfileSpec) []nextdnsv1alpha1.ListReference {
+		return spec.DenylistRefs
+	}), nil
 }
 
-// handleDeletion handles the deletion of an denylist
+// handleDeletion handles the deletion of a denylist
 func (r *NextDNSDenylistReconciler) handleDeletion(ctx context.Context, list *nextdnsv1alpha1.NextDNSDenylist) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -185,13 +150,7 @@ func (r *NextDNSDenylistReconciler) handleDeletion(ctx context.Context, list *ne
 	if len(list.Status.ProfileRefs) > 0 {
 		logger.Info("Deletion blocked - list is in use", "profileRefs", list.Status.ProfileRefs)
 
-		// Set DeletionBlocked condition
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "DeletionBlocked",
-			Status:  metav1.ConditionTrue,
-			Reason:  "InUseByProfiles",
-			Message: fmt.Sprintf("Cannot delete: used by profiles %s. Remove references first.", formatProfileRefs(list.Status.ProfileRefs)),
-		})
+		setDeletionBlockedCondition(&list.Status.Conditions, list.Status.ProfileRefs)
 
 		// Update status and requeue
 		if err := r.Status().Update(ctx, list); err != nil {
@@ -210,35 +169,3 @@ func (r *NextDNSDenylistReconciler) handleDeletion(ctx context.Context, list *ne
 	return ctrl.Result{}, nil
 }
 
-// setConditions sets status conditions based on current state
-func (r *NextDNSDenylistReconciler) setConditions(list *nextdnsv1alpha1.NextDNSDenylist, count, refCount int) {
-	// Valid condition
-	meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-		Type:    "Valid",
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllDomainsValid",
-		Message: fmt.Sprintf("All %d domains are valid", count),
-	})
-
-	// InUse condition
-	if refCount > 0 {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionTrue,
-			Reason:  "ReferencedByProfiles",
-			Message: fmt.Sprintf("Used by %d profile(s)", refCount),
-		})
-	} else {
-		meta.SetStatusCondition(&list.Status.Conditions, metav1.Condition{
-			Type:    "InUse",
-			Status:  metav1.ConditionFalse,
-			Reason:  "NotReferenced",
-			Message: "Not used by any profiles",
-		})
-	}
-
-	// Clear DeletionBlocked if it was set
-	if refCount == 0 {
-		meta.RemoveStatusCondition(&list.Status.Conditions, "DeletionBlocked")
-	}
-}
