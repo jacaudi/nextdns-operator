@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -126,7 +127,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Validate Multus configuration
 	if coreDNS.Spec.Multus != nil && len(coreDNS.Spec.Multus.IPs) > 0 {
-		multusWarning := false
+		var warnings []string
 
 		// Validate IP formats
 		var invalidIPs []string
@@ -139,9 +140,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 		}
 		if len(invalidIPs) > 0 {
-			multusWarning = true
-			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionTrue, "InvalidIPs",
-				fmt.Sprintf("Invalid IPv4 addresses in spec.multus.ips: %v", invalidIPs))
+			warnings = append(warnings, fmt.Sprintf("Invalid IPv4 addresses: %v", invalidIPs))
 		}
 
 		// Warn if IPs < replicas
@@ -150,19 +149,21 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			replicas = *coreDNS.Spec.Deployment.Replicas
 		}
 		if int32(len(coreDNS.Spec.Multus.IPs)) < replicas {
-			multusWarning = true
 			logger.Info("WARNING: fewer Multus IPs than replicas; some pods may fail IPAM allocation",
 				"multusIPs", len(coreDNS.Spec.Multus.IPs),
 				"replicas", replicas)
-			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionTrue, "InsufficientIPs",
-				fmt.Sprintf("Fewer Multus IPs (%d) than replicas (%d); some pods may fail IPAM allocation",
-					len(coreDNS.Spec.Multus.IPs), replicas))
+			warnings = append(warnings, fmt.Sprintf("Fewer IPs (%d) than replicas (%d)", len(coreDNS.Spec.Multus.IPs), replicas))
 		}
 
-		// Clear warning if validation passed
-		if !multusWarning {
+		if len(warnings) > 0 {
+			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionTrue, "ValidationWarning",
+				strings.Join(warnings, "; "))
+		} else {
 			r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionFalse, "ValidationPassed", "All Multus IPs are valid and sufficient for replicas")
 		}
+	} else {
+		// Clear stale warning when Multus is not configured
+		r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionFalse, "MultusNotConfigured", "Multus is not configured")
 	}
 
 	// Store profile information in status

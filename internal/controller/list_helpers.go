@@ -80,8 +80,7 @@ func countActiveTLDs(tlds []nextdnsv1alpha1.TLDEntry) int {
 	return count
 }
 
-// setDeletionBlockedCondition sets the DeletionBlocked condition on a list resource
-// and returns the condition message for logging purposes.
+// setDeletionBlockedCondition sets the DeletionBlocked condition on a list resource.
 func setDeletionBlockedCondition(conditions *[]metav1.Condition, profileRefs []nextdnsv1alpha1.ResourceReference) {
 	meta.SetStatusCondition(conditions, metav1.Condition{
 		Type:    "DeletionBlocked",
