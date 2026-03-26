@@ -714,9 +714,12 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 			},
 		}
 
-		// Apply LoadBalancer IP if specified
+		// Apply LoadBalancer IP if specified.
+		// NOTE: service.Spec.LoadBalancerIP is deprecated since Kubernetes v1.24
+		// but is still honored by most cloud providers. We continue to set it for
+		// backward compatibility.
 		if serviceType == corev1.ServiceTypeLoadBalancer && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.LoadBalancerIP != "" {
-			service.Spec.LoadBalancerIP = coreDNS.Spec.Service.LoadBalancerIP
+			service.Spec.LoadBalancerIP = coreDNS.Spec.Service.LoadBalancerIP //nolint:staticcheck // deprecated but still functional
 		}
 
 		return controllerutil.SetControllerReference(coreDNS, service, r.Scheme)
