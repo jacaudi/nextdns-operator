@@ -682,3 +682,143 @@ func TestUpstreamConfig_DeviceName(t *testing.T) {
 	empty := UpstreamConfig{Primary: DNSProtocolDoH}
 	assert.Equal(t, "", empty.DeviceName)
 }
+
+// =============================================================================
+// Behavioral tests — DeepCopy independence
+// =============================================================================
+
+func TestSecuritySpec_DeepCopy_Independent(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	original := &SecuritySpec{
+		AIThreatDetection:       &trueVal,
+		GoogleSafeBrowsing:      &trueVal,
+		Cryptojacking:           &trueVal,
+		DNSRebinding:            &trueVal,
+		IDNHomographs:           &trueVal,
+		Typosquatting:           &trueVal,
+		DGA:                     &trueVal,
+		NRD:                     &falseVal,
+		DDNS:                    &falseVal,
+		Parking:                 &trueVal,
+		CSAM:                    &trueVal,
+		ThreatIntelligenceFeeds: &trueVal,
+	}
+
+	copied := original.DeepCopy()
+
+	// Verify values match
+	assert.Equal(t, *original.AIThreatDetection, *copied.AIThreatDetection)
+	assert.Equal(t, *original.NRD, *copied.NRD)
+	assert.Equal(t, *original.ThreatIntelligenceFeeds, *copied.ThreatIntelligenceFeeds)
+
+	// Mutate the copy — original must be unaffected
+	*copied.AIThreatDetection = false
+	*copied.NRD = true
+	*copied.ThreatIntelligenceFeeds = false
+
+	assert.True(t, *original.AIThreatDetection, "original AIThreatDetection should still be true after mutating copy")
+	assert.False(t, *original.NRD, "original NRD should still be false after mutating copy")
+	assert.True(t, *original.ThreatIntelligenceFeeds, "original ThreatIntelligenceFeeds should still be true after mutating copy")
+}
+
+func TestNextDNSAllowlist_DeepCopy_Independent(t *testing.T) {
+	trueVal := true
+
+	original := &NextDNSAllowlist{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-allowlist",
+			Namespace: "default",
+		},
+		Spec: NextDNSAllowlistSpec{
+			Description: "Test allowlist",
+			Domains: []DomainEntry{
+				{Domain: "example.com", Active: &trueVal, Reason: "Testing"},
+				{Domain: "example.org", Active: &trueVal},
+			},
+		},
+	}
+
+	copied := original.DeepCopy()
+
+	// Verify values match
+	assert.Equal(t, original.Name, copied.Name)
+	assert.Equal(t, len(original.Spec.Domains), len(copied.Spec.Domains))
+	assert.Equal(t, original.Spec.Domains[0].Domain, copied.Spec.Domains[0].Domain)
+
+	// Mutate the copy
+	copied.Name = "mutated-allowlist"
+	copied.Spec.Description = "Mutated"
+	copied.Spec.Domains[0].Domain = "mutated.com"
+	*copied.Spec.Domains[0].Active = false
+
+	// Original must be unaffected
+	assert.Equal(t, "my-allowlist", original.Name)
+	assert.Equal(t, "Test allowlist", original.Spec.Description)
+	assert.Equal(t, "example.com", original.Spec.Domains[0].Domain)
+	assert.True(t, *original.Spec.Domains[0].Active, "original Active should still be true after mutating copy")
+}
+
+func TestNextDNSProfileSpec_DeepCopy_Independent(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	original := &NextDNSProfileSpec{
+		Name: "Original Profile",
+		CredentialsRef: SecretKeySelector{
+			Name: "my-secret",
+			Key:  "api-key",
+		},
+		AllowlistRefs: []ListReference{
+			{Name: "allowlist-1", Namespace: "ns1"},
+		},
+		DenylistRefs: []ListReference{
+			{Name: "denylist-1"},
+		},
+		Security: &SecuritySpec{
+			AIThreatDetection: &trueVal,
+			NRD:               &falseVal,
+		},
+		Privacy: &PrivacySpec{
+			Blocklists: []BlocklistEntry{
+				{ID: "nextdns-recommended", Active: &trueVal},
+			},
+			DisguisedTrackers: &trueVal,
+		},
+	}
+
+	copied := original.DeepCopy()
+
+	// Mutate the copy deeply
+	copied.Name = "Mutated Profile"
+	copied.AllowlistRefs[0].Name = "mutated-allowlist"
+	*copied.Security.AIThreatDetection = false
+	copied.Privacy.Blocklists[0].ID = "mutated-blocklist"
+	*copied.Privacy.DisguisedTrackers = false
+
+	// Original must be unaffected
+	assert.Equal(t, "Original Profile", original.Name)
+	assert.Equal(t, "allowlist-1", original.AllowlistRefs[0].Name)
+	assert.True(t, *original.Security.AIThreatDetection)
+	assert.Equal(t, "nextdns-recommended", original.Privacy.Blocklists[0].ID)
+	assert.True(t, *original.Privacy.DisguisedTrackers)
+}
+
+func TestDeepCopy_NilReceiver(t *testing.T) {
+	// DeepCopy on nil receivers should return nil, not panic
+	var nilSecurity *SecuritySpec
+	assert.Nil(t, nilSecurity.DeepCopy())
+
+	var nilAllowlist *NextDNSAllowlist
+	assert.Nil(t, nilAllowlist.DeepCopy())
+
+	var nilProfile *NextDNSProfile
+	assert.Nil(t, nilProfile.DeepCopy())
+
+	var nilSettings *SettingsSpec
+	assert.Nil(t, nilSettings.DeepCopy())
+
+	var nilLogs *LogsSpec
+	assert.Nil(t, nilLogs.DeepCopy())
+}

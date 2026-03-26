@@ -28,7 +28,7 @@ import (
 
 const (
 	// FinalizerName is the finalizer used by this controller
-	FinalizerName = "nextdns.io/finalizer"
+	FinalizerName = "nextdns.io/profile-finalizer"
 
 	// ConditionTypeReady indicates the profile is ready
 	ConditionTypeReady = "Ready"
@@ -57,9 +57,10 @@ func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	ClientFactory ClientFactory
-	SyncPeriod    time.Duration
+	Scheme             *runtime.Scheme
+	ClientFactory      ClientFactory
+	SyncPeriod         time.Duration
+	lastMetricsUpdate  time.Time
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -76,8 +77,11 @@ type NextDNSProfileReconciler struct {
 func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Update resource count metrics
-	r.updateResourceMetrics(ctx)
+	// Update resource count metrics (throttled to once per sync period)
+	if time.Since(r.lastMetricsUpdate) > r.SyncPeriod {
+		r.updateResourceMetrics(ctx)
+		r.lastMetricsUpdate = time.Now()
+	}
 
 	// Fetch the NextDNSProfile instance
 	profile := &nextdnsv1alpha1.NextDNSProfile{}
@@ -93,6 +97,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Deep copy to avoid mutating the controller-runtime cache
 	profile = profile.DeepCopy()
+
+	// Migrate old finalizer name if present
+	if migrated, err := migrateFinalizerDomain(ctx, r.Client, profile, "nextdns.io/finalizer", FinalizerName); err != nil {
+		return ctrl.Result{}, err
+	} else if migrated {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
 
 	// Check if the resource is being deleted
 	if !profile.DeletionTimestamp.IsZero() {
@@ -606,21 +617,55 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 		}
 	}
 
-	// Sync settings (logs, block page)
+	// Sync settings (logs, block page, performance, web3)
 	if profile.Spec.Settings != nil {
 		settingsConfig := &nextdns.SettingsConfig{
-			LogsEnabled:     true,
+			// Log defaults
+			LogsEnabled:   true,
+			LogClientsIPs: false,
+			LogDomains:    true,
+			// Block page default
 			BlockPageEnable: true,
+			// Performance defaults
+			Ecs:             true,
+			CacheBoost:      true,
+			CnameFlattening: true,
+			// Web3 default
+			Web3: false,
 		}
 		if profile.Spec.Settings.Logs != nil {
 			settingsConfig.LogsEnabled = boolValue(profile.Spec.Settings.Logs.Enabled, true)
+			settingsConfig.LogClientsIPs = boolValue(profile.Spec.Settings.Logs.LogClientsIPs, false)
+			settingsConfig.LogDomains = boolValue(profile.Spec.Settings.Logs.LogDomains, true)
 			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
 		}
 		if profile.Spec.Settings.BlockPage != nil {
 			settingsConfig.BlockPageEnable = boolValue(profile.Spec.Settings.BlockPage.Enabled, true)
 		}
+		if profile.Spec.Settings.Performance != nil {
+			settingsConfig.Ecs = boolValue(profile.Spec.Settings.Performance.ECS, true)
+			settingsConfig.CacheBoost = boolValue(profile.Spec.Settings.Performance.CacheBoost, true)
+			settingsConfig.CnameFlattening = boolValue(profile.Spec.Settings.Performance.CNAMEFlattening, true)
+		}
+		settingsConfig.Web3 = boolValue(profile.Spec.Settings.Web3, false)
 		if err := client.UpdateSettings(ctx, profileID, settingsConfig); err != nil {
 			return fmt.Errorf("failed to update settings: %w", err)
+		}
+	}
+
+	// Sync rewrites (nil = field omitted, don't touch remote; empty = explicit clear)
+	if profile.Spec.Rewrites != nil {
+		rewriteEntries := make([]nextdns.RewriteEntry, 0, len(profile.Spec.Rewrites))
+		for _, rw := range profile.Spec.Rewrites {
+			if rw.Active == nil || *rw.Active {
+				rewriteEntries = append(rewriteEntries, nextdns.RewriteEntry{
+					Name:    rw.From,
+					Content: rw.To,
+				})
+			}
+		}
+		if err := client.SyncRewrites(ctx, profileID, rewriteEntries); err != nil {
+			return fmt.Errorf("failed to sync rewrites: %w", err)
 		}
 	}
 

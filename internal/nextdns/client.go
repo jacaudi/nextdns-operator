@@ -78,12 +78,22 @@ type SettingsConfig struct {
 	LogRetention    int
 	BlockPageEnable bool
 	Web3            bool
+	// Performance settings
+	Ecs             bool
+	CacheBoost      bool
+	CnameFlattening bool
 }
 
 // DomainEntry represents a domain with its active state for syncing to NextDNS
 type DomainEntry struct {
 	Domain string
 	Active bool
+}
+
+// RewriteEntry represents a DNS rewrite for syncing to NextDNS
+type RewriteEntry struct {
+	Name    string
+	Content string
 }
 
 // CreateProfile creates a new NextDNS profile and returns the profile ID
@@ -218,26 +228,80 @@ func (c *Client) UpdatePrivacy(ctx context.Context, profileID string, config *Pr
 	return nil
 }
 
-// SyncDenylist synchronizes the denylist for a profile
-func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error {
+// SyncRewrites synchronizes DNS rewrites for a profile using diff-based create/delete.
+// The NextDNS API does not support update for rewrites, so we delete removed entries
+// and create new ones.
+func (c *Client) SyncRewrites(ctx context.Context, profileID string, entries []RewriteEntry) error {
 	start := time.Now()
 
-	// Get current denylist
-	listRequest := &nextdns.ListDenylistRequest{
+	// Get current rewrites
+	listRequest := &nextdns.ListRewritesRequest{ProfileID: profileID}
+	current, err := c.client.Rewrites.List(ctx, listRequest)
+	if err != nil {
+		metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+		return fmt.Errorf("failed to list rewrites: %w", err)
+	}
+
+	// Build desired set keyed by name+content
+	type rewriteKey struct{ Name, Content string }
+	desired := make(map[rewriteKey]bool, len(entries))
+	for _, e := range entries {
+		desired[rewriteKey{e.Name, e.Content}] = true
+	}
+
+	// Find entries to delete (in current but not in desired)
+	currentSet := make(map[rewriteKey]bool, len(current))
+	for _, rw := range current {
+		key := rewriteKey{rw.Name, rw.Content}
+		currentSet[key] = true
+		if !desired[key] {
+			deleteReq := &nextdns.DeleteRewritesRequest{ProfileID: profileID, ID: rw.ID}
+			if err := c.client.Rewrites.Delete(ctx, deleteReq); err != nil {
+				metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+				return fmt.Errorf("failed to delete rewrite %s: %w", rw.Name, err)
+			}
+		}
+	}
+
+	// Create entries not in current state
+	for _, e := range entries {
+		key := rewriteKey{e.Name, e.Content}
+		if !currentSet[key] {
+			createReq := &nextdns.CreateRewritesRequest{
+				ProfileID: profileID,
+				Rewrites:  &nextdns.Rewrites{Name: e.Name, Content: e.Content},
+			}
+			if _, err := c.client.Rewrites.Create(ctx, createReq); err != nil {
+				metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), false)
+				return fmt.Errorf("failed to create rewrite %s: %w", e.Name, err)
+			}
+		}
+	}
+
+	metrics.RecordAPIRequest("SyncRewrites", time.Since(start).Seconds(), true)
+	return nil
+}
+
+// GetRewrites retrieves the current rewrites for a profile
+func (c *Client) GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error) {
+	start := time.Now()
+	request := &nextdns.ListRewritesRequest{
 		ProfileID: profileID,
 	}
 
-	currentList, err := c.client.Denylist.List(ctx, listRequest)
+	list, err := c.client.Rewrites.List(ctx, request)
+	metrics.RecordAPIRequest("GetRewrites", time.Since(start).Seconds(), err == nil)
+
 	if err != nil {
-		metrics.RecordAPIRequest("SyncDenylist", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to get current denylist: %w", err)
+		return nil, fmt.Errorf("failed to get rewrites: %w", err)
 	}
 
-	// Build map of current domains
-	currentDomains := make(map[string]bool)
-	for _, entry := range currentList {
-		currentDomains[entry.ID] = true
-	}
+	return list, nil
+}
+
+// SyncDenylist synchronizes the denylist for a profile
+func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []DomainEntry) error {
+	start := time.Now()
 
 	// Build the desired denylist
 	var denylist []*nextdns.Denylist
@@ -248,7 +312,7 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []D
 		})
 	}
 
-	// Create/update the denylist (PUT replaces the entire list)
+	// PUT replaces the entire list
 	createRequest := &nextdns.CreateDenylistRequest{
 		ProfileID: profileID,
 		Denylist:  denylist,
@@ -443,36 +507,41 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 
 	start := time.Now()
 
-	// Update logs settings
-	logsRequest := &nextdns.UpdateSettingsLogsRequest{
-		ProfileID: profileID,
-		SettingsLogs: &nextdns.SettingsLogs{
+	// Build the full settings object for a single PATCH call.
+	// Note: LogClientsIPs and LogDomains use positive logic in the operator spec
+	// (true = log them), but the NextDNS API uses inverted logic via the Drop struct
+	// (true = don't log them). We invert here at the client boundary.
+	settings := &nextdns.Settings{
+		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
 			Retention: config.LogRetention,
+			Drop: &nextdns.SettingsLogsDrop{
+				IP:     !config.LogClientsIPs,
+				Domain: !config.LogDomains,
+			},
 		},
-	}
-
-	err := c.client.SettingsLogs.Update(ctx, logsRequest)
-	if err != nil {
-		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to update logs settings: %w", err)
-	}
-
-	// Update block page settings
-	blockPageRequest := &nextdns.UpdateSettingsBlockPageRequest{
-		ProfileID: profileID,
-		SettingsBlockPage: &nextdns.SettingsBlockPage{
+		BlockPage: &nextdns.SettingsBlockPage{
 			Enabled: config.BlockPageEnable,
 		},
+		Performance: &nextdns.SettingsPerformance{
+			Ecs:             config.Ecs,
+			CacheBoost:      config.CacheBoost,
+			CnameFlattening: config.CnameFlattening,
+		},
+		Web3: config.Web3,
 	}
 
-	err = c.client.SettingsBlockPage.Update(ctx, blockPageRequest)
+	request := &nextdns.UpdateSettingsRequest{
+		ProfileID: profileID,
+		Settings:  settings,
+	}
+
+	err := c.client.Settings.Update(ctx, request)
+	metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), err == nil)
 	if err != nil {
-		metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), false)
-		return fmt.Errorf("failed to update block page settings: %w", err)
+		return fmt.Errorf("failed to update settings: %w", err)
 	}
 
-	metrics.RecordAPIRequest("UpdateSettings", time.Since(start).Seconds(), true)
 	return nil
 }
 
@@ -793,23 +862,6 @@ func (c *Client) GetParentalControlServices(ctx context.Context, profileID strin
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parental control services: %w", err)
-	}
-
-	return list, nil
-}
-
-// GetRewrites retrieves the current rewrites for a profile
-func (c *Client) GetRewrites(ctx context.Context, profileID string) ([]*nextdns.Rewrites, error) {
-	start := time.Now()
-	request := &nextdns.ListRewritesRequest{
-		ProfileID: profileID,
-	}
-
-	list, err := c.client.Rewrites.List(ctx, request)
-	metrics.RecordAPIRequest("GetRewrites", time.Since(start).Seconds(), err == nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rewrites: %w", err)
 	}
 
 	return list, nil

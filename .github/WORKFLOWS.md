@@ -12,7 +12,7 @@ Runs on every push to `main` and on pull requests:
 2. **Test** - Runs Go tests with 80% coverage requirement
 3. **Release** - Creates semantic version and GitHub release (main only)
 4. **Docker Build** - Builds multi-arch container images (amd64, arm64)
-5. **Security Scan** - Scans images for vulnerabilities
+5. **Validate Versions** - Verifies chart and container version alignment
 6. **Helm Publish** - Publishes chart to OCI registry at `ghcr.io`
 
 ### PR Validation (`pr.yml`)
@@ -21,7 +21,6 @@ Fast feedback on pull requests:
 - Linting (YAML, Helm, Go)
 - Testing with coverage
 - Docker build verification (no push)
-- Security scanning with Trivy (CRITICAL, HIGH vulnerabilities)
 
 ## Setup Requirements
 
@@ -169,7 +168,7 @@ graph LR
     B --> D[Release]
     C --> D
     D --> E[Docker Build]
-    E --> F[Security Scan]
+    E --> F[Validate Versions]
     F --> G[Helm Publish]
 ```
 

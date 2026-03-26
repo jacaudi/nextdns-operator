@@ -115,8 +115,10 @@ type CoreDNSServiceConfig struct {
 	Type CoreDNSServiceType `json:"type,omitempty"`
 
 	// LoadBalancerIP specifies the IP address for LoadBalancer type services.
-	// Must be a valid IPv4 address if specified.
-	// +kubebuilder:validation:Pattern=`^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`
+	// Accepts any valid IPv4 or IPv6 address.
+	// Deprecated: This field is deprecated since Kubernetes v1.24 but is still
+	// honored by most cloud providers. Future versions may migrate to
+	// Service annotations or a gateway API mechanism.
 	// +optional
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 
@@ -129,9 +131,10 @@ type CoreDNSServiceConfig struct {
 	NameOverride string `json:"nameOverride,omitempty"`
 }
 
-// ServiceMonitorConfig configures Prometheus ServiceMonitor creation
-// TODO: Implement ServiceMonitor reconciliation in the controller.
-// Currently this struct is defined but not used.
+// ServiceMonitorConfig configures Prometheus ServiceMonitor creation.
+// Note: The operator controller does not reconcile ServiceMonitor resources.
+// ServiceMonitor creation is handled by the Helm chart via the bjw-s common library.
+// This struct exists in the CRD for Helm values passthrough.
 type ServiceMonitorConfig struct {
 	// Enabled creates a ServiceMonitor for Prometheus Operator
 	// +kubebuilder:default=false
