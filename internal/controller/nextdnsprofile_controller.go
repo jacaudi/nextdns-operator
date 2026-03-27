@@ -1212,6 +1212,7 @@ func (r *NextDNSProfileReconciler) findProfilesForAllowlist(ctx context.Context,
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for allowlist watch")
 		return nil
 	}
 
@@ -1245,6 +1246,7 @@ func (r *NextDNSProfileReconciler) findProfilesForDenylist(ctx context.Context, 
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for denylist watch")
 		return nil
 	}
 
@@ -1278,6 +1280,7 @@ func (r *NextDNSProfileReconciler) findProfilesForTLDList(ctx context.Context, o
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for TLD list watch")
 		return nil
 	}
 
@@ -1316,6 +1319,7 @@ func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, ob
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	indexKey := secret.Namespace + "/" + secret.Name
 	if err := r.List(ctx, &profiles, client.MatchingFields{credentialsRefIndexField: indexKey}); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for secret watch")
 		return nil
 	}
 
