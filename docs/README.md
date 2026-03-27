@@ -6,8 +6,10 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
 
 - [Configuration](#configuration)
   - [ConfigMap Export](#configmap-export)
-  - [ConfigMap Import](#configmap-import)
+  - [ConfigMap Import](#configmap-import) *(deprecated)*
     - [Supported Import Fields](#supported-import-fields)
+  - [Observe Mode](#observe-mode)
+    - [Transitioning to Managed Mode](#transitioning-to-managed-mode)
 - [CoreDNS Deployment](#coredns-deployment)
   - [Basic Setup](#basic-setup)
   - [Upstream Protocols](#upstream-protocols)
@@ -76,6 +78,8 @@ envFrom:
 ```
 
 ### ConfigMap Import
+
+> **Deprecated:** ConfigMap Import is deprecated in favor of [Observe Mode](#observe-mode). Observe mode provides a safer and more integrated workflow for adopting existing NextDNS profiles into GitOps management. ConfigMap Import will be removed in a future release.
 
 Import base profile configuration from a ConfigMap containing JSON. Explicit spec fields always take precedence over imported values, making this useful for shared base configurations, migration from existing profiles, or templating.
 
@@ -245,6 +249,85 @@ Below is a complete JSON example showing every supported field. All fields are o
 - Unknown fields in the JSON are silently ignored (the operator logs a warning).
 - Domain values in `denylist`, `allowlist`, and `rewrites` are validated against the same rules as inline spec domains.
 - List entries have configurable upper bounds: 1000 for deny/allowlists, 500 for rewrites, and 100 for blocklists.
+
+### Observe Mode
+
+Observe mode lets you safely adopt an existing NextDNS profile into GitOps management without modifying it. The operator reads the full remote profile configuration and stores it in `status.observedConfig`, but never writes any changes back to NextDNS.
+
+This is useful when you have profiles already configured through the NextDNS dashboard and want to bring them under declarative management without risk of accidentally overwriting settings.
+
+**Create a NextDNSProfile in observe mode:**
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  name: my-existing-profile
+spec:
+  mode: observe
+  profileID: "abc123"
+  credentialsRef:
+    name: nextdns-credentials
+```
+
+The operator will read the remote profile and populate `status.observedConfig` with the full configuration. No changes are made to the remote profile.
+
+**Inspect the observed configuration:**
+
+```bash
+kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.observedConfig}' | jq .
+```
+
+This returns the complete remote profile configuration, including security settings, privacy blocklists, deny/allowlists, rewrites, parental controls, and settings.
+
+**Use the suggested spec for easy transition:**
+
+```bash
+kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.suggestedSpec}' | jq .
+```
+
+The `suggestedSpec` field contains a spec-compatible translation of the observed configuration. You can copy fields directly from `suggestedSpec` into your CR spec when transitioning to managed mode.
+
+> **Limitations:** Some fields cannot be derived from the NextDNS API and are omitted from `suggestedSpec`:
+> - `settings.logs.logClientsIPs` and `settings.logs.logDomains` -- not exposed by the API
+> - `blockedTLDs` are included for reference but must be placed in a `NextDNSTLDList` CR and referenced via `spec.tldListRefs`
+
+#### Transitioning to Managed Mode
+
+Once you have inspected the observed configuration and are ready to manage the profile declaratively, follow these steps:
+
+1. **Inspect `status.suggestedSpec`** to see the spec-compatible translation of the remote configuration.
+2. **Copy the desired configuration sections** from `status.suggestedSpec` into the `spec` of your NextDNSProfile CR. The `suggestedSpec` provides values in the correct spec format. Use `status.observedConfig` as a reference for the raw API values.
+3. **Add `spec.name`** with the profile name.
+4. **Change `spec.mode` to `managed`** (or remove it entirely, since `managed` is the default).
+
+**Example -- transitioning from observe to managed:**
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSProfile
+metadata:
+  name: my-existing-profile
+spec:
+  # mode: managed  # This is the default, so it can be omitted
+  name: "My Profile"
+  profileID: "abc123"
+  credentialsRef:
+    name: nextdns-credentials
+  security:
+    aiThreatDetection: true
+    googleSafeBrowsing: true
+  privacy:
+    blocklists:
+      - id: nextdns-recommended
+    disguisedTrackers: true
+  settings:
+    logs:
+      enabled: true
+      retention: 30d
+```
+
+> **Transition guard:** The operator blocks switching to managed mode if `observedConfig` exists in status but the spec contains no configuration sections (security, privacy, denylist, allowlist, rewrites, parentalControl, or settings). This prevents accidentally overwriting a configured profile with empty settings. Populate at least one configuration section in the spec before switching to managed mode.
 
 ---
 

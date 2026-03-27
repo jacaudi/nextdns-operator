@@ -703,7 +703,7 @@ func TestSecuritySpec_DeepCopy_Independent(t *testing.T) {
 		DDNS:                    &falseVal,
 		Parking:                 &trueVal,
 		CSAM:                    &trueVal,
-		ThreatIntelligenceFeeds: []string{"feed-a", "feed-b"},
+		ThreatIntelligenceFeeds: &trueVal,
 	}
 
 	copied := original.DeepCopy()
@@ -711,16 +711,16 @@ func TestSecuritySpec_DeepCopy_Independent(t *testing.T) {
 	// Verify values match
 	assert.Equal(t, *original.AIThreatDetection, *copied.AIThreatDetection)
 	assert.Equal(t, *original.NRD, *copied.NRD)
-	assert.Equal(t, original.ThreatIntelligenceFeeds, copied.ThreatIntelligenceFeeds)
+	assert.Equal(t, *original.ThreatIntelligenceFeeds, *copied.ThreatIntelligenceFeeds)
 
 	// Mutate the copy — original must be unaffected
 	*copied.AIThreatDetection = false
 	*copied.NRD = true
-	copied.ThreatIntelligenceFeeds[0] = "mutated"
+	*copied.ThreatIntelligenceFeeds = false
 
 	assert.True(t, *original.AIThreatDetection, "original AIThreatDetection should still be true after mutating copy")
 	assert.False(t, *original.NRD, "original NRD should still be false after mutating copy")
-	assert.Equal(t, "feed-a", original.ThreatIntelligenceFeeds[0], "original feed should be unchanged after mutating copy")
+	assert.True(t, *original.ThreatIntelligenceFeeds, "original ThreatIntelligenceFeeds should still be true after mutating copy")
 }
 
 func TestNextDNSAllowlist_DeepCopy_Independent(t *testing.T) {

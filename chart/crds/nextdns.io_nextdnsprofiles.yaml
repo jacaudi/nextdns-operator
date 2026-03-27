@@ -15,6 +15,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
     - jsonPath: .status.profileID
       name: Profile ID
       type: string
@@ -180,10 +183,19 @@ spec:
                   - name
                   type: object
                 type: array
+              mode:
+                default: managed
+                description: |-
+                  Mode controls whether the operator manages or only observes this profile
+                  In "observe" mode, the operator reads the remote profile into status without modifying it
+                  In "managed" mode (default), the operator syncs spec to the remote profile
+                enum:
+                - observe
+                - managed
+                type: string
               name:
                 description: Name is the human-readable name shown in NextDNS dashboard
                 maxLength: 100
-                minLength: 1
                 type: string
               parentalControl:
                 description: |-
@@ -359,11 +371,10 @@ spec:
                     description: Parking blocks parked domains
                     type: boolean
                   threatIntelligenceFeeds:
-                    description: ThreatIntelligenceFeeds specifies which threat feeds
-                      to use
-                    items:
-                      type: string
-                    type: array
+                    default: true
+                    description: ThreatIntelligenceFeeds enables threat intelligence
+                      feeds
+                    type: boolean
                   typosquatting:
                     default: true
                     description: Typosquatting blocks typosquatting domains
@@ -454,7 +465,6 @@ spec:
                 type: array
             required:
             - credentialsRef
-            - name
             type: object
           status:
             description: NextDNSProfileStatus defines the observed state of NextDNSProfile
@@ -544,6 +554,221 @@ spec:
                   with NextDNS
                 format: date-time
                 type: string
+              observedConfig:
+                description: |-
+                  ObservedConfig contains the full observed state of the remote profile
+                  Populated in observe mode; cleared after first successful managed sync
+                properties:
+                  allowlist:
+                    description: Allowlist contains observed allowed domains
+                    items:
+                      description: ObservedDomainEntry represents an observed domain
+                        with active state
+                      properties:
+                        active:
+                          type: boolean
+                        domain:
+                          type: string
+                      required:
+                      - active
+                      - domain
+                      type: object
+                    type: array
+                  blockedTLDs:
+                    description: BlockedTLDs contains observed blocked TLDs
+                    items:
+                      type: string
+                    type: array
+                  denylist:
+                    description: Denylist contains observed denied domains
+                    items:
+                      description: ObservedDomainEntry represents an observed domain
+                        with active state
+                      properties:
+                        active:
+                          type: boolean
+                        domain:
+                          type: string
+                      required:
+                      - active
+                      - domain
+                      type: object
+                    type: array
+                  name:
+                    description: Name is the profile name as shown in NextDNS dashboard
+                    type: string
+                  parentalControl:
+                    description: ParentalControl contains observed parental control
+                      settings
+                    properties:
+                      categories:
+                        items:
+                          description: ObservedCategoryEntry represents an observed
+                            content category
+                          properties:
+                            active:
+                              type: boolean
+                            id:
+                              type: string
+                          required:
+                          - active
+                          - id
+                          type: object
+                        type: array
+                      safeSearch:
+                        type: boolean
+                      services:
+                        items:
+                          description: ObservedServiceEntry represents an observed
+                            blocked service
+                          properties:
+                            active:
+                              type: boolean
+                            id:
+                              type: string
+                          required:
+                          - active
+                          - id
+                          type: object
+                        type: array
+                      youtubeRestrictedMode:
+                        type: boolean
+                    required:
+                    - safeSearch
+                    - youtubeRestrictedMode
+                    type: object
+                  privacy:
+                    description: Privacy contains observed privacy settings
+                    properties:
+                      allowAffiliate:
+                        type: boolean
+                      blocklists:
+                        items:
+                          description: ObservedBlocklistEntry represents an observed
+                            privacy blocklist
+                          properties:
+                            id:
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                      disguisedTrackers:
+                        type: boolean
+                      natives:
+                        items:
+                          description: ObservedNativeEntry represents an observed
+                            native tracker protection
+                          properties:
+                            id:
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                    required:
+                    - allowAffiliate
+                    - disguisedTrackers
+                    type: object
+                  rewrites:
+                    description: Rewrites contains observed DNS rewrites
+                    items:
+                      description: ObservedRewriteEntry represents an observed DNS
+                        rewrite
+                      properties:
+                        content:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - content
+                      - name
+                      type: object
+                    type: array
+                  security:
+                    description: Security contains observed security settings
+                    properties:
+                      aiThreatDetection:
+                        type: boolean
+                      cryptojacking:
+                        type: boolean
+                      csam:
+                        type: boolean
+                      ddns:
+                        type: boolean
+                      dga:
+                        type: boolean
+                      dnsRebinding:
+                        type: boolean
+                      googleSafeBrowsing:
+                        type: boolean
+                      idnHomographs:
+                        type: boolean
+                      nrd:
+                        type: boolean
+                      parking:
+                        type: boolean
+                      threatIntelligenceFeeds:
+                        type: boolean
+                      typosquatting:
+                        type: boolean
+                    required:
+                    - aiThreatDetection
+                    - cryptojacking
+                    - csam
+                    - ddns
+                    - dga
+                    - dnsRebinding
+                    - googleSafeBrowsing
+                    - idnHomographs
+                    - nrd
+                    - parking
+                    - threatIntelligenceFeeds
+                    - typosquatting
+                    type: object
+                  settings:
+                    description: Settings contains observed general settings
+                    properties:
+                      blockPage:
+                        description: ObservedBlockPage represents observed block page
+                          settings
+                        properties:
+                          enabled:
+                            type: boolean
+                        required:
+                        - enabled
+                        type: object
+                      logs:
+                        description: ObservedLogs represents observed logging settings
+                        properties:
+                          enabled:
+                            type: boolean
+                          retention:
+                            type: integer
+                        required:
+                        - enabled
+                        type: object
+                      performance:
+                        description: ObservedPerformance represents observed performance
+                          settings
+                        properties:
+                          cacheBoost:
+                            type: boolean
+                          cnameFlattening:
+                            type: boolean
+                          ecs:
+                            type: boolean
+                        required:
+                        - cacheBoost
+                        - cnameFlattening
+                        - ecs
+                        type: object
+                      web3:
+                        type: boolean
+                    required:
+                    - web3
+                    type: object
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the generation last processed by
                   the controller
@@ -627,6 +852,300 @@ spec:
                       - ready
                       type: object
                     type: array
+                type: object
+              suggestedSpec:
+                description: |-
+                  SuggestedSpec contains a spec-compatible translation of the observed config
+                  Copy fields from this into spec when transitioning from observe to managed mode
+                  Populated in observe mode; cleared after first successful managed sync
+                properties:
+                  allowlist:
+                    description: Allowlist contains suggested allowed domains
+                    items:
+                      description: DomainEntry represents a domain in allow/deny lists
+                      properties:
+                        active:
+                          default: true
+                          description: Active indicates if this entry is enabled
+                          type: boolean
+                        domain:
+                          description: Domain is the domain name (supports wildcards
+                            like *.example.com)
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$
+                          type: string
+                        reason:
+                          description: Reason documents why this domain is in the
+                            list
+                          type: string
+                      required:
+                      - domain
+                      type: object
+                    type: array
+                  blockedTLDs:
+                    description: |-
+                      BlockedTLDs lists TLDs from the remote profile
+                      These must be placed in a NextDNSTLDList CR and referenced via spec.tldListRefs
+                    items:
+                      type: string
+                    type: array
+                  denylist:
+                    description: Denylist contains suggested denied domains
+                    items:
+                      description: DomainEntry represents a domain in allow/deny lists
+                      properties:
+                        active:
+                          default: true
+                          description: Active indicates if this entry is enabled
+                          type: boolean
+                        domain:
+                          description: Domain is the domain name (supports wildcards
+                            like *.example.com)
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$
+                          type: string
+                        reason:
+                          description: Reason documents why this domain is in the
+                            list
+                          type: string
+                      required:
+                      - domain
+                      type: object
+                    type: array
+                  name:
+                    description: Name is the profile name
+                    type: string
+                  parentalControl:
+                    description: ParentalControl contains suggested parental control
+                      settings
+                    properties:
+                      categories:
+                        description: Categories specifies content categories to block
+                        items:
+                          description: CategoryEntry references a content category
+                          properties:
+                            active:
+                              default: true
+                              description: Active indicates if this category is blocked
+                              type: boolean
+                            id:
+                              description: ID is the category identifier (e.g., "gambling",
+                                "adult", "violence")
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                      safeSearch:
+                        default: false
+                        description: SafeSearch enforces safe search on search engines
+                        type: boolean
+                      services:
+                        description: Services specifies specific services to block
+                        items:
+                          description: ServiceEntry references a specific service
+                          properties:
+                            active:
+                              default: true
+                              description: Active indicates if this service is blocked
+                              type: boolean
+                            id:
+                              description: ID is the service identifier (e.g., "tiktok",
+                                "youtube", "facebook")
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                      youtubeRestrictedMode:
+                        default: false
+                        description: YouTubeRestrictedMode enforces YouTube restricted
+                          mode
+                        type: boolean
+                    type: object
+                  privacy:
+                    description: Privacy contains suggested privacy settings
+                    properties:
+                      allowAffiliate:
+                        default: false
+                        description: AllowAffiliate allows affiliate & tracking links
+                        type: boolean
+                      blocklists:
+                        description: Blocklists specifies which ad/tracker blocklists
+                          to enable
+                        items:
+                          description: BlocklistEntry references a privacy blocklist
+                          properties:
+                            active:
+                              default: true
+                              description: Active indicates if this blocklist is enabled
+                              type: boolean
+                            id:
+                              description: ID is the blocklist identifier (e.g., "nextdns-recommended",
+                                "oisd")
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                      disguisedTrackers:
+                        default: true
+                        description: DisguisedTrackers blocks trackers using CNAME
+                          cloaking
+                        type: boolean
+                      natives:
+                        description: Natives specifies native tracking protection
+                          (per-vendor)
+                        items:
+                          description: NativeEntry configures native tracker blocking
+                            for a vendor
+                          properties:
+                            active:
+                              default: true
+                              description: Active indicates if blocking is enabled
+                                for this vendor
+                              type: boolean
+                            id:
+                              description: ID is the vendor identifier (e.g., "apple",
+                                "windows", "samsung")
+                              type: string
+                          required:
+                          - id
+                          type: object
+                        type: array
+                    type: object
+                  rewrites:
+                    description: Rewrites contains suggested DNS rewrites
+                    items:
+                      description: RewriteEntry defines a DNS rewrite rule
+                      properties:
+                        active:
+                          default: true
+                          description: Active indicates if this rewrite is enabled
+                          type: boolean
+                        from:
+                          description: From is the source domain
+                          type: string
+                        to:
+                          description: To is the target (IP or domain)
+                          type: string
+                      required:
+                      - from
+                      - to
+                      type: object
+                    type: array
+                  security:
+                    description: Security contains suggested security settings
+                    properties:
+                      aiThreatDetection:
+                        default: true
+                        description: AIThreatDetection enables AI-based threat detection
+                        type: boolean
+                      cryptojacking:
+                        default: true
+                        description: Cryptojacking blocks cryptomining scripts
+                        type: boolean
+                      csam:
+                        default: true
+                        description: CSAM blocks child sexual abuse material
+                        type: boolean
+                      ddns:
+                        default: false
+                        description: DDNS blocks dynamic DNS hostnames
+                        type: boolean
+                      dga:
+                        default: true
+                        description: DGA blocks algorithmically-generated domains
+                        type: boolean
+                      dnsRebinding:
+                        default: true
+                        description: DNSRebinding protects against DNS rebinding attacks
+                        type: boolean
+                      googleSafeBrowsing:
+                        default: true
+                        description: GoogleSafeBrowsing enables Google Safe Browsing
+                          protection
+                        type: boolean
+                      idnHomographs:
+                        default: true
+                        description: IDNHomographs blocks IDN homograph attacks
+                        type: boolean
+                      nrd:
+                        default: false
+                        description: NRD blocks newly registered domains
+                        type: boolean
+                      parking:
+                        default: true
+                        description: Parking blocks parked domains
+                        type: boolean
+                      threatIntelligenceFeeds:
+                        default: true
+                        description: ThreatIntelligenceFeeds enables threat intelligence
+                          feeds
+                        type: boolean
+                      typosquatting:
+                        default: true
+                        description: Typosquatting blocks typosquatting domains
+                        type: boolean
+                    type: object
+                  settings:
+                    description: |-
+                      Settings contains suggested general settings
+                      Note: logClientsIPs and logDomains are omitted (not exposed by API)
+                    properties:
+                      blockPage:
+                        description: BlockPage configures the block page
+                        properties:
+                          enabled:
+                            default: true
+                            description: Enabled shows a block page instead of failing
+                              silently
+                            type: boolean
+                        type: object
+                      logs:
+                        description: Logs configures query logging
+                        properties:
+                          enabled:
+                            default: true
+                            description: Enabled turns logging on/off
+                            type: boolean
+                          logClientsIPs:
+                            default: false
+                            description: LogClientsIPs logs client IP addresses
+                            type: boolean
+                          logDomains:
+                            default: true
+                            description: LogDomains logs queried domains
+                            type: boolean
+                          retention:
+                            default: 7d
+                            description: Retention specifies log retention period
+                              (1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y)
+                            type: string
+                        type: object
+                      performance:
+                        description: Performance configures performance optimizations
+                        properties:
+                          cacheBoost:
+                            default: true
+                            description: CacheBoost enables extended caching
+                            type: boolean
+                          cnameFlattening:
+                            default: true
+                            description: CNAMEFlattening enables CNAME flattening
+                            type: boolean
+                          ecs:
+                            default: true
+                            description: ECS enables EDNS Client Subnet
+                            type: boolean
+                        type: object
+                      web3:
+                        default: false
+                        description: Web3 enables Web3 domain resolution
+                        type: boolean
+                    type: object
                 type: object
             type: object
         type: object

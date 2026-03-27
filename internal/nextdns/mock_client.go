@@ -58,27 +58,32 @@ type MockClient struct {
 	Rewrites map[string][]*nextdns.Rewrites
 
 	// Error injection for testing error paths
-	CreateProfileError         error
-	GetProfileError            error
-	UpdateProfileError         error
-	DeleteProfileError         error
-	UpdateSecurityError        error
-	GetSecurityError           error
-	UpdatePrivacyError         error
-	GetPrivacyError            error
-	SyncPrivacyBlocklistsError error
-	SyncPrivacyNativesError    error
-	UpdateParentalControlError error
-	GetParentalControlError    error
-	SyncDenylistError          error
-	SyncAllowlistError         error
-	SyncSecurityTLDsError      error
-	GetDenylistError           error
-	GetAllowlistError          error
-	GetSecurityTLDsError       error
-	UpdateSettingsError        error
-	SyncRewritesError          error
-	GetRewritesError           error
+	CreateProfileError                error
+	GetProfileError                   error
+	UpdateProfileError                error
+	DeleteProfileError                error
+	UpdateSecurityError               error
+	GetSecurityError                  error
+	UpdatePrivacyError                error
+	GetPrivacyError                   error
+	SyncPrivacyBlocklistsError        error
+	SyncPrivacyNativesError           error
+	UpdateParentalControlError        error
+	GetParentalControlError           error
+	SyncDenylistError                 error
+	SyncAllowlistError                error
+	SyncSecurityTLDsError             error
+	GetDenylistError                  error
+	GetAllowlistError                 error
+	GetSecurityTLDsError              error
+	UpdateSettingsError               error
+	SyncRewritesError                 error
+	GetSettingsError                  error
+	GetPrivacyBlocklistsError         error
+	GetPrivacyNativesError            error
+	GetParentalControlCategoriesError error
+	GetParentalControlServicesError   error
+	GetRewritesError                  error
 
 	// Call tracking
 	Calls []MockCall
@@ -622,6 +627,76 @@ func (m *MockClient) DeletePrivacyNative(ctx context.Context, profileID string, 
 	return nil
 }
 
+// GetSettings retrieves mock settings
+func (m *MockClient) GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error) {
+	m.recordCall("GetSettings", profileID)
+	if m.GetSettingsError != nil {
+		return nil, m.GetSettingsError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	settings, exists := m.Settings[profileID]
+	if !exists {
+		return &nextdns.Settings{}, nil
+	}
+
+	return settings, nil
+}
+
+// GetPrivacyBlocklists retrieves mock privacy blocklists
+func (m *MockClient) GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*nextdns.PrivacyBlocklists, error) {
+	m.recordCall("GetPrivacyBlocklists", profileID)
+	if m.GetPrivacyBlocklistsError != nil {
+		return nil, m.GetPrivacyBlocklistsError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.PrivacyBlocklists[profileID], nil
+}
+
+// GetPrivacyNatives retrieves mock privacy natives
+func (m *MockClient) GetPrivacyNatives(ctx context.Context, profileID string) ([]*nextdns.PrivacyNatives, error) {
+	m.recordCall("GetPrivacyNatives", profileID)
+	if m.GetPrivacyNativesError != nil {
+		return nil, m.GetPrivacyNativesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.PrivacyNatives[profileID], nil
+}
+
+// GetParentalControlCategories retrieves mock parental control categories
+func (m *MockClient) GetParentalControlCategories(ctx context.Context, profileID string) ([]*nextdns.ParentalControlCategories, error) {
+	m.recordCall("GetParentalControlCategories", profileID)
+	if m.GetParentalControlCategoriesError != nil {
+		return nil, m.GetParentalControlCategoriesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.ParentalControlCategories[profileID], nil
+}
+
+// GetParentalControlServices retrieves mock parental control services
+func (m *MockClient) GetParentalControlServices(ctx context.Context, profileID string) ([]*nextdns.ParentalControlServices, error) {
+	m.recordCall("GetParentalControlServices", profileID)
+	if m.GetParentalControlServicesError != nil {
+		return nil, m.GetParentalControlServicesError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.ParentalControlServices[profileID], nil
+}
+
 // SyncRewrites syncs mock rewrites using diff-based create/delete
 func (m *MockClient) SyncRewrites(ctx context.Context, profileID string, entries []RewriteEntry) error {
 	m.recordCall("SyncRewrites", profileID, entries)
@@ -751,6 +826,11 @@ func (m *MockClient) Reset() {
 	m.GetSecurityTLDsError = nil
 	m.UpdateSettingsError = nil
 	m.SyncRewritesError = nil
+	m.GetSettingsError = nil
+	m.GetPrivacyBlocklistsError = nil
+	m.GetPrivacyNativesError = nil
+	m.GetParentalControlCategoriesError = nil
+	m.GetParentalControlServicesError = nil
 	m.GetRewritesError = nil
 }
 

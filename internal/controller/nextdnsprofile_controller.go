@@ -41,6 +41,9 @@ const (
 
 	// ConditionTypeConfigImported indicates whether config import from ConfigMap succeeded
 	ConditionTypeConfigImported = "ConfigImported"
+
+	// ConditionTypeObserveOnly indicates the profile is in observe-only mode
+	ConditionTypeObserveOnly = "ObserveOnly"
 )
 
 // ClientFactory is a function that creates a NextDNS client
@@ -127,6 +130,50 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			logger.Error(updateErr, "Failed to update status")
 		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Log deprecation warning if configImportRef is set
+	if profile.Spec.ConfigImportRef != nil {
+		logger.Info("DEPRECATION WARNING: configImportRef is deprecated and will be removed in a future release. Use observe mode to import existing profiles instead.")
+	}
+
+	// Determine mode (default: managed)
+	mode := profile.Spec.Mode
+	if mode == "" {
+		mode = nextdnsv1alpha1.ProfileModeManaged
+	}
+
+	// Observe mode: read-only reconciliation
+	if mode == nextdnsv1alpha1.ProfileModeObserve {
+		return r.reconcileObserveMode(ctx, profile, apiKey)
+	}
+
+	// Managed mode: validate name is set
+	if profile.Spec.Name == "" {
+		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "NameRequired",
+			"spec.name is required in managed mode")
+		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Transition guard: block if switching from observe to managed with empty spec
+	if profile.Status.ObservedConfig != nil && !specHasConfig(&profile.Spec) {
+		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "TransitionBlocked",
+			"Cannot switch to managed mode with empty spec. Copy desired config from status.observedConfig into spec first.")
+		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Clear observedConfig on first successful managed reconciliation
+	if profile.Status.ObservedConfig != nil {
+		profile.Status.ObservedConfig = nil
+		profile.Status.SuggestedSpec = nil
+		r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionFalse, "ManagedMode",
+			"Profile transitioned to managed mode")
 	}
 
 	// Import configuration from ConfigMap if configured
@@ -243,7 +290,9 @@ func (r *NextDNSProfileReconciler) handleDeletion(ctx context.Context, profile *
 
 		// Only delete the profile from NextDNS if we created it (no profileID was specified in spec)
 		// and we have a profile ID in status
-		if profile.Spec.ProfileID == "" && profile.Status.ProfileID != "" {
+		if profile.Spec.Mode == nextdnsv1alpha1.ProfileModeObserve {
+			logger.Info("Skipping NextDNS profile deletion (observe mode, profile not owned)", "profileID", profile.Status.ProfileID)
+		} else if profile.Spec.ProfileID == "" && profile.Status.ProfileID != "" {
 			// Get API credentials
 			apiKey, err := r.getAPIKey(ctx, profile)
 			if err != nil {
@@ -487,17 +536,18 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 	// Sync security settings
 	if profile.Spec.Security != nil {
 		securityConfig := &nextdns.SecurityConfig{
-			AIThreatDetection:  boolValue(profile.Spec.Security.AIThreatDetection, true),
-			GoogleSafeBrowsing: boolValue(profile.Spec.Security.GoogleSafeBrowsing, true),
-			Cryptojacking:      boolValue(profile.Spec.Security.Cryptojacking, true),
-			DNSRebinding:       boolValue(profile.Spec.Security.DNSRebinding, true),
-			IDNHomographs:      boolValue(profile.Spec.Security.IDNHomographs, true),
-			Typosquatting:      boolValue(profile.Spec.Security.Typosquatting, true),
-			DGA:                boolValue(profile.Spec.Security.DGA, true),
-			NRD:                boolValue(profile.Spec.Security.NRD, false),
-			DDNS:               boolValue(profile.Spec.Security.DDNS, false),
-			Parking:            boolValue(profile.Spec.Security.Parking, true),
-			CSAM:               boolValue(profile.Spec.Security.CSAM, true),
+			ThreatIntelligenceFeeds: boolValue(profile.Spec.Security.ThreatIntelligenceFeeds, true),
+			AIThreatDetection:       boolValue(profile.Spec.Security.AIThreatDetection, true),
+			GoogleSafeBrowsing:      boolValue(profile.Spec.Security.GoogleSafeBrowsing, true),
+			Cryptojacking:           boolValue(profile.Spec.Security.Cryptojacking, true),
+			DNSRebinding:            boolValue(profile.Spec.Security.DNSRebinding, true),
+			IDNHomographs:           boolValue(profile.Spec.Security.IDNHomographs, true),
+			Typosquatting:           boolValue(profile.Spec.Security.Typosquatting, true),
+			DGA:                     boolValue(profile.Spec.Security.DGA, true),
+			NRD:                     boolValue(profile.Spec.Security.NRD, false),
+			DDNS:                    boolValue(profile.Spec.Security.DDNS, false),
+			Parking:                 boolValue(profile.Spec.Security.Parking, true),
+			CSAM:                    boolValue(profile.Spec.Security.CSAM, true),
 		}
 		if err := client.UpdateSecurity(ctx, profileID, securityConfig); err != nil {
 			return fmt.Errorf("failed to update security settings: %w", err)
@@ -644,6 +694,380 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 	return nil
 }
 
+// reconcileObserveMode handles reconciliation when mode is "observe"
+func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile, apiKey string) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Validate profileID is set
+	if profile.Spec.ProfileID == "" {
+		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ProfileIDRequired",
+			"spec.profileID is required in observe mode")
+		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Create NextDNS client
+	factory := r.ClientFactory
+	if factory == nil {
+		factory = DefaultClientFactory
+	}
+	client, err := factory(apiKey)
+	if err != nil {
+		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ObserveFailed",
+			fmt.Sprintf("Failed to create API client: %v", err))
+		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+	}
+
+	// Read full profile from NextDNS
+	observed, err := r.readFullProfile(ctx, client, profile.Spec.ProfileID)
+	if err != nil {
+		logger.Error(err, "Failed to read full profile from NextDNS")
+		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ObserveFailed")
+		r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ObserveFailed", err.Error())
+		if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+	}
+
+	// Update status
+	profile.Status.ProfileID = profile.Spec.ProfileID
+	profile.Status.Fingerprint = profile.Spec.ProfileID + ".dns.nextdns.io"
+	profile.Status.ObservedConfig = observed
+	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
+	now := metav1.Now()
+	profile.Status.LastSyncTime = &now
+	profile.Status.ObservedGeneration = profile.Generation
+
+	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
+	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "ObserveSuccess", "Remote profile read successfully")
+	r.setCondition(profile, ConditionTypeReady, metav1.ConditionTrue, "Observed", "Profile observed successfully")
+
+	metrics.RecordProfileSync(profile.Name, profile.Namespace)
+
+	if err := r.Status().Update(ctx, profile); err != nil {
+		logger.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Successfully observed NextDNS profile",
+		"profileID", profile.Spec.ProfileID,
+		"profileName", observed.Name)
+
+	syncInterval := CalculateSyncInterval(r.SyncPeriod)
+	return ctrl.Result{RequeueAfter: syncInterval}, nil
+}
+
+// readFullProfile reads all sections of a NextDNS profile
+func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client nextdns.ClientInterface, profileID string) (*nextdnsv1alpha1.ObservedConfig, error) {
+	observed := &nextdnsv1alpha1.ObservedConfig{}
+
+	// Get profile name
+	profile, err := client.GetProfile(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+	observed.Name = profile.Name
+
+	// Get security settings
+	security, err := client.GetSecurity(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get security: %w", err)
+	}
+	observed.Security = &nextdnsv1alpha1.ObservedSecurity{
+		AIThreatDetection:       security.AiThreatDetection,
+		ThreatIntelligenceFeeds: security.ThreatIntelligenceFeeds,
+		GoogleSafeBrowsing:      security.GoogleSafeBrowsing,
+		Cryptojacking:           security.Cryptojacking,
+		DNSRebinding:            security.DNSRebinding,
+		IDNHomographs:           security.IdnHomographs,
+		Typosquatting:           security.Typosquatting,
+		DGA:                     security.Dga,
+		NRD:                     security.Nrd,
+		DDNS:                    security.DDNS,
+		Parking:                 security.Parking,
+		CSAM:                    security.Csam,
+	}
+
+	// Get privacy settings
+	privacy, err := client.GetPrivacy(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get privacy: %w", err)
+	}
+	observed.Privacy = &nextdnsv1alpha1.ObservedPrivacy{
+		DisguisedTrackers: privacy.DisguisedTrackers,
+		AllowAffiliate:    privacy.AllowAffiliate,
+	}
+
+	// Get privacy blocklists
+	blocklists, err := client.GetPrivacyBlocklists(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get privacy blocklists: %w", err)
+	}
+	for _, bl := range blocklists {
+		observed.Privacy.Blocklists = append(observed.Privacy.Blocklists, nextdnsv1alpha1.ObservedBlocklistEntry{ID: bl.ID})
+	}
+
+	// Get privacy natives
+	natives, err := client.GetPrivacyNatives(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get privacy natives: %w", err)
+	}
+	for _, n := range natives {
+		observed.Privacy.Natives = append(observed.Privacy.Natives, nextdnsv1alpha1.ObservedNativeEntry{ID: n.ID})
+	}
+
+	// Get parental control settings
+	pc, err := client.GetParentalControl(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parental control: %w", err)
+	}
+	observed.ParentalControl = &nextdnsv1alpha1.ObservedParentalControl{
+		SafeSearch:            pc.SafeSearch,
+		YouTubeRestrictedMode: pc.YoutubeRestrictedMode,
+	}
+
+	// Get parental control categories
+	categories, err := client.GetParentalControlCategories(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parental control categories: %w", err)
+	}
+	for _, cat := range categories {
+		observed.ParentalControl.Categories = append(observed.ParentalControl.Categories, nextdnsv1alpha1.ObservedCategoryEntry{
+			ID:     cat.ID,
+			Active: cat.Active,
+		})
+	}
+
+	// Get parental control services
+	services, err := client.GetParentalControlServices(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parental control services: %w", err)
+	}
+	for _, svc := range services {
+		observed.ParentalControl.Services = append(observed.ParentalControl.Services, nextdnsv1alpha1.ObservedServiceEntry{
+			ID:     svc.ID,
+			Active: svc.Active,
+		})
+	}
+
+	// Get denylist
+	denylist, err := client.GetDenylist(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get denylist: %w", err)
+	}
+	for _, d := range denylist {
+		observed.Denylist = append(observed.Denylist, nextdnsv1alpha1.ObservedDomainEntry{
+			Domain: d.ID,
+			Active: d.Active,
+		})
+	}
+
+	// Get allowlist
+	allowlist, err := client.GetAllowlist(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get allowlist: %w", err)
+	}
+	for _, a := range allowlist {
+		observed.Allowlist = append(observed.Allowlist, nextdnsv1alpha1.ObservedDomainEntry{
+			Domain: a.ID,
+			Active: a.Active,
+		})
+	}
+
+	// Get blocked TLDs
+	tlds, err := client.GetSecurityTLDs(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get security TLDs: %w", err)
+	}
+	for _, tld := range tlds {
+		observed.BlockedTLDs = append(observed.BlockedTLDs, tld.ID)
+	}
+
+	// Get settings
+	settings, err := client.GetSettings(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+	observed.Settings = &nextdnsv1alpha1.ObservedSettings{
+		Web3: settings.Web3,
+	}
+	if settings.Logs != nil {
+		observed.Settings.Logs = &nextdnsv1alpha1.ObservedLogs{
+			Enabled:   settings.Logs.Enabled,
+			Retention: settings.Logs.Retention,
+		}
+	}
+	if settings.BlockPage != nil {
+		observed.Settings.BlockPage = &nextdnsv1alpha1.ObservedBlockPage{
+			Enabled: settings.BlockPage.Enabled,
+		}
+	}
+	if settings.Performance != nil {
+		observed.Settings.Performance = &nextdnsv1alpha1.ObservedPerformance{
+			ECS:             settings.Performance.Ecs,
+			CacheBoost:      settings.Performance.CacheBoost,
+			CNAMEFlattening: settings.Performance.CnameFlattening,
+		}
+	}
+
+	// Get rewrites
+	rewrites, err := client.GetRewrites(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rewrites: %w", err)
+	}
+	for _, rw := range rewrites {
+		observed.Rewrites = append(observed.Rewrites, nextdnsv1alpha1.ObservedRewriteEntry{
+			Name:    rw.Name,
+			Content: rw.Content,
+		})
+	}
+
+	return observed, nil
+}
+
+// buildSuggestedSpec translates an ObservedConfig into spec-compatible types
+// that users can copy directly into their NextDNSProfile spec.
+// Fields not available from the API are omitted (threatIntelligenceFeeds, logClientsIPs, logDomains).
+func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alpha1.SuggestedSpec {
+	if observed == nil {
+		return nil
+	}
+
+	suggested := &nextdnsv1alpha1.SuggestedSpec{
+		Name:        observed.Name,
+		BlockedTLDs: observed.BlockedTLDs,
+	}
+
+	// Security: bool -> *bool
+	if observed.Security != nil {
+		suggested.Security = &nextdnsv1alpha1.SecuritySpec{
+			ThreatIntelligenceFeeds: boolPtr(observed.Security.ThreatIntelligenceFeeds),
+			AIThreatDetection:       boolPtr(observed.Security.AIThreatDetection),
+			GoogleSafeBrowsing:      boolPtr(observed.Security.GoogleSafeBrowsing),
+			Cryptojacking:           boolPtr(observed.Security.Cryptojacking),
+			DNSRebinding:            boolPtr(observed.Security.DNSRebinding),
+			IDNHomographs:           boolPtr(observed.Security.IDNHomographs),
+			Typosquatting:           boolPtr(observed.Security.Typosquatting),
+			DGA:                     boolPtr(observed.Security.DGA),
+			NRD:                     boolPtr(observed.Security.NRD),
+			DDNS:                    boolPtr(observed.Security.DDNS),
+			Parking:                 boolPtr(observed.Security.Parking),
+			CSAM:                    boolPtr(observed.Security.CSAM),
+		}
+	}
+
+	// Privacy: bool -> *bool, blocklists/natives default Active to true
+	if observed.Privacy != nil {
+		suggested.Privacy = &nextdnsv1alpha1.PrivacySpec{
+			DisguisedTrackers: boolPtr(observed.Privacy.DisguisedTrackers),
+			AllowAffiliate:    boolPtr(observed.Privacy.AllowAffiliate),
+		}
+		for _, bl := range observed.Privacy.Blocklists {
+			suggested.Privacy.Blocklists = append(suggested.Privacy.Blocklists, nextdnsv1alpha1.BlocklistEntry{
+				ID:     bl.ID,
+				Active: boolPtr(true),
+			})
+		}
+		for _, n := range observed.Privacy.Natives {
+			suggested.Privacy.Natives = append(suggested.Privacy.Natives, nextdnsv1alpha1.NativeEntry{
+				ID:     n.ID,
+				Active: boolPtr(true),
+			})
+		}
+	}
+
+	// ParentalControl: bool -> *bool, categories/services preserve Active as *bool
+	if observed.ParentalControl != nil {
+		suggested.ParentalControl = &nextdnsv1alpha1.ParentalControlSpec{
+			SafeSearch:            boolPtr(observed.ParentalControl.SafeSearch),
+			YouTubeRestrictedMode: boolPtr(observed.ParentalControl.YouTubeRestrictedMode),
+		}
+		for _, cat := range observed.ParentalControl.Categories {
+			suggested.ParentalControl.Categories = append(suggested.ParentalControl.Categories, nextdnsv1alpha1.CategoryEntry{
+				ID:     cat.ID,
+				Active: boolPtr(cat.Active),
+			})
+		}
+		for _, svc := range observed.ParentalControl.Services {
+			suggested.ParentalControl.Services = append(suggested.ParentalControl.Services, nextdnsv1alpha1.ServiceEntry{
+				ID:     svc.ID,
+				Active: boolPtr(svc.Active),
+			})
+		}
+	}
+
+	// Denylist/Allowlist: Active bool -> *bool
+	for _, d := range observed.Denylist {
+		suggested.Denylist = append(suggested.Denylist, nextdnsv1alpha1.DomainEntry{
+			Domain: d.Domain,
+			Active: boolPtr(d.Active),
+		})
+	}
+	for _, a := range observed.Allowlist {
+		suggested.Allowlist = append(suggested.Allowlist, nextdnsv1alpha1.DomainEntry{
+			Domain: a.Domain,
+			Active: boolPtr(a.Active),
+		})
+	}
+
+	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
+	for _, rw := range observed.Rewrites {
+		suggested.Rewrites = append(suggested.Rewrites, nextdnsv1alpha1.RewriteEntry{
+			From:   rw.Name,
+			To:     rw.Content,
+			Active: boolPtr(true),
+		})
+	}
+
+	// Settings: bool -> *bool, retention int -> string
+	if observed.Settings != nil {
+		suggested.Settings = &nextdnsv1alpha1.SettingsSpec{
+			Web3: boolPtr(observed.Settings.Web3),
+		}
+		if observed.Settings.Logs != nil {
+			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{
+				Enabled:   boolPtr(observed.Settings.Logs.Enabled),
+				Retention: formatRetentionString(observed.Settings.Logs.Retention),
+				// LogClientsIPs and LogDomains intentionally omitted (not available from API)
+			}
+		}
+		if observed.Settings.BlockPage != nil {
+			suggested.Settings.BlockPage = &nextdnsv1alpha1.BlockPageSpec{
+				Enabled: boolPtr(observed.Settings.BlockPage.Enabled),
+			}
+		}
+		if observed.Settings.Performance != nil {
+			suggested.Settings.Performance = &nextdnsv1alpha1.PerformanceSpec{
+				ECS:             boolPtr(observed.Settings.Performance.ECS),
+				CacheBoost:      boolPtr(observed.Settings.Performance.CacheBoost),
+				CNAMEFlattening: boolPtr(observed.Settings.Performance.CNAMEFlattening),
+			}
+		}
+	}
+
+	return suggested
+}
+
+// specHasConfig checks if the spec has any configuration sections populated
+func specHasConfig(spec *nextdnsv1alpha1.NextDNSProfileSpec) bool {
+	return spec.Security != nil ||
+		spec.Privacy != nil ||
+		spec.ParentalControl != nil ||
+		spec.Settings != nil ||
+		len(spec.Denylist) > 0 ||
+		len(spec.Allowlist) > 0 ||
+		len(spec.Rewrites) > 0 ||
+		len(spec.DenylistRefs) > 0 ||
+		len(spec.AllowlistRefs) > 0 ||
+		len(spec.TLDListRefs) > 0
+}
+
 // reconcileConfigMap creates or updates the ConfigMap with connection details
 func (r *NextDNSProfileReconciler) reconcileConfigMap(ctx context.Context, profile *nextdnsv1alpha1.NextDNSProfile) error {
 	// Skip if ConfigMapRef is not enabled
@@ -762,6 +1186,27 @@ func parseRetentionDays(retention string) int {
 	}
 
 	return 7 // default
+}
+
+// boolPtr returns a pointer to a bool value
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+// formatRetentionString converts a retention value in days to the spec string format
+func formatRetentionString(days int) string {
+	switch days {
+	case 0:
+		// Sub-day retentions (1h, 6h) round to 0 days in the API.
+		// Map to 1h as the most conservative sub-day value.
+		return "1h"
+	case 365:
+		return "1y"
+	case 730:
+		return "2y"
+	default:
+		return fmt.Sprintf("%dd", days)
+	}
 }
 
 // setCondition sets a condition on the profile

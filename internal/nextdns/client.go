@@ -781,3 +781,88 @@ func (c *Client) GetParentalControl(ctx context.Context, profileID string) (*nex
 
 	return pc, nil
 }
+
+// GetSettings retrieves the current settings for a profile
+func (c *Client) GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error) {
+	start := time.Now()
+	request := &nextdns.GetSettingsRequest{
+		ProfileID: profileID,
+	}
+
+	settings, err := c.client.Settings.Get(ctx, request)
+	metrics.RecordAPIRequest("GetSettings", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	return settings, nil
+}
+
+// GetPrivacyBlocklists retrieves the current privacy blocklists for a profile
+func (c *Client) GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*nextdns.PrivacyBlocklists, error) {
+	start := time.Now()
+	request := &nextdns.ListPrivacyBlocklistsRequest{
+		ProfileID: profileID,
+	}
+
+	list, err := c.client.PrivacyBlocklists.List(ctx, request)
+	metrics.RecordAPIRequest("GetPrivacyBlocklists", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get privacy blocklists: %w", err)
+	}
+
+	return list, nil
+}
+
+// GetPrivacyNatives retrieves the current privacy natives for a profile
+func (c *Client) GetPrivacyNatives(ctx context.Context, profileID string) ([]*nextdns.PrivacyNatives, error) {
+	start := time.Now()
+	request := &nextdns.ListPrivacyNativesRequest{
+		ProfileID: profileID,
+	}
+
+	list, err := c.client.PrivacyNatives.List(ctx, request)
+	metrics.RecordAPIRequest("GetPrivacyNatives", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get privacy natives: %w", err)
+	}
+
+	return list, nil
+}
+
+// GetParentalControlCategories retrieves the current parental control categories for a profile
+func (c *Client) GetParentalControlCategories(ctx context.Context, profileID string) ([]*nextdns.ParentalControlCategories, error) {
+	start := time.Now()
+	request := &nextdns.ListParentalControlCategoriesRequest{
+		ProfileID: profileID,
+	}
+
+	list, err := c.client.ParentalControlCategories.List(ctx, request)
+	metrics.RecordAPIRequest("GetParentalControlCategories", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parental control categories: %w", err)
+	}
+
+	return list, nil
+}
+
+// GetParentalControlServices retrieves the current parental control services for a profile
+func (c *Client) GetParentalControlServices(ctx context.Context, profileID string) ([]*nextdns.ParentalControlServices, error) {
+	start := time.Now()
+	request := &nextdns.ListParentalControlServicesRequest{
+		ProfileID: profileID,
+	}
+
+	list, err := c.client.ParentalControlServices.List(ctx, request)
+	metrics.RecordAPIRequest("GetParentalControlServices", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parental control services: %w", err)
+	}
+
+	return list, nil
+}
