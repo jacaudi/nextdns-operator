@@ -294,17 +294,23 @@ func (r *NextDNSProfileReconciler) getAPIKey(ctx context.Context, profile *nextd
 		secretKey = "api-key"
 	}
 
+	// Use credentialsRef.namespace if set, otherwise default to the profile's namespace
+	secretNamespace := profile.Spec.CredentialsRef.Namespace
+	if secretNamespace == "" {
+		secretNamespace = profile.Namespace
+	}
+
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      secretName,
-		Namespace: profile.Namespace,
+		Namespace: secretNamespace,
 	}, secret); err != nil {
-		return "", fmt.Errorf("failed to get secret %s: %w", secretName, err)
+		return "", fmt.Errorf("failed to get secret %s/%s: %w", secretNamespace, secretName, err)
 	}
 
 	apiKey, ok := secret.Data[secretKey]
 	if !ok {
-		return "", fmt.Errorf("key %s not found in secret %s", secretKey, secretName)
+		return "", fmt.Errorf("key %s not found in secret %s/%s", secretKey, secretNamespace, secretName)
 	}
 
 	return string(apiKey), nil

@@ -27,6 +27,11 @@ type SecretKeySelector struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
+	// Namespace is the namespace of the Secret
+	// If not set, defaults to the namespace of the referencing resource
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
 	// Key is the key within the Secret
 	// +kubebuilder:default=api-key
 	// +optional

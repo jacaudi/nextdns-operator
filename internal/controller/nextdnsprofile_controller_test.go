@@ -293,6 +293,33 @@ func TestGetAPIKey(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			name: "successful retrieval from different namespace",
+			profile: &nextdnsv1alpha1.NextDNSProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-profile",
+					Namespace: "app-namespace",
+				},
+				Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+					Name: "Test Profile",
+					CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+						Name:      "shared-secret",
+						Namespace: "platform-system",
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-secret",
+					Namespace: "platform-system",
+				},
+				Data: map[string][]byte{
+					"api-key": []byte("cross-ns-api-key"),
+				},
+			},
+			expectError: false,
+			expectedKey: "cross-ns-api-key",
+		},
 	}
 
 	for _, tt := range tests {
