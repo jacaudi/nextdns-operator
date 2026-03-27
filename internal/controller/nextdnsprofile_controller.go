@@ -1284,20 +1284,29 @@ func (r *NextDNSProfileReconciler) findProfilesForTLDList(ctx context.Context, o
 }
 
 // findProfilesForSecret returns reconcile requests for profiles referencing the secret
+// findProfilesForSecret returns reconcile requests for profiles referencing the secret.
+// Matches both same-namespace references (credentialsRef.namespace empty) and
+// cross-namespace references (credentialsRef.namespace explicitly set).
 func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
 	secret, ok := obj.(*corev1.Secret)
 	if !ok {
 		return nil
 	}
 
+	// List ALL profiles across all namespaces to catch cross-namespace references
 	var profiles nextdnsv1alpha1.NextDNSProfileList
-	if err := r.List(ctx, &profiles, client.InNamespace(secret.Namespace)); err != nil {
+	if err := r.List(ctx, &profiles); err != nil {
 		return nil
 	}
 
 	var requests []reconcile.Request
 	for _, profile := range profiles.Items {
-		if profile.Spec.CredentialsRef.Name == secret.Name {
+		ref := profile.Spec.CredentialsRef
+		refNamespace := ref.Namespace
+		if refNamespace == "" {
+			refNamespace = profile.Namespace
+		}
+		if ref.Name == secret.Name && refNamespace == secret.Namespace {
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      profile.Name,

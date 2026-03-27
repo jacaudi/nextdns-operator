@@ -985,6 +985,69 @@ func TestFindProfilesForSecret_InvalidType(t *testing.T) {
 	assert.Nil(t, requests)
 }
 
+func TestFindProfilesForSecret_CrossNamespace(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	// Profile in "app" namespace references secret in "platform" namespace
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cross-ns-profile",
+			Namespace: "app",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Cross NS Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name:      "shared-creds",
+				Namespace: "platform",
+			},
+		},
+	}
+
+	// Profile in "platform" namespace with same-namespace ref (should also match)
+	localProfile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "local-profile",
+			Namespace: "platform",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Local Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "shared-creds",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, localProfile).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shared-creds",
+			Namespace: "platform",
+		},
+	}
+
+	requests := reconciler.findProfilesForSecret(ctx, secret)
+
+	// Should find both: cross-ns profile and local profile
+	assert.Equal(t, 2, len(requests))
+
+	names := make(map[string]string)
+	for _, req := range requests {
+		names[req.Name] = req.Namespace
+	}
+	assert.Equal(t, "app", names["cross-ns-profile"])
+	assert.Equal(t, "platform", names["local-profile"])
+}
+
 func TestFindProfilesForAllowlist_MultipleProfiles(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()
