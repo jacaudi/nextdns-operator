@@ -708,6 +708,7 @@ func TestFindProfilesForSecret(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(secret, profile).
+		WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
 		Build()
 
 	reconciler := &NextDNSProfileReconciler{
@@ -1021,6 +1022,7 @@ func TestFindProfilesForSecret_CrossNamespace(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(profile, localProfile).
+		WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
 		Build()
 
 	reconciler := &NextDNSProfileReconciler{
@@ -3381,4 +3383,84 @@ func TestSyncWithNextDNS_Rewrites(t *testing.T) {
 
 	rewrites := mockNDS.Rewrites["abc123"]
 	require.Equal(t, 2, len(rewrites))
+}
+
+func TestFindProfilesForSecret_WithFieldIndex(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	// Profile in "app" namespace references secret in "platform" namespace
+	crossNsProfile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cross-ns-profile",
+			Namespace: "app",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Cross NS Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name:      "shared-creds",
+				Namespace: "platform",
+			},
+		},
+	}
+
+	// Profile in "platform" namespace with same-namespace ref
+	localProfile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "local-profile",
+			Namespace: "platform",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Local Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "shared-creds",
+			},
+		},
+	}
+
+	// Profile referencing a different secret (should NOT match)
+	unrelatedProfile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unrelated-profile",
+			Namespace: "platform",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Unrelated Profile",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "other-creds",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(crossNsProfile, localProfile, unrelatedProfile).
+		WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shared-creds",
+			Namespace: "platform",
+		},
+	}
+
+	requests := reconciler.findProfilesForSecret(ctx, secret)
+
+	// Should find cross-ns and local, but NOT unrelated
+	assert.Equal(t, 2, len(requests))
+
+	names := make(map[string]string)
+	for _, req := range requests {
+		names[req.Name] = req.Namespace
+	}
+	assert.Equal(t, "app", names["cross-ns-profile"])
+	assert.Equal(t, "platform", names["local-profile"])
+	_, hasUnrelated := names["unrelated-profile"]
+	assert.False(t, hasUnrelated)
 }
