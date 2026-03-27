@@ -95,23 +95,6 @@ spec:
                   - name
                   type: object
                 type: array
-              configImportRef:
-                description: |-
-                  ConfigImportRef references a ConfigMap containing profile configuration JSON
-                  Fields from the ConfigMap are applied as defaults; explicit spec fields take precedence
-                properties:
-                  key:
-                    default: config.json
-                    description: Key is the key within the ConfigMap data containing
-                      the JSON
-                    type: string
-                  name:
-                    description: Name is the name of the ConfigMap to import from
-                    minLength: 1
-                    type: string
-                required:
-                - name
-                type: object
               configMapRef:
                 description: ConfigMapRef configures optional ConfigMap creation with
                   connection details
@@ -541,11 +524,6 @@ spec:
                   - type
                   type: object
                 type: array
-              configImportResourceVersion:
-                description: |-
-                  ConfigImportResourceVersion tracks the ResourceVersion of the imported ConfigMap
-                  Used to detect changes and trigger re-import
-                type: string
               fingerprint:
                 description: Fingerprint is the DNS endpoint (e.g., "abc123.dns.nextdns.io")
                 type: string
@@ -1122,7 +1100,15 @@ spec:
                           retention:
                             default: 7d
                             description: Retention specifies log retention period
-                              (1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y)
+                            enum:
+                            - 1h
+                            - 6h
+                            - 1d
+                            - 7d
+                            - 30d
+                            - 90d
+                            - 1y
+                            - 2y
                             type: string
                         type: object
                       performance:
