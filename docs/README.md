@@ -6,8 +6,6 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
 
 - [Configuration](#configuration)
   - [ConfigMap Export](#configmap-export)
-  - [ConfigMap Import](#configmap-import) *(deprecated)*
-    - [Supported Import Fields](#supported-import-fields)
   - [Observe Mode](#observe-mode)
     - [Transitioning to Managed Mode](#transitioning-to-managed-mode)
 - [CoreDNS Deployment](#coredns-deployment)
@@ -76,179 +74,6 @@ envFrom:
   - configMapRef:
       name: my-dns-config
 ```
-
-### ConfigMap Import
-
-> **Deprecated:** ConfigMap Import is deprecated in favor of [Observe Mode](#observe-mode). Observe mode provides a safer and more integrated workflow for adopting existing NextDNS profiles into GitOps management. ConfigMap Import will be removed in a future release.
-
-Import base profile configuration from a ConfigMap containing JSON. Explicit spec fields always take precedence over imported values, making this useful for shared base configurations, migration from existing profiles, or templating.
-
-```yaml
-apiVersion: nextdns.io/v1alpha1
-kind: NextDNSProfile
-metadata:
-  name: my-profile
-spec:
-  name: "My Profile"
-  credentialsRef:
-    name: nextdns-credentials
-  configImportRef:
-    name: base-profile-config
-    key: config.json  # optional, defaults to "config.json"
-  # Explicit spec fields override imported values
-  security:
-    nrd: false  # overrides imported nrd value
-```
-
-The referenced ConfigMap contains profile configuration as JSON:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: base-profile-config
-data:
-  config.json: |
-    {
-      "security": {
-        "aiThreatDetection": true,
-        "googleSafeBrowsing": true,
-        "nrd": true
-      },
-      "privacy": {
-        "blocklists": [
-          {"id": "nextdns-recommended", "active": true}
-        ],
-        "disguisedTrackers": true
-      },
-      "denylist": [
-        {"domain": "ads.example.com", "active": true}
-      ],
-      "settings": {
-        "logs": {"enabled": true, "retention": "30d"}
-      }
-    }
-```
-
-**Precedence rules:**
-- Explicit spec fields always win over imported values
-- Imported values fill in fields not set in the spec
-- Lists (denylist, allowlist, rewrites, blocklists, etc.) are merged with deduplication
-- Changes to the import ConfigMap trigger re-reconciliation
-
-#### Supported Import Fields
-
-Below is a complete JSON example showing every supported field. All fields are optional -- include only what you need.
-
-```json
-{
-  "security": {
-    "aiThreatDetection": true,
-    "googleSafeBrowsing": true,
-    "cryptojacking": true,
-    "dnsRebinding": true,
-    "idnHomographs": true,
-    "typosquatting": true,
-    "dga": true,
-    "nrd": false,
-    "ddns": false,
-    "parking": true,
-    "csam": true,
-    "threatIntelligenceFeeds": ["feed-id-1", "feed-id-2"]
-  },
-  "privacy": {
-    "blocklists": [
-      {"id": "nextdns-recommended", "active": true},
-      {"id": "oisd", "active": true}
-    ],
-    "natives": [
-      {"id": "apple", "active": true},
-      {"id": "windows", "active": true}
-    ],
-    "disguisedTrackers": true,
-    "allowAffiliate": false
-  },
-  "parentalControl": {
-    "categories": [
-      {"id": "gambling", "active": true},
-      {"id": "adult", "active": true}
-    ],
-    "services": [
-      {"id": "tiktok", "active": true},
-      {"id": "facebook", "active": false}
-    ],
-    "safeSearch": false,
-    "youtubeRestrictedMode": false
-  },
-  "denylist": [
-    {"domain": "ads.example.com", "active": true},
-    {"domain": "tracker.example.com", "active": true}
-  ],
-  "allowlist": [
-    {"domain": "safe.example.com", "active": true}
-  ],
-  "rewrites": [
-    {"from": "app.internal", "to": "10.0.0.5", "active": true}
-  ],
-  "settings": {
-    "logs": {
-      "enabled": true,
-      "logClientsIPs": false,
-      "logDomains": true,
-      "retention": "30d"
-    },
-    "blockPage": {
-      "enabled": true
-    },
-    "performance": {
-      "ecs": true,
-      "cacheBoost": true,
-      "cnameFlattening": true
-    },
-    "web3": false
-  }
-}
-```
-
-| Section | Field | Type | Description |
-|---------|-------|------|-------------|
-| `security` | `aiThreatDetection` | bool | AI-based threat detection |
-| | `googleSafeBrowsing` | bool | Google Safe Browsing protection |
-| | `cryptojacking` | bool | Block cryptomining scripts |
-| | `dnsRebinding` | bool | DNS rebinding attack protection |
-| | `idnHomographs` | bool | Block IDN homograph attacks |
-| | `typosquatting` | bool | Block typosquatting domains |
-| | `dga` | bool | Block algorithmically-generated domains |
-| | `nrd` | bool | Block newly registered domains |
-| | `ddns` | bool | Block dynamic DNS hostnames |
-| | `parking` | bool | Block parked domains |
-| | `csam` | bool | Block child sexual abuse material |
-| | `threatIntelligenceFeeds` | string[] | Threat feed identifiers to enable |
-| `privacy` | `blocklists` | object[] | Ad/tracker blocklists (`id`, `active`) |
-| | `natives` | object[] | Native tracking protection per vendor (`id`, `active`) |
-| | `disguisedTrackers` | bool | Block CNAME-cloaked trackers |
-| | `allowAffiliate` | bool | Allow affiliate & tracking links |
-| `parentalControl` | `categories` | object[] | Content categories to block (`id`, `active`) |
-| | `services` | object[] | Specific services to block (`id`, `active`) |
-| | `safeSearch` | bool | Enforce safe search on search engines |
-| | `youtubeRestrictedMode` | bool | Enforce YouTube restricted mode |
-| `denylist` | | object[] | Domains to block (`domain`, `active`) |
-| `allowlist` | | object[] | Domains to allow (`domain`, `active`) |
-| `rewrites` | | object[] | DNS rewrites (`from`, `to`, `active`) |
-| `settings.logs` | `enabled` | bool | Enable query logging |
-| | `logClientsIPs` | bool | Log client IP addresses |
-| | `logDomains` | bool | Log queried domains |
-| | `retention` | string | Log retention period (`1h`, `6h`, `1d`, `7d`, `30d`, `90d`, `1y`, `2y`) |
-| `settings.blockPage` | `enabled` | bool | Show block page instead of failing silently |
-| `settings.performance` | `ecs` | bool | EDNS Client Subnet |
-| | `cacheBoost` | bool | Extended caching |
-| | `cnameFlattening` | bool | CNAME flattening |
-| `settings` | `web3` | bool | Web3 domain resolution |
-
-**Notes:**
-- Unknown fields in the JSON are silently ignored (the operator logs a warning).
-- Domain values in `denylist`, `allowlist`, and `rewrites` are validated against the same rules as inline spec domains.
-- List entries have configurable upper bounds: 1000 for deny/allowlists, 500 for rewrites, and 100 for blocklists.
 
 ### Observe Mode
 
@@ -759,7 +584,6 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `rewrites` | RewriteEntry[] | No | | DNS rewrite rules |
 | `settings` | SettingsSpec | No | | Logging, performance, and other options (see below) |
 | `configMapRef` | ConfigMapRef | No | | Enable ConfigMap creation with connection details |
-| `configImportRef` | ConfigImportRef | No | | Import base config from a ConfigMap |
 
 **SecuritySpec:**
 
@@ -818,7 +642,6 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `DomainEntry` | `domain` (required), `active` (default: true), `reason` (optional) | Domain entry for allow/deny lists; supports wildcards (`*.example.com`) |
 | `RewriteEntry` | `from` (required), `to` (required), `active` (default: true) | DNS rewrite rule |
 | `ConfigMapRef` | `enabled` (default: false), `name` (optional) | ConfigMap export config; name defaults to `<profile-name>-nextdns` |
-| `ConfigImportRef` | `name` (required), `key` (default: `config.json`) | ConfigMap import reference |
 
 #### Status Fields
 
@@ -835,7 +658,6 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `conditions` | []Condition | Standard Kubernetes conditions (see [Status & Conditions](#status--conditions)) |
 | `lastSyncTime` | Time | Last time the profile was synced with NextDNS API |
 | `observedGeneration` | int64 | Generation last processed by the controller |
-| `configImportResourceVersion` | string | ResourceVersion of the imported ConfigMap (for change detection) |
 
 #### Conditions
 
@@ -844,7 +666,6 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `Ready` | Overall readiness -- `True` when the profile is fully synced and operational |
 | `Synced` | `True` when the profile spec has been successfully applied to the NextDNS API |
 | `ReferencesResolved` | `True` when all referenced list resources (allowlist, denylist, TLD) exist and are ready |
-| `ConfigImported` | `True` when the config import ConfigMap has been successfully read and merged |
 
 ### NextDNSAllowlist
 
@@ -1015,7 +836,6 @@ kubectl get nextdnscoredns home-dns -o yaml
 | **Ready** | Profile is fully synced and operational | One or more subsystems have issues |
 | **Synced** | Spec successfully applied to NextDNS API | API sync failed (check `message` for details) |
 | **ReferencesResolved** | All referenced lists exist and are ready | One or more list references are missing or not ready |
-| **ConfigImported** | ConfigMap read and merged successfully | Import failed (missing ConfigMap, invalid JSON, etc.) |
 
 ### NextDNSCoreDNS Conditions
 
@@ -1084,26 +904,6 @@ kubectl describe nextdnsprofile my-profile
    kubectl logs -n nextdns-operator-system deploy/nextdns-operator -f
    ```
 3. **Invalid profile ID**: If using `profileID` to adopt an existing profile, verify the ID exists in your NextDNS account.
-
-### ConfigMap Import Failures
-
-**Symptoms:** `ConfigImported` condition is `False`.
-
-**Check:**
-```bash
-kubectl get nextdnsprofile my-profile -o jsonpath='{.status.conditions[?(@.type=="ConfigImported")]}'
-```
-
-**Common causes:**
-1. **ConfigMap not found**: Verify the ConfigMap exists in the same namespace.
-   ```bash
-   kubectl get configmap base-profile-config
-   ```
-2. **Invalid JSON**: Check that the JSON in the ConfigMap is valid.
-   ```bash
-   kubectl get configmap base-profile-config -o jsonpath='{.data.config\.json}' | jq .
-   ```
-3. **Wrong key**: Ensure the `key` field in `configImportRef` matches the actual key in the ConfigMap data (default: `config.json`).
 
 ### CoreDNS Not Starting
 
@@ -1198,12 +998,11 @@ List resources (`NextDNSAllowlist`, `NextDNSDenylist`, `NextDNSTLDList`) are **r
 **NextDNSProfile reconciliation:**
 
 1. Read the profile spec and resolve credentials from the referenced Secret
-2. If `configImportRef` is set, read the ConfigMap and merge imported values with spec (spec takes precedence)
-3. Resolve all list references (`allowlistRefs`, `denylistRefs`, `tldListRefs`) and merge domains
-4. If `profileID` is set, adopt the existing profile; otherwise, create a new one
-5. Apply the merged configuration to the NextDNS API
-6. If `configMapRef.enabled`, create/update the ConfigMap with connection details
-7. Update status with profile ID, fingerprint, aggregated counts, and conditions
+2. Resolve all list references (`allowlistRefs`, `denylistRefs`, `tldListRefs`) and merge domains
+3. If `profileID` is set, adopt the existing profile; otherwise, create a new one
+4. Apply the merged configuration to the NextDNS API
+5. If `configMapRef.enabled`, create/update the ConfigMap with connection details
+6. Update status with profile ID, fingerprint, aggregated counts, and conditions
 
 **NextDNSCoreDNS reconciliation:**
 
@@ -1224,8 +1023,6 @@ When a profile references a list resource:
 4. Deduplication ensures no domain appears twice in the final list sent to the API
 5. The `referencedResources` status field tracks each list's name, namespace, readiness, and item count
 
-### How ConfigMap Import/Export Works
+### How ConfigMap Export Works
 
 **Export** (`configMapRef`): After syncing a profile, the operator creates a ConfigMap containing the profile's DNS connection details (profile ID, DoT/DoH/DoQ endpoints, IPv4/IPv6 addresses). Other workloads can consume this ConfigMap via `envFrom` or volume mounts.
-
-**Import** (`configImportRef`): Before syncing, the operator reads a ConfigMap containing profile configuration as JSON. Imported values act as defaults -- explicit spec fields always take precedence. The operator watches the ConfigMap's `ResourceVersion` and re-imports when it changes.
