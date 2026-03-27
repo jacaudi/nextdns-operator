@@ -120,6 +120,11 @@ spec:
                   name:
                     description: Name is the name of the Secret
                     type: string
+                  namespace:
+                    description: |-
+                      Namespace is the namespace of the Secret
+                      If not set, defaults to the namespace of the referencing resource
+                    type: string
                 required:
                 - name
                 type: object

@@ -42,6 +42,25 @@ const (
 	ConditionTypeObserveOnly = "ObserveOnly"
 )
 
+const (
+	// credentialsRefIndexField is the field index key for looking up profiles by their secret reference
+	credentialsRefIndexField = ".spec.credentialsRef"
+)
+
+// credentialsRefIndexFunc extracts the secret reference key (namespace/name) from a NextDNSProfile
+// for use with controller-runtime's field indexer. This enables efficient lookups when a Secret changes.
+func credentialsRefIndexFunc(obj client.Object) []string {
+	profile, ok := obj.(*nextdnsv1alpha1.NextDNSProfile)
+	if !ok {
+		return nil
+	}
+	ns := profile.Spec.CredentialsRef.Namespace
+	if ns == "" {
+		ns = profile.Namespace
+	}
+	return []string{ns + "/" + profile.Spec.CredentialsRef.Name}
+}
+
 // ClientFactory is a function that creates a NextDNS client
 type ClientFactory func(apiKey string) (nextdns.ClientInterface, error)
 
@@ -294,17 +313,23 @@ func (r *NextDNSProfileReconciler) getAPIKey(ctx context.Context, profile *nextd
 		secretKey = "api-key"
 	}
 
+	// Use credentialsRef.namespace if set, otherwise default to the profile's namespace
+	secretNamespace := profile.Spec.CredentialsRef.Namespace
+	if secretNamespace == "" {
+		secretNamespace = profile.Namespace
+	}
+
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      secretName,
-		Namespace: profile.Namespace,
+		Namespace: secretNamespace,
 	}, secret); err != nil {
-		return "", fmt.Errorf("failed to get secret %s: %w", secretName, err)
+		return "", fmt.Errorf("failed to get secret %s/%s: %w", secretNamespace, secretName, err)
 	}
 
 	apiKey, ok := secret.Data[secretKey]
 	if !ok {
-		return "", fmt.Errorf("key %s not found in secret %s", secretKey, secretName)
+		return "", fmt.Errorf("key %s not found in secret %s/%s", secretKey, secretNamespace, secretName)
 	}
 
 	return string(apiKey), nil
@@ -1187,6 +1212,7 @@ func (r *NextDNSProfileReconciler) findProfilesForAllowlist(ctx context.Context,
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for allowlist watch")
 		return nil
 	}
 
@@ -1220,6 +1246,7 @@ func (r *NextDNSProfileReconciler) findProfilesForDenylist(ctx context.Context, 
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for denylist watch")
 		return nil
 	}
 
@@ -1253,6 +1280,7 @@ func (r *NextDNSProfileReconciler) findProfilesForTLDList(ctx context.Context, o
 
 	var profiles nextdnsv1alpha1.NextDNSProfileList
 	if err := r.List(ctx, &profiles); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for TLD list watch")
 		return nil
 	}
 
@@ -1277,28 +1305,32 @@ func (r *NextDNSProfileReconciler) findProfilesForTLDList(ctx context.Context, o
 	return requests
 }
 
-// findProfilesForSecret returns reconcile requests for profiles referencing the secret
+// findProfilesForSecret returns reconcile requests for profiles referencing the secret.
+// Uses a field index on credentialsRef for efficient lookups instead of listing all profiles.
+// Matches both same-namespace references (credentialsRef.namespace empty) and
+// cross-namespace references (credentialsRef.namespace explicitly set).
 func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
 	secret, ok := obj.(*corev1.Secret)
 	if !ok {
 		return nil
 	}
 
+	// Use field index to efficiently find profiles referencing this secret
 	var profiles nextdnsv1alpha1.NextDNSProfileList
-	if err := r.List(ctx, &profiles, client.InNamespace(secret.Namespace)); err != nil {
+	indexKey := secret.Namespace + "/" + secret.Name
+	if err := r.List(ctx, &profiles, client.MatchingFields{credentialsRefIndexField: indexKey}); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to list profiles for secret watch")
 		return nil
 	}
 
 	var requests []reconcile.Request
 	for _, profile := range profiles.Items {
-		if profile.Spec.CredentialsRef.Name == secret.Name {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      profile.Name,
-					Namespace: profile.Namespace,
-				},
-			})
-		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      profile.Name,
+				Namespace: profile.Namespace,
+			},
+		})
 	}
 	return requests
 }
@@ -1357,6 +1389,16 @@ func (r *NextDNSProfileReconciler) updateResourceMetrics(ctx context.Context) {
 
 // SetupWithManager sets up the controller with the Manager
 func (r *NextDNSProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Register field index for efficient secret reference lookups
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&nextdnsv1alpha1.NextDNSProfile{},
+		credentialsRefIndexField,
+		credentialsRefIndexFunc,
+	); err != nil {
+		return fmt.Errorf("failed to create field index for credentialsRef: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&nextdnsv1alpha1.NextDNSProfile{}).
 		Watches(

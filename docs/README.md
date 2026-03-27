@@ -572,6 +572,7 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `name` | string | Yes | | Human-readable name shown in NextDNS dashboard (1-100 chars) |
 | `mode` | string | No | `managed` | Operational mode: `observe` (read-only) or `managed` (sync spec to remote) |
 | `credentialsRef.name` | string | Yes | | Name of the Secret containing the API key |
+| `credentialsRef.namespace` | string | No | CR's namespace | Namespace of the Secret (for cross-namespace references) |
 | `credentialsRef.key` | string | No | `api-key` | Key within the Secret |
 | `profileID` | string | No | | Existing NextDNS profile ID to adopt. If unset, a new profile is created |
 | `allowlistRefs` | ListReference[] | No | | References to NextDNSAllowlist resources |
