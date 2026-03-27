@@ -1283,7 +1283,6 @@ func (r *NextDNSProfileReconciler) findProfilesForTLDList(ctx context.Context, o
 	return requests
 }
 
-// findProfilesForSecret returns reconcile requests for profiles referencing the secret
 // findProfilesForSecret returns reconcile requests for profiles referencing the secret.
 // Matches both same-namespace references (credentialsRef.namespace empty) and
 // cross-namespace references (credentialsRef.namespace explicitly set).
