@@ -2988,6 +2988,15 @@ func TestFormatRetentionString(t *testing.T) {
 		{name: "90 days", days: 90, expected: "90d"},
 		{name: "365 days is 1y", days: 365, expected: "1y"},
 		{name: "730 days is 2y", days: 730, expected: "2y"},
+		// Out-of-range values clamp UP to next valid enum (safer: retains more data)
+		{name: "negative clamps to 1h", days: -1, expected: "1h"},
+		{name: "2 days rounds up to 7d", days: 2, expected: "7d"},
+		{name: "15 days rounds up to 30d", days: 15, expected: "30d"},
+		{name: "60 days rounds up to 90d", days: 60, expected: "90d"},
+		{name: "180 days rounds up to 1y", days: 180, expected: "1y"},
+		{name: "500 days rounds up to 2y", days: 500, expected: "2y"},
+		{name: "1000 days clamps to 2y", days: 1000, expected: "2y"},
+		{name: "31536000 days (API bug) clamps to 2y", days: 31536000, expected: "2y"},
 	}
 
 	for _, tt := range tests {

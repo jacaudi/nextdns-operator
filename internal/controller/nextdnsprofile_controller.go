@@ -1176,18 +1176,26 @@ func boolPtr(b bool) *bool {
 }
 
 // formatRetentionString converts a retention value in days to the spec string format
+// formatRetentionString converts a retention value in days to the nearest valid
+// CRD enum value. The NextDNS API may return unexpected values (e.g., 31536000
+// for "unlimited"), so we clamp to the nearest supported retention period.
+// Valid values: 1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y
 func formatRetentionString(days int) string {
-	switch days {
-	case 0:
-		// Sub-day retentions (1h, 6h) round to 0 days in the API.
-		// Map to 1h as the most conservative sub-day value.
+	switch {
+	case days <= 0:
 		return "1h"
-	case 365:
+	case days == 1:
+		return "1d"
+	case days <= 7:
+		return "7d"
+	case days <= 30:
+		return "30d"
+	case days <= 90:
+		return "90d"
+	case days <= 365:
 		return "1y"
-	case 730:
-		return "2y"
 	default:
-		return fmt.Sprintf("%dd", days)
+		return "2y"
 	}
 }
 
