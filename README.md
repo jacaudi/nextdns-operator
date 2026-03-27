@@ -10,7 +10,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - **Profile Lifecycle Management**: Create new profiles or adopt existing ones; operator-created profiles are deleted on resource removal
 - **Drift Detection**: Automatic periodic reconciliation (default: 1 hour) catches manual changes made outside the operator
 - **ConfigMap Export**: Optionally create a ConfigMap with DNS connection details for easy integration with other applications
-- **ConfigMap Import**: Import base profile configuration from a ConfigMap JSON, with spec fields taking precedence
+- **Observe Mode**: Read existing NextDNS profiles without modifying them, with a guided path to declarative management
 
 ## Custom Resources
 
@@ -115,7 +115,7 @@ See the [config/samples](config/samples/) directory for complete examples:
 
 For detailed configuration guides, CRD reference, troubleshooting, and architecture documentation, see the **[full documentation](docs/README.md)**.
 
-Covers: ConfigMap export/import, CoreDNS deployment (upstream protocols, Multus CNI, domain overrides), drift detection, complete CRD field reference, status conditions, and troubleshooting.
+Covers: ConfigMap export, observe mode, CoreDNS deployment (upstream protocols, Multus CNI, domain overrides), drift detection, complete CRD field reference, status conditions, and troubleshooting.
 
 ## Development
 

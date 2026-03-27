@@ -570,6 +570,7 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `name` | string | Yes | | Human-readable name shown in NextDNS dashboard (1-100 chars) |
+| `mode` | string | No | `managed` | Operational mode: `observe` (read-only) or `managed` (sync spec to remote) |
 | `credentialsRef.name` | string | Yes | | Name of the Secret containing the API key |
 | `credentialsRef.key` | string | No | `api-key` | Key within the Secret |
 | `profileID` | string | No | | Existing NextDNS profile ID to adopt. If unset, a new profile is created |
@@ -590,7 +591,7 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `aiThreatDetection` | *bool | `true` | AI-based threat detection |
-| `threatIntelligenceFeeds` | string[] | | Threat feed identifiers to enable |
+| `threatIntelligenceFeeds` | *bool | `true` | Enable threat intelligence feeds |
 | `googleSafeBrowsing` | *bool | `true` | Google Safe Browsing protection |
 | `cryptojacking` | *bool | `true` | Block cryptomining scripts |
 | `dnsRebinding` | *bool | `true` | DNS rebinding attack protection |
@@ -658,6 +659,8 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `conditions` | []Condition | Standard Kubernetes conditions (see [Status & Conditions](#status--conditions)) |
 | `lastSyncTime` | Time | Last time the profile was synced with NextDNS API |
 | `observedGeneration` | int64 | Generation last processed by the controller |
+| `observedConfig` | ObservedConfig | Full observed state of remote profile (observe mode only) |
+| `suggestedSpec` | SuggestedSpec | Spec-compatible translation of observed config for easy transition |
 
 #### Conditions
 
@@ -836,6 +839,7 @@ kubectl get nextdnscoredns home-dns -o yaml
 | **Ready** | Profile is fully synced and operational | One or more subsystems have issues |
 | **Synced** | Spec successfully applied to NextDNS API | API sync failed (check `message` for details) |
 | **ReferencesResolved** | All referenced lists exist and are ready | One or more list references are missing or not ready |
+| **ObserveOnly** | Profile is in observe-only mode (reading remote, not writing) | Profile is in managed mode |
 
 ### NextDNSCoreDNS Conditions
 
