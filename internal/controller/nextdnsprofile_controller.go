@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
-	"github.com/jacaudi/nextdns-operator/internal/configimport"
 	"github.com/jacaudi/nextdns-operator/internal/metrics"
 	"github.com/jacaudi/nextdns-operator/internal/nextdns"
 )
@@ -38,9 +37,6 @@ const (
 
 	// ConditionTypeReferencesResolved indicates all references are resolved
 	ConditionTypeReferencesResolved = "ReferencesResolved"
-
-	// ConditionTypeConfigImported indicates whether config import from ConfigMap succeeded
-	ConditionTypeConfigImported = "ConfigImported"
 
 	// ConditionTypeObserveOnly indicates the profile is in observe-only mode
 	ConditionTypeObserveOnly = "ObserveOnly"
@@ -132,11 +128,6 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Log deprecation warning if configImportRef is set
-	if profile.Spec.ConfigImportRef != nil {
-		logger.Info("DEPRECATION WARNING: configImportRef is deprecated and will be removed in a future release. Use observe mode to import existing profiles instead.")
-	}
-
 	// Determine mode (default: managed)
 	mode := profile.Spec.Mode
 	if mode == "" {
@@ -174,40 +165,6 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		profile.Status.SuggestedSpec = nil
 		r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionFalse, "ManagedMode",
 			"Profile transitioned to managed mode")
-	}
-
-	// Import configuration from ConfigMap if configured
-	if profile.Spec.ConfigImportRef != nil {
-		importResult, err := configimport.ReadAndParse(ctx, r.Client, profile.Namespace, profile.Spec.ConfigImportRef)
-		if err != nil {
-			logger.Error(err, "Failed to import configuration from ConfigMap")
-			metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ConfigImportFailed")
-			r.setCondition(profile, ConditionTypeConfigImported, metav1.ConditionFalse, "ImportFailed", err.Error())
-			r.setCondition(profile, ConditionTypeReady, metav1.ConditionFalse, "ConfigImportFailed", err.Error())
-			if updateErr := r.Status().Update(ctx, profile); updateErr != nil {
-				logger.Error(updateErr, "Failed to update status")
-			}
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-		}
-
-		// Merge imported config into the in-memory spec. This mutation is intentional
-		// and is NOT persisted back to the API server. On each reconciliation the
-		// profile is fetched fresh from the cache and the merge is re-applied, so
-		// the stored spec always remains the user's original intent. Do not persist
-		// the merged spec; doing so would overwrite the user's explicit field values.
-		configimport.MergeIntoSpec(&profile.Spec, importResult.Config)
-		profile.Status.ConfigImportResourceVersion = importResult.ResourceVersion
-
-		for _, w := range importResult.Warnings {
-			logger.Info("Config import warning", "warning", w)
-		}
-
-		logger.Info("Imported configuration from ConfigMap",
-			"configMap", profile.Spec.ConfigImportRef.Name,
-			"resourceVersion", importResult.ResourceVersion)
-
-		r.setCondition(profile, ConditionTypeConfigImported, metav1.ConditionTrue, "ImportSucceeded",
-			fmt.Sprintf("Imported from ConfigMap %s (resourceVersion: %s)", profile.Spec.ConfigImportRef.Name, importResult.ResourceVersion))
 	}
 
 	// Resolve list references
@@ -1347,8 +1304,7 @@ func (r *NextDNSProfileReconciler) findProfilesForSecret(ctx context.Context, ob
 }
 
 // findProfilesForConfigMap returns reconcile requests for profiles that
-// reference the given ConfigMap - either via owner references (output ConfigMap)
-// or via configImportRef (import ConfigMap)
+// reference the given ConfigMap via owner references (output ConfigMap from configMapRef)
 func (r *NextDNSProfileReconciler) findProfilesForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
 	configMap, ok := obj.(*corev1.ConfigMap)
 	if !ok {
@@ -1357,7 +1313,7 @@ func (r *NextDNSProfileReconciler) findProfilesForConfigMap(ctx context.Context,
 
 	var requests []reconcile.Request
 
-	// Check owner references (output ConfigMap)
+	// Check owner references (output ConfigMap from configMapRef)
 	for _, ref := range configMap.OwnerReferences {
 		if ref.Kind == "NextDNSProfile" && ref.APIVersion == nextdnsv1alpha1.GroupVersion.String() {
 			requests = append(requests, reconcile.Request{
@@ -1366,26 +1322,6 @@ func (r *NextDNSProfileReconciler) findProfilesForConfigMap(ctx context.Context,
 					Namespace: configMap.Namespace,
 				},
 			})
-		}
-	}
-
-	// Check configImportRef (import ConfigMap)
-	profileList := &nextdnsv1alpha1.NextDNSProfileList{}
-	if err := r.List(ctx, profileList, client.InNamespace(configMap.Namespace)); err != nil {
-		return requests
-	}
-
-	seen := make(map[types.NamespacedName]struct{}, len(requests))
-	for _, req := range requests {
-		seen[req.NamespacedName] = struct{}{}
-	}
-
-	for _, p := range profileList.Items {
-		if p.Spec.ConfigImportRef != nil && p.Spec.ConfigImportRef.Name == configMap.Name {
-			nn := types.NamespacedName{Name: p.Name, Namespace: p.Namespace}
-			if _, exists := seen[nn]; !exists {
-				requests = append(requests, reconcile.Request{NamespacedName: nn})
-			}
 		}
 	}
 
