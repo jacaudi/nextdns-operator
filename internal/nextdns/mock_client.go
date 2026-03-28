@@ -778,7 +778,8 @@ func (m *MockClient) SetProfile(profileID, name, fingerprint string) {
 	defer m.mu.Unlock()
 
 	m.Profiles[profileID] = &nextdns.Profile{
-		Name: name,
+		Name:        name,
+		Fingerprint: fingerprint,
 	}
 }
 

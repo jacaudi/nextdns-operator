@@ -1174,7 +1174,7 @@ func TestSyncWithNextDNS_CreateNewProfile(t *testing.T) {
 
 	// Verify profile was created
 	assert.NotEmpty(t, profile.Status.ProfileID)
-	assert.Contains(t, profile.Status.Fingerprint, ".dns.nextdns.io")
+	assert.Equal(t, "fp-mock-mock-profile-1", profile.Status.Fingerprint)
 
 	// Verify mock was called
 	assert.True(t, mockClient.createProfileCalled)
@@ -1226,6 +1226,7 @@ func TestSyncWithNextDNS_AdoptExistingProfile(t *testing.T) {
 
 	// Verify profile was adopted (not created)
 	assert.Equal(t, "existing-profile-123", profile.Status.ProfileID)
+	assert.Equal(t, "fp-mock-existing-profile-123", profile.Status.Fingerprint)
 	assert.False(t, mockClient.createProfileCalled)
 	assert.True(t, mockClient.getProfileCalled)
 }
@@ -1894,7 +1895,8 @@ func (m *mockNextDNSClient) GetProfile(ctx context.Context, profileID string) (*
 		return nil, m.getProfileError
 	}
 	return &sdknextdns.Profile{
-		Name: "Mock Profile",
+		Name:        "Mock Profile",
+		Fingerprint: "fp-mock-" + profileID,
 	}, nil
 }
 
@@ -2512,7 +2514,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 		Build()
 
 	mockNDS := nextdns.NewMockClient()
-	mockNDS.SetProfile("abc123", "Remote Profile", "abc123.dns.nextdns.io")
+	mockNDS.SetProfile("abc123", "Remote Profile", "fp04d207c439ee4858")
 	mockNDS.Security["abc123"] = &sdknextdns.Security{
 		AiThreatDetection:  true,
 		GoogleSafeBrowsing: true,
@@ -2568,6 +2570,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "abc123", updated.Status.ProfileID)
+	assert.Equal(t, "fp04d207c439ee4858", updated.Status.Fingerprint)
 	assert.NotNil(t, updated.Status.ObservedConfig)
 	assert.Equal(t, "Remote Profile", updated.Status.ObservedConfig.Name)
 	assert.True(t, updated.Status.ObservedConfig.Security.AIThreatDetection)
@@ -2970,7 +2973,7 @@ func TestReconcile_ObserveMode_APIError(t *testing.T) {
 		Build()
 
 	mockNDS := nextdns.NewMockClient()
-	mockNDS.SetProfile("abc123", "Remote Profile", "abc123.dns.nextdns.io")
+	mockNDS.SetProfile("abc123", "Remote Profile", "fp04d207c439ee4858")
 	mockNDS.GetSecurityError = fmt.Errorf("API rate limited")
 
 	reconciler := &NextDNSProfileReconciler{
