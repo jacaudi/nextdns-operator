@@ -2530,7 +2530,14 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 		{ID: "good.com", Active: true},
 	}
 	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
-		Logs:      &sdknextdns.SettingsLogs{Enabled: true, Retention: 7},
+		Logs: &sdknextdns.SettingsLogs{
+			Enabled:   true,
+			Retention: 7,
+			Drop: &sdknextdns.SettingsLogsDrop{
+				IP:     false,
+				Domain: false,
+			},
+		},
 		BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
 		Performance: &sdknextdns.SettingsPerformance{
 			Ecs:             true,
@@ -2568,6 +2575,8 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Denylist))
 	assert.Equal(t, 1, len(updated.Status.ObservedConfig.Allowlist))
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
+	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
+	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
 
 	// Verify suggestedSpec was populated
 	require.NotNil(t, updated.Status.SuggestedSpec)
@@ -2585,6 +2594,8 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	require.NotNil(t, updated.Status.SuggestedSpec.Settings.Logs)
 	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.Enabled)
 	assert.Equal(t, "7d", updated.Status.SuggestedSpec.Settings.Logs.Retention)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogClientsIPs)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogDomains)
 
 	// Verify conditions
 	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
@@ -3055,7 +3066,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 			{Domain: "good.com", Active: true},
 		},
 		Settings: &nextdnsv1alpha1.ObservedSettings{
-			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30},
+			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false},
 			BlockPage: &nextdnsv1alpha1.ObservedBlockPage{Enabled: true},
 			Performance: &nextdnsv1alpha1.ObservedPerformance{
 				ECS:             true,
@@ -3131,8 +3142,8 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	require.NotNil(t, suggested.Settings.Logs)
 	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.Enabled)
 	assert.Equal(t, "30d", suggested.Settings.Logs.Retention)
-	assert.Nil(t, suggested.Settings.Logs.LogClientsIPs) // Not available from API
-	assert.Nil(t, suggested.Settings.Logs.LogDomains)    // Not available from API
+	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.LogClientsIPs)
+	assert.Equal(t, boolPtr(false), suggested.Settings.Logs.LogDomains)
 	require.NotNil(t, suggested.Settings.BlockPage)
 	assert.Equal(t, boolPtr(true), suggested.Settings.BlockPage.Enabled)
 	require.NotNil(t, suggested.Settings.Performance)

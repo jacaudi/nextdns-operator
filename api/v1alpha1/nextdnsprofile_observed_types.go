@@ -112,6 +112,12 @@ type ObservedSettings struct {
 type ObservedLogs struct {
 	Enabled   bool `json:"enabled"`
 	Retention int  `json:"retention,omitempty"`
+	// LogClientsIPs indicates whether client IPs are logged.
+	// Derived from the API's Drop.IP field (inverted: LogClientsIPs = !Drop.IP).
+	LogClientsIPs bool `json:"logClientsIPs"`
+	// LogDomains indicates whether queried domains are logged.
+	// Derived from the API's Drop.Domain field (inverted: LogDomains = !Drop.Domain).
+	LogDomains bool `json:"logDomains"`
 }
 
 // ObservedBlockPage represents observed block page settings
@@ -134,7 +140,7 @@ type ObservedRewriteEntry struct {
 
 // SuggestedSpec provides a spec-compatible translation of observed remote config.
 // Users can copy fields from this into their spec when transitioning to managed mode.
-// Fields that cannot be derived from the API are omitted (e.g., logClientsIPs, logDomains).
+// Fields that cannot be derived from the API are omitted.
 type SuggestedSpec struct {
 	// Name is the profile name
 	// +optional
@@ -165,7 +171,6 @@ type SuggestedSpec struct {
 	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
 
 	// Settings contains suggested general settings
-	// Note: logClientsIPs and logDomains are omitted (not exposed by API)
 	// +optional
 	Settings *SettingsSpec `json:"settings,omitempty"`
 

@@ -884,6 +884,16 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 			Enabled:   settings.Logs.Enabled,
 			Retention: settings.Logs.Retention,
 		}
+		// Invert Drop fields to user-friendly positive semantics:
+		// API Drop.IP=true means "don't log IPs" -> LogClientsIPs=false
+		if settings.Logs.Drop != nil {
+			observed.Settings.Logs.LogClientsIPs = !settings.Logs.Drop.IP
+			observed.Settings.Logs.LogDomains = !settings.Logs.Drop.Domain
+		} else {
+			// Default: log both when Drop is not set
+			observed.Settings.Logs.LogClientsIPs = true
+			observed.Settings.Logs.LogDomains = true
+		}
 	}
 	if settings.BlockPage != nil {
 		observed.Settings.BlockPage = &nextdnsv1alpha1.ObservedBlockPage{
@@ -1014,9 +1024,10 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 		}
 		if observed.Settings.Logs != nil {
 			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{
-				Enabled:   boolPtr(observed.Settings.Logs.Enabled),
-				Retention: formatRetentionString(observed.Settings.Logs.Retention),
-				// LogClientsIPs and LogDomains intentionally omitted (not available from API)
+				Enabled:       boolPtr(observed.Settings.Logs.Enabled),
+				Retention:     formatRetentionString(observed.Settings.Logs.Retention),
+				LogClientsIPs: boolPtr(observed.Settings.Logs.LogClientsIPs),
+				LogDomains:    boolPtr(observed.Settings.Logs.LogDomains),
 			}
 		}
 		if observed.Settings.BlockPage != nil {
