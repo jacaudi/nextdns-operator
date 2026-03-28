@@ -726,10 +726,22 @@ spec:
                         properties:
                           enabled:
                             type: boolean
+                          logClientsIPs:
+                            description: |-
+                              LogClientsIPs indicates whether client IPs are logged.
+                              Derived from the API's Drop.IP field (inverted: LogClientsIPs = !Drop.IP).
+                            type: boolean
+                          logDomains:
+                            description: |-
+                              LogDomains indicates whether queried domains are logged.
+                              Derived from the API's Drop.Domain field (inverted: LogDomains = !Drop.Domain).
+                            type: boolean
                           retention:
                             type: integer
                         required:
                         - enabled
+                        - logClientsIPs
+                        - logDomains
                         type: object
                       performance:
                         description: ObservedPerformance represents observed performance
@@ -1074,9 +1086,7 @@ spec:
                         type: boolean
                     type: object
                   settings:
-                    description: |-
-                      Settings contains suggested general settings
-                      Note: logClientsIPs and logDomains are omitted (not exposed by API)
+                    description: Settings contains suggested general settings
                     properties:
                       blockPage:
                         description: BlockPage configures the block page
