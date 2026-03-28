@@ -608,6 +608,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			Services:              services,
 			SafeSearch:            boolValue(profile.Spec.ParentalControl.SafeSearch, false),
 			YouTubeRestrictedMode: boolValue(profile.Spec.ParentalControl.YouTubeRestrictedMode, false),
+			BlockBypass:           boolValue(profile.Spec.ParentalControl.BlockBypass, false),
 		}
 		if err := client.UpdateParentalControl(ctx, profileID, pcConfig); err != nil {
 			return fmt.Errorf("failed to update parental control settings: %w", err)
@@ -828,6 +829,40 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	observed.ParentalControl = &nextdnsv1alpha1.ObservedParentalControl{
 		SafeSearch:            pc.SafeSearch,
 		YouTubeRestrictedMode: pc.YoutubeRestrictedMode,
+		BlockBypass:           pc.BlockBypass,
+	}
+
+	// Map recreation schedule if present
+	if pc.Recreation != nil {
+		observed.ParentalControl.Recreation = &nextdnsv1alpha1.ObservedRecreation{
+			Timezone: pc.Recreation.Timezone,
+		}
+		if pc.Recreation.Times != nil {
+			observed.ParentalControl.Recreation.Times = &nextdnsv1alpha1.ObservedRecreationTimes{}
+			t := pc.Recreation.Times
+			rt := observed.ParentalControl.Recreation.Times
+			if t.Monday != nil {
+				rt.Monday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Monday.Start, End: t.Monday.End}
+			}
+			if t.Tuesday != nil {
+				rt.Tuesday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Tuesday.Start, End: t.Tuesday.End}
+			}
+			if t.Wednesday != nil {
+				rt.Wednesday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Wednesday.Start, End: t.Wednesday.End}
+			}
+			if t.Thursday != nil {
+				rt.Thursday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Thursday.Start, End: t.Thursday.End}
+			}
+			if t.Friday != nil {
+				rt.Friday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Friday.Start, End: t.Friday.End}
+			}
+			if t.Saturday != nil {
+				rt.Saturday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Saturday.Start, End: t.Saturday.End}
+			}
+			if t.Sunday != nil {
+				rt.Sunday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Sunday.Start, End: t.Sunday.End}
+			}
+		}
 	}
 
 	// Get parental control categories
@@ -837,8 +872,9 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	}
 	for _, cat := range categories {
 		observed.ParentalControl.Categories = append(observed.ParentalControl.Categories, nextdnsv1alpha1.ObservedCategoryEntry{
-			ID:     cat.ID,
-			Active: cat.Active,
+			ID:         cat.ID,
+			Active:     cat.Active,
+			Recreation: cat.Recreation,
 		})
 	}
 
@@ -1014,11 +1050,13 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 		suggested.ParentalControl = &nextdnsv1alpha1.ParentalControlSpec{
 			SafeSearch:            boolPtr(observed.ParentalControl.SafeSearch),
 			YouTubeRestrictedMode: boolPtr(observed.ParentalControl.YouTubeRestrictedMode),
+			BlockBypass:           boolPtr(observed.ParentalControl.BlockBypass),
 		}
 		for _, cat := range observed.ParentalControl.Categories {
 			suggested.ParentalControl.Categories = append(suggested.ParentalControl.Categories, nextdnsv1alpha1.CategoryEntry{
-				ID:     cat.ID,
-				Active: boolPtr(cat.Active),
+				ID:         cat.ID,
+				Active:     boolPtr(cat.Active),
+				Recreation: boolPtr(cat.Recreation),
 			})
 		}
 		for _, svc := range observed.ParentalControl.Services {

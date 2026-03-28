@@ -68,6 +68,7 @@ type ParentalControlConfig struct {
 	Services              []string
 	SafeSearch            bool
 	YouTubeRestrictedMode bool
+	BlockBypass           bool
 }
 
 // SettingsConfig represents general settings
@@ -583,6 +584,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 		ParentalControl: &nextdns.ParentalControl{
 			SafeSearch:            config.SafeSearch,
 			YoutubeRestrictedMode: config.YouTubeRestrictedMode,
+			BlockBypass:           config.BlockBypass,
 		},
 	}
 

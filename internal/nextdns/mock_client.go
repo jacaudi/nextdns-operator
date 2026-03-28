@@ -346,6 +346,7 @@ func (m *MockClient) UpdateParentalControl(ctx context.Context, profileID string
 	m.ParentalControl[profileID] = &nextdns.ParentalControl{
 		SafeSearch:            config.SafeSearch,
 		YoutubeRestrictedMode: config.YouTubeRestrictedMode,
+		BlockBypass:           config.BlockBypass,
 	}
 
 	// Store categories

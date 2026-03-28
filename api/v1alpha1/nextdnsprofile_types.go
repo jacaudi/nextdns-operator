@@ -245,6 +245,11 @@ type ParentalControlSpec struct {
 	// +kubebuilder:default=false
 	// +optional
 	YouTubeRestrictedMode *bool `json:"youtubeRestrictedMode,omitempty"`
+
+	// BlockBypass prevents bypassing parental controls
+	// +kubebuilder:default=false
+	// +optional
+	BlockBypass *bool `json:"blockBypass,omitempty"`
 }
 
 // CategoryEntry references a content category
@@ -257,6 +262,11 @@ type CategoryEntry struct {
 	// +kubebuilder:default=true
 	// +optional
 	Active *bool `json:"active,omitempty"`
+
+	// Recreation indicates if this category allows recreation time exceptions
+	// +kubebuilder:default=false
+	// +optional
+	Recreation *bool `json:"recreation,omitempty"`
 }
 
 // ServiceEntry references a specific service

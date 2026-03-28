@@ -83,20 +83,46 @@ type ObservedNativeEntry struct {
 type ObservedParentalControl struct {
 	SafeSearch            bool                    `json:"safeSearch"`
 	YouTubeRestrictedMode bool                    `json:"youtubeRestrictedMode"`
+	BlockBypass           bool                    `json:"blockBypass"`
 	Categories            []ObservedCategoryEntry `json:"categories,omitempty"`
 	Services              []ObservedServiceEntry  `json:"services,omitempty"`
+	Recreation            *ObservedRecreation     `json:"recreation,omitempty"`
 }
 
 // ObservedCategoryEntry represents an observed content category
 type ObservedCategoryEntry struct {
-	ID     string `json:"id"`
-	Active bool   `json:"active"`
+	ID         string `json:"id"`
+	Active     bool   `json:"active"`
+	Recreation bool   `json:"recreation"`
 }
 
 // ObservedServiceEntry represents an observed blocked service
 type ObservedServiceEntry struct {
 	ID     string `json:"id"`
 	Active bool   `json:"active"`
+}
+
+// ObservedRecreation represents observed recreation schedule settings
+type ObservedRecreation struct {
+	Times    *ObservedRecreationTimes `json:"times,omitempty"`
+	Timezone string                   `json:"timezone,omitempty"`
+}
+
+// ObservedRecreationTimes represents the days of the week with recreation intervals
+type ObservedRecreationTimes struct {
+	Monday    *ObservedRecreationInterval `json:"monday,omitempty"`
+	Tuesday   *ObservedRecreationInterval `json:"tuesday,omitempty"`
+	Wednesday *ObservedRecreationInterval `json:"wednesday,omitempty"`
+	Thursday  *ObservedRecreationInterval `json:"thursday,omitempty"`
+	Friday    *ObservedRecreationInterval `json:"friday,omitempty"`
+	Saturday  *ObservedRecreationInterval `json:"saturday,omitempty"`
+	Sunday    *ObservedRecreationInterval `json:"sunday,omitempty"`
+}
+
+// ObservedRecreationInterval represents a start and end time for recreation
+type ObservedRecreationInterval struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 // ObservedDomainEntry represents an observed domain with active state
