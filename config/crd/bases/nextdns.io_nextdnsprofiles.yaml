@@ -530,7 +530,8 @@ spec:
                   type: object
                 type: array
               fingerprint:
-                description: Fingerprint is the DNS endpoint (e.g., "abc123.dns.nextdns.io")
+                description: Fingerprint is the unique profile configuration fingerprint
+                  from the NextDNS API
                 type: string
               lastSyncTime:
                 description: LastSyncTime is the last time the profile was synced
