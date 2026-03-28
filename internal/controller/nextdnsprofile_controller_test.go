@@ -2789,6 +2789,151 @@ func TestReconcile_ManagedMode_MissingName(t *testing.T) {
 	assert.Equal(t, "NameRequired", readyCondition.Reason)
 }
 
+func TestReadFullProfile_LogDropInversion(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	// Test with Drop.IP=true (don't log IPs) and Drop.Domain=true (don't log domains)
+	t.Run("drop true inverts to false", func(t *testing.T) {
+		profile := &nextdnsv1alpha1.NextDNSProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-drop-true",
+				Namespace:  "default",
+				Finalizers: []string{FinalizerName},
+			},
+			Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+				Mode:      nextdnsv1alpha1.ProfileModeObserve,
+				ProfileID: "abc123",
+				CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+					Name: "nextdns-secret",
+				},
+			},
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nextdns-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"api-key": []byte("test-api-key"),
+			},
+		}
+
+		mockNDS := nextdns.NewMockClient()
+		mockNDS.SetProfile("abc123", "Test", "abc123.dns.nextdns.io")
+		mockNDS.Settings["abc123"] = &sdknextdns.Settings{
+			Logs: &sdknextdns.SettingsLogs{
+				Enabled:   true,
+				Retention: 7,
+				Drop: &sdknextdns.SettingsLogsDrop{
+					IP:     true,  // Don't log IPs
+					Domain: true,  // Don't log domains
+				},
+			},
+			BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(profile, secret).
+			WithStatusSubresource(profile).
+			WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
+			Build()
+
+		reconciler := &NextDNSProfileReconciler{
+			Client:    fakeClient,
+			Scheme:    scheme,
+			SyncPeriod: 5 * time.Minute,
+			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+				return mockNDS, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: "test-drop-true", Namespace: "default"},
+		})
+		require.NoError(t, err)
+
+		updated := &nextdnsv1alpha1.NextDNSProfile{}
+		err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-drop-true", Namespace: "default"}, updated)
+		require.NoError(t, err)
+
+		// Drop.IP=true -> LogClientsIPs=false
+		assert.False(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
+		// Drop.Domain=true -> LogDomains=false
+		assert.False(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
+	})
+
+	// Test with nil Drop (should default to logging both)
+	t.Run("nil drop defaults to true", func(t *testing.T) {
+		profile := &nextdnsv1alpha1.NextDNSProfile{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-drop-nil",
+				Namespace:  "default",
+				Finalizers: []string{FinalizerName},
+			},
+			Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+				Mode:      nextdnsv1alpha1.ProfileModeObserve,
+				ProfileID: "def456",
+				CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+					Name: "nextdns-secret",
+				},
+			},
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nextdns-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"api-key": []byte("test-api-key"),
+			},
+		}
+
+		mockNDS := nextdns.NewMockClient()
+		mockNDS.SetProfile("def456", "Test", "def456.dns.nextdns.io")
+		mockNDS.Settings["def456"] = &sdknextdns.Settings{
+			Logs: &sdknextdns.SettingsLogs{
+				Enabled:   true,
+				Retention: 30,
+				// Drop is nil
+			},
+			BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(profile, secret).
+			WithStatusSubresource(profile).
+			WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
+			Build()
+
+		reconciler := &NextDNSProfileReconciler{
+			Client:    fakeClient,
+			Scheme:    scheme,
+			SyncPeriod: 5 * time.Minute,
+			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+				return mockNDS, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: "test-drop-nil", Namespace: "default"},
+		})
+		require.NoError(t, err)
+
+		updated := &nextdnsv1alpha1.NextDNSProfile{}
+		err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-drop-nil", Namespace: "default"}, updated)
+		require.NoError(t, err)
+
+		// nil Drop defaults to logging both
+		assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
+		assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
+	})
+}
+
 func TestReconcile_ObserveMode_APIError(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()

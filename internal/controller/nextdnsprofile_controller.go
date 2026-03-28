@@ -925,7 +925,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 
 // buildSuggestedSpec translates an ObservedConfig into spec-compatible types
 // that users can copy directly into their NextDNSProfile spec.
-// Fields not available from the API are omitted (threatIntelligenceFeeds, logClientsIPs, logDomains).
+// Fields not available from the API are omitted.
 func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alpha1.SuggestedSpec {
 	if observed == nil {
 		return nil
