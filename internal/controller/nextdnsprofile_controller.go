@@ -936,6 +936,25 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 		})
 	}
 
+	// Get setup (read-only endpoint data)
+	setup, err := client.GetSetup(ctx, profileID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get setup: %w", err)
+	}
+	observed.Setup = &nextdnsv1alpha1.ObservedSetup{
+		IPv4:     setup.Ipv4,
+		IPv6:     setup.Ipv6,
+		DNSCrypt: setup.Dnscrypt,
+	}
+	if setup.LinkedIP != nil {
+		observed.Setup.LinkedIP = &nextdnsv1alpha1.ObservedLinkedIP{
+			Servers: setup.LinkedIP.Servers,
+			IP:      setup.LinkedIP.IP,
+			DDNS:    setup.LinkedIP.Ddns,
+			// updateToken intentionally excluded (sensitive)
+		}
+	}
+
 	return observed, apiFingerprint, nil
 }
 

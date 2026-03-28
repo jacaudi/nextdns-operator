@@ -782,6 +782,23 @@ func (c *Client) GetParentalControl(ctx context.Context, profileID string) (*nex
 	return pc, nil
 }
 
+// GetSetup retrieves the current setup/endpoint data for a profile
+func (c *Client) GetSetup(ctx context.Context, profileID string) (*nextdns.Setup, error) {
+	start := time.Now()
+	request := &nextdns.GetSetupRequest{
+		ProfileID: profileID,
+	}
+
+	setup, err := c.client.Setup.Get(ctx, request)
+	metrics.RecordAPIRequest("GetSetup", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get setup: %w", err)
+	}
+
+	return setup, nil
+}
+
 // GetSettings retrieves the current settings for a profile
 func (c *Client) GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error) {
 	start := time.Now()

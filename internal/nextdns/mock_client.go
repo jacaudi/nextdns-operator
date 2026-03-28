@@ -57,6 +57,9 @@ type MockClient struct {
 	// Rewrites stores mock rewrites per profile
 	Rewrites map[string][]*nextdns.Rewrites
 
+	// SetupData stores mock setup data per profile
+	SetupData map[string]*nextdns.Setup
+
 	// Error injection for testing error paths
 	CreateProfileError                error
 	GetProfileError                   error
@@ -84,6 +87,7 @@ type MockClient struct {
 	GetParentalControlCategoriesError error
 	GetParentalControlServicesError   error
 	GetRewritesError                  error
+	GetSetupError                     error
 
 	// Call tracking
 	Calls []MockCall
@@ -116,6 +120,7 @@ func NewMockClient() *MockClient {
 		ParentalControlCategories: make(map[string][]*nextdns.ParentalControlCategories),
 		ParentalControlServices:   make(map[string][]*nextdns.ParentalControlServices),
 		Rewrites:                  make(map[string][]*nextdns.Rewrites),
+		SetupData:                 make(map[string]*nextdns.Setup),
 		Calls:                     make([]MockCall, 0),
 		NextProfileID:             1,
 	}
@@ -751,6 +756,24 @@ func (m *MockClient) GetRewrites(ctx context.Context, profileID string) ([]*next
 	return m.Rewrites[profileID], nil
 }
 
+// GetSetup retrieves mock setup data
+func (m *MockClient) GetSetup(ctx context.Context, profileID string) (*nextdns.Setup, error) {
+	m.recordCall("GetSetup", profileID)
+	if m.GetSetupError != nil {
+		return nil, m.GetSetupError
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	setup, exists := m.SetupData[profileID]
+	if !exists {
+		return &nextdns.Setup{}, nil
+	}
+
+	return setup, nil
+}
+
 // GetCallCount returns the number of calls to a specific method
 func (m *MockClient) GetCallCount(method string) int {
 	m.mu.RLock()
@@ -803,6 +826,7 @@ func (m *MockClient) Reset() {
 	m.ParentalControlCategories = make(map[string][]*nextdns.ParentalControlCategories)
 	m.ParentalControlServices = make(map[string][]*nextdns.ParentalControlServices)
 	m.Rewrites = make(map[string][]*nextdns.Rewrites)
+	m.SetupData = make(map[string]*nextdns.Setup)
 	m.Calls = make([]MockCall, 0)
 	m.NextProfileID = 1
 
@@ -833,6 +857,7 @@ func (m *MockClient) Reset() {
 	m.GetParentalControlCategoriesError = nil
 	m.GetParentalControlServicesError = nil
 	m.GetRewritesError = nil
+	m.GetSetupError = nil
 }
 
 // Ensure MockClient implements ClientInterface

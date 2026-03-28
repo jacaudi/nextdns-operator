@@ -2047,6 +2047,10 @@ func (m *mockNextDNSClient) GetRewrites(ctx context.Context, profileID string) (
 	return []*sdknextdns.Rewrites{}, nil
 }
 
+func (m *mockNextDNSClient) GetSetup(ctx context.Context, profileID string) (*sdknextdns.Setup, error) {
+	return &sdknextdns.Setup{}, nil
+}
+
 func TestReconcileConfigMap(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()
@@ -2531,6 +2535,17 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	mockNDS.Allowlists["abc123"] = []*sdknextdns.Allowlist{
 		{ID: "good.com", Active: true},
 	}
+	mockNDS.SetupData["abc123"] = &sdknextdns.Setup{
+		Ipv4:     []string{"45.90.28.0"},
+		Ipv6:     []string{"2a07:a8c0::"},
+		Dnscrypt: "sdns://test-stamp",
+		LinkedIP: &sdknextdns.SetupLinkedIP{
+			Servers:     []string{"45.90.28.0", "45.90.30.0"},
+			IP:          "203.0.113.1",
+			Ddns:        "test.dns1.nextdns.io",
+			UpdateToken: "secret-token-should-not-appear",
+		},
+	}
 	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
 		Logs: &sdknextdns.SettingsLogs{
 			Enabled:   true,
@@ -2580,6 +2595,16 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
+
+	// Verify setup was populated
+	require.NotNil(t, updated.Status.ObservedConfig.Setup)
+	assert.Equal(t, []string{"45.90.28.0"}, updated.Status.ObservedConfig.Setup.IPv4)
+	assert.Equal(t, []string{"2a07:a8c0::"}, updated.Status.ObservedConfig.Setup.IPv6)
+	assert.Equal(t, "sdns://test-stamp", updated.Status.ObservedConfig.Setup.DNSCrypt)
+	require.NotNil(t, updated.Status.ObservedConfig.Setup.LinkedIP)
+	assert.Equal(t, []string{"45.90.28.0", "45.90.30.0"}, updated.Status.ObservedConfig.Setup.LinkedIP.Servers)
+	assert.Equal(t, "203.0.113.1", updated.Status.ObservedConfig.Setup.LinkedIP.IP)
+	assert.Equal(t, "test.dns1.nextdns.io", updated.Status.ObservedConfig.Setup.LinkedIP.DDNS)
 
 	// Verify suggestedSpec was populated
 	require.NotNil(t, updated.Status.SuggestedSpec)
