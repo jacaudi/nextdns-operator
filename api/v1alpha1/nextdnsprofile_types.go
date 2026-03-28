@@ -374,7 +374,7 @@ type NextDNSProfileStatus struct {
 	// +optional
 	ProfileID string `json:"profileID,omitempty"`
 
-	// Fingerprint is the DNS endpoint (e.g., "abc123.dns.nextdns.io")
+	// Fingerprint is the unique profile configuration fingerprint from the NextDNS API
 	// +optional
 	Fingerprint string `json:"fingerprint,omitempty"`
 

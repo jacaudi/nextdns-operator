@@ -518,6 +518,8 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			profile.Status.Fingerprint = existingProfile.Fingerprint
 		case newProfile != nil:
 			profile.Status.Fingerprint = newProfile.Fingerprint
+		default:
+			logger.Info("WARNING: could not retrieve fingerprint from API, fingerprint will be empty")
 		}
 	}
 
@@ -1097,7 +1099,9 @@ func (r *NextDNSProfileReconciler) reconcileConfigMap(ctx context.Context, profi
 
 	profileID := profile.Status.ProfileID
 
-	// Build ConfigMap data
+	// Build ConfigMap data with DNS protocol endpoints.
+	// Note: These use {profileID}.dns.nextdns.io which is the DNS server hostname,
+	// NOT the API fingerprint (status.fingerprint). These are different concepts.
 	data := map[string]string{
 		"NEXTDNS_PROFILE_ID": profileID,
 		"NEXTDNS_DOT":        fmt.Sprintf("%s.dns.nextdns.io", profileID),

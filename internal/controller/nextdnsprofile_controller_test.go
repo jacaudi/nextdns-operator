@@ -1226,6 +1226,7 @@ func TestSyncWithNextDNS_AdoptExistingProfile(t *testing.T) {
 
 	// Verify profile was adopted (not created)
 	assert.Equal(t, "existing-profile-123", profile.Status.ProfileID)
+	assert.Equal(t, "fp-mock-existing-profile-123", profile.Status.Fingerprint)
 	assert.False(t, mockClient.createProfileCalled)
 	assert.True(t, mockClient.getProfileCalled)
 }
