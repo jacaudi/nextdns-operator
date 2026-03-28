@@ -77,6 +77,7 @@ type SettingsConfig struct {
 	LogClientsIPs   bool
 	LogDomains      bool
 	LogRetention    int
+	Location        string
 	BlockPageEnable bool
 	Web3            bool
 	// Performance settings
@@ -516,6 +517,7 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
 			Retention: config.LogRetention,
+			Location:  config.Location,
 			Drop: &nextdns.SettingsLogsDrop{
 				IP:     !config.LogClientsIPs,
 				Domain: !config.LogDomains,

@@ -2564,6 +2564,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 		Logs: &sdknextdns.SettingsLogs{
 			Enabled:   true,
 			Retention: 7,
+			Location:  "eu",
 			Drop: &sdknextdns.SettingsLogsDrop{
 				IP:     false,
 				Domain: false,
@@ -2609,6 +2610,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", updated.Status.ObservedConfig.Settings.Logs.Location)
 
 	// Verify setup was populated
 	require.NotNil(t, updated.Status.ObservedConfig.Setup)
@@ -2667,6 +2669,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, "7d", updated.Status.SuggestedSpec.Settings.Logs.Retention)
 	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogClientsIPs)
 	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", updated.Status.SuggestedSpec.Settings.Logs.Location)
 
 	// Verify conditions
 	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
@@ -3283,7 +3286,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 			{Domain: "good.com", Active: true},
 		},
 		Settings: &nextdnsv1alpha1.ObservedSettings{
-			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false},
+			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false, Location: "eu"},
 			BlockPage: &nextdnsv1alpha1.ObservedBlockPage{Enabled: true},
 			Performance: &nextdnsv1alpha1.ObservedPerformance{
 				ECS:             true,
@@ -3364,6 +3367,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	assert.Equal(t, "30d", suggested.Settings.Logs.Retention)
 	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.LogClientsIPs)
 	assert.Equal(t, boolPtr(false), suggested.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", suggested.Settings.Logs.Location)
 	require.NotNil(t, suggested.Settings.BlockPage)
 	assert.Equal(t, boolPtr(true), suggested.Settings.BlockPage.Enabled)
 	require.NotNil(t, suggested.Settings.Performance)
@@ -3498,6 +3502,7 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 					LogClientsIPs: boolPtr(true),
 					LogDomains:    boolPtr(false),
 					Retention:     "30d",
+					Location:      "ch",
 				},
 				BlockPage: &nextdnsv1alpha1.BlockPageSpec{
 					Enabled: boolPtr(true),
@@ -3560,6 +3565,8 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
 	// LogDomains=false -> Drop.Domain=true (inverted)
 	assert.True(t, settings.Logs.Drop.Domain, "LogDomains=false should mean Drop.Domain=true")
+	// Location should be passed through
+	assert.Equal(t, "ch", settings.Logs.Location, "Location should be passed through to SDK")
 }
 
 func TestSyncWithNextDNS_Rewrites(t *testing.T) {

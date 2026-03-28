@@ -323,6 +323,10 @@ type LogsSpec struct {
 	// +kubebuilder:default="7d"
 	// +optional
 	Retention string `json:"retention,omitempty"`
+
+	// Location specifies the log storage location (e.g., "eu", "us", "ch")
+	// +optional
+	Location string `json:"location,omitempty"`
 }
 
 // BlockPageSpec configures the block page

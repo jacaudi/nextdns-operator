@@ -143,6 +143,8 @@ type ObservedSettings struct {
 type ObservedLogs struct {
 	Enabled   bool `json:"enabled"`
 	Retention int  `json:"retention,omitempty"`
+	// Location is the log storage location (e.g., "eu", "us", "ch")
+	Location string `json:"location,omitempty"`
 	// LogClientsIPs indicates whether client IPs are logged.
 	// Derived from the API's Drop.IP field (inverted: LogClientsIPs = !Drop.IP).
 	LogClientsIPs bool `json:"logClientsIPs"`

@@ -636,6 +636,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			settingsConfig.LogClientsIPs = boolValue(profile.Spec.Settings.Logs.LogClientsIPs, false)
 			settingsConfig.LogDomains = boolValue(profile.Spec.Settings.Logs.LogDomains, true)
 			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
+			settingsConfig.Location = profile.Spec.Settings.Logs.Location
 		}
 		if profile.Spec.Settings.BlockPage != nil {
 			settingsConfig.BlockPageEnable = boolValue(profile.Spec.Settings.BlockPage.Enabled, true)
@@ -935,6 +936,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 		observed.Settings.Logs = &nextdnsv1alpha1.ObservedLogs{
 			Enabled:   settings.Logs.Enabled,
 			Retention: settings.Logs.Retention,
+			Location:  settings.Logs.Location,
 		}
 		// Invert Drop fields to user-friendly positive semantics:
 		// API Drop.IP=true means "don't log IPs" -> LogClientsIPs=false
@@ -1099,6 +1101,7 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{
 				Enabled:       boolPtr(observed.Settings.Logs.Enabled),
 				Retention:     formatRetentionString(observed.Settings.Logs.Retention),
+				Location:      observed.Settings.Logs.Location,
 				LogClientsIPs: boolPtr(observed.Settings.Logs.LogClientsIPs),
 				LogDomains:    boolPtr(observed.Settings.Logs.LogDomains),
 			}
