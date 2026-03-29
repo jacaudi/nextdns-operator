@@ -263,7 +263,8 @@ type CategoryEntry struct {
 	// +optional
 	Active *bool `json:"active,omitempty"`
 
-	// Recreation indicates if this category allows recreation time exceptions
+	// Recreation indicates if this category allows recreation time exceptions.
+	// Note: Observe mode reads this from the API. Managed mode write support is deferred.
 	// +kubebuilder:default=false
 	// +optional
 	Recreation *bool `json:"recreation,omitempty"`
@@ -324,7 +325,8 @@ type LogsSpec struct {
 	// +optional
 	Retention string `json:"retention,omitempty"`
 
-	// Location specifies the log storage location (e.g., "eu", "us", "ch")
+	// Location specifies the log storage location (e.g., "eu", "us", "ch").
+	// Valid values depend on the NextDNS plan and may change over time.
 	// +optional
 	Location string `json:"location,omitempty"`
 }
