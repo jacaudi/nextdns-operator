@@ -209,8 +209,9 @@ spec:
                           type: string
                         recreation:
                           default: false
-                          description: Recreation indicates if this category allows
-                            recreation time exceptions
+                          description: |-
+                            Recreation indicates if this category allows recreation time exceptions.
+                            Note: Observe mode reads this from the API. Managed mode write support is deferred.
                           type: boolean
                       required:
                       - id
@@ -399,8 +400,9 @@ spec:
                         description: Enabled turns logging on/off
                         type: boolean
                       location:
-                        description: Location specifies the log storage location (e.g.,
-                          "eu", "us", "ch")
+                        description: |-
+                          Location specifies the log storage location (e.g., "eu", "us", "ch").
+                          Valid values depend on the NextDNS plan and may change over time.
                         type: string
                       logClientsIPs:
                         default: false
@@ -1090,8 +1092,9 @@ spec:
                               type: string
                             recreation:
                               default: false
-                              description: Recreation indicates if this category allows
-                                recreation time exceptions
+                              description: |-
+                                Recreation indicates if this category allows recreation time exceptions.
+                                Note: Observe mode reads this from the API. Managed mode write support is deferred.
                               type: boolean
                           required:
                           - id
@@ -1269,8 +1272,9 @@ spec:
                             description: Enabled turns logging on/off
                             type: boolean
                           location:
-                            description: Location specifies the log storage location
-                              (e.g., "eu", "us", "ch")
+                            description: |-
+                              Location specifies the log storage location (e.g., "eu", "us", "ch").
+                              Valid values depend on the NextDNS plan and may change over time.
                             type: string
                           logClientsIPs:
                             default: false
