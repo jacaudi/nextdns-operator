@@ -2901,8 +2901,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 				Enabled:   true,
 				Retention: 7,
 				Drop: &sdknextdns.SettingsLogsDrop{
-					IP:     true,  // Don't log IPs
-					Domain: true,  // Don't log domains
+					IP:     true, // Don't log IPs
+					Domain: true, // Don't log domains
 				},
 			},
 			BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
@@ -2916,8 +2916,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 			Build()
 
 		reconciler := &NextDNSProfileReconciler{
-			Client:    fakeClient,
-			Scheme:    scheme,
+			Client:     fakeClient,
+			Scheme:     scheme,
 			SyncPeriod: 5 * time.Minute,
 			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 				return mockNDS, nil
@@ -2985,8 +2985,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 			Build()
 
 		reconciler := &NextDNSProfileReconciler{
-			Client:    fakeClient,
-			Scheme:    scheme,
+			Client:     fakeClient,
+			Scheme:     scheme,
 			SyncPeriod: 5 * time.Minute,
 			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 				return mockNDS, nil

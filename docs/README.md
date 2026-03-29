@@ -79,6 +79,8 @@ envFrom:
 
 Observe mode lets you safely adopt an existing NextDNS profile into GitOps management without modifying it. The operator reads the full remote profile configuration and stores it in `status.observedConfig`, but never writes any changes back to NextDNS.
 
+The `observedConfig` captures the complete profile state: security, privacy (blocklists, natives), parental control (including blockBypass and recreation schedules), denylist, allowlist, rewrites, settings (logs with location and drop fields, block page, performance, web3), blocked TLDs, and DNS setup endpoints (IPv4, IPv6, LinkedIP, DNSCrypt).
+
 This is useful when you have profiles already configured through the NextDNS dashboard and want to bring them under declarative management without risk of accidentally overwriting settings.
 
 **Create a NextDNSProfile in observe mode:**
@@ -112,6 +114,8 @@ kubectl get nextdnsprofile my-existing-profile -o jsonpath='{.status.suggestedSp
 ```
 
 The `suggestedSpec` field contains a spec-compatible translation of the observed configuration. You can copy fields directly from `suggestedSpec` into your CR spec when transitioning to managed mode.
+
+The `observedConfig` also includes a `setup` section with DNS endpoint information (IPv4/IPv6 addresses, LinkedIP configuration, DNSCrypt stamp). This data is read-only and not included in `suggestedSpec`.
 
 > **Limitations:** Some fields cannot be derived from the NextDNS API and are omitted from `suggestedSpec`:
 > - `settings.logs.logClientsIPs` and `settings.logs.logDomains` -- not exposed by the API
@@ -621,6 +625,15 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `services` | ServiceEntry[] | | Specific services to block (`id` required, `active` defaults to `true`) |
 | `safeSearch` | *bool | `false` | Enforce safe search on search engines |
 | `youtubeRestrictedMode` | *bool | `false` | Enforce YouTube restricted mode |
+| `blockBypass` | *bool | `false` | Prevent bypassing parental controls |
+
+Each `CategoryEntry` has:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | string | | Category identifier |
+| `active` | *bool | `true` | Whether this category is blocked |
+| `recreation` | *bool | `false` | Allow recreation time exceptions for this category |
 
 **SettingsSpec:**
 
@@ -630,6 +643,7 @@ The primary resource for managing a NextDNS profile. Each `NextDNSProfile` maps 
 | `logs.logClientsIPs` | *bool | `false` | Log client IP addresses |
 | `logs.logDomains` | *bool | `true` | Log queried domains |
 | `logs.retention` | string | `7d` | Log retention (`1h`, `6h`, `1d`, `7d`, `30d`, `90d`, `1y`, `2y`) |
+| `logs.location` | string | | Log storage location (e.g., `eu`, `us`, `ch`) |
 | `blockPage.enabled` | *bool | `true` | Show block page instead of failing silently |
 | `performance.ecs` | *bool | `true` | EDNS Client Subnet for geo-aware responses |
 | `performance.cacheBoost` | *bool | `true` | Extended caching at NextDNS edge |

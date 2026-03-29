@@ -74,10 +74,10 @@ func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	ClientFactory      ClientFactory
-	SyncPeriod         time.Duration
-	lastMetricsUpdate  time.Time
+	Scheme            *runtime.Scheme
+	ClientFactory     ClientFactory
+	SyncPeriod        time.Duration
+	lastMetricsUpdate time.Time
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
