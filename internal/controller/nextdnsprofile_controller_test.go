@@ -1352,6 +1352,7 @@ func TestSyncWithNextDNS_WithParentalControl(t *testing.T) {
 			ParentalControl: &nextdnsv1alpha1.ParentalControlSpec{
 				SafeSearch:            boolPtr(true),
 				YouTubeRestrictedMode: boolPtr(true),
+				BlockBypass:           boolPtr(true),
 				Categories: []nextdnsv1alpha1.CategoryEntry{
 					{ID: "adult"},
 					{ID: "gambling", Active: boolPtr(true)},
@@ -1390,6 +1391,7 @@ func TestSyncWithNextDNS_WithParentalControl(t *testing.T) {
 	assert.NotNil(t, mockClient.parentalControlConfig)
 	assert.True(t, mockClient.parentalControlConfig.SafeSearch)
 	assert.True(t, mockClient.parentalControlConfig.YouTubeRestrictedMode)
+	assert.True(t, mockClient.parentalControlConfig.BlockBypass)
 	assert.Equal(t, 2, len(mockClient.parentalControlConfig.Categories)) // Only active ones
 	assert.Equal(t, 2, len(mockClient.parentalControlConfig.Services))
 }
@@ -2047,6 +2049,10 @@ func (m *mockNextDNSClient) GetRewrites(ctx context.Context, profileID string) (
 	return []*sdknextdns.Rewrites{}, nil
 }
 
+func (m *mockNextDNSClient) GetSetup(ctx context.Context, profileID string) (*sdknextdns.Setup, error) {
+	return &sdknextdns.Setup{}, nil
+}
+
 func TestReconcileConfigMap(t *testing.T) {
 	scheme := newTestScheme()
 	ctx := context.Background()
@@ -2523,7 +2529,19 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 		DisguisedTrackers: true,
 	}
 	mockNDS.ParentalControl["abc123"] = &sdknextdns.ParentalControl{
-		SafeSearch: true,
+		SafeSearch:  true,
+		BlockBypass: true,
+		Recreation: &sdknextdns.ParentalControlRecreation{
+			Timezone: "America/New_York",
+			Times: &sdknextdns.ParentalControlRecreationTimes{
+				Monday:   &sdknextdns.ParentalControlRecreationInterval{Start: "15:00", End: "20:00"},
+				Saturday: &sdknextdns.ParentalControlRecreationInterval{Start: "09:00", End: "21:00"},
+			},
+		},
+	}
+	mockNDS.ParentalControlCategories["abc123"] = []*sdknextdns.ParentalControlCategories{
+		{ID: "gambling", Active: true, Recreation: true},
+		{ID: "adult", Active: true, Recreation: false},
 	}
 	mockNDS.Denylists["abc123"] = []*sdknextdns.Denylist{
 		{ID: "bad.com", Active: true},
@@ -2531,10 +2549,22 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	mockNDS.Allowlists["abc123"] = []*sdknextdns.Allowlist{
 		{ID: "good.com", Active: true},
 	}
+	mockNDS.SetupData["abc123"] = &sdknextdns.Setup{
+		Ipv4:     []string{"45.90.28.0"},
+		Ipv6:     []string{"2a07:a8c0::"},
+		Dnscrypt: "sdns://test-stamp",
+		LinkedIP: &sdknextdns.SetupLinkedIP{
+			Servers:     []string{"45.90.28.0", "45.90.30.0"},
+			IP:          "203.0.113.1",
+			Ddns:        "test.dns1.nextdns.io",
+			UpdateToken: "secret-token-should-not-appear",
+		},
+	}
 	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
 		Logs: &sdknextdns.SettingsLogs{
 			Enabled:   true,
 			Retention: 7,
+			Location:  "eu",
 			Drop: &sdknextdns.SettingsLogsDrop{
 				IP:     false,
 				Domain: false,
@@ -2580,6 +2610,46 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.Enabled)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", updated.Status.ObservedConfig.Settings.Logs.Location)
+
+	// Verify setup was populated
+	require.NotNil(t, updated.Status.ObservedConfig.Setup)
+	assert.Equal(t, []string{"45.90.28.0"}, updated.Status.ObservedConfig.Setup.IPv4)
+	assert.Equal(t, []string{"2a07:a8c0::"}, updated.Status.ObservedConfig.Setup.IPv6)
+	assert.Equal(t, "sdns://test-stamp", updated.Status.ObservedConfig.Setup.DNSCrypt)
+	require.NotNil(t, updated.Status.ObservedConfig.Setup.LinkedIP)
+	assert.Equal(t, []string{"45.90.28.0", "45.90.30.0"}, updated.Status.ObservedConfig.Setup.LinkedIP.Servers)
+	assert.Equal(t, "203.0.113.1", updated.Status.ObservedConfig.Setup.LinkedIP.IP)
+	assert.Equal(t, "test.dns1.nextdns.io", updated.Status.ObservedConfig.Setup.LinkedIP.DDNS)
+
+	// Verify parental control BlockBypass and Recreation were observed
+	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl)
+	assert.True(t, updated.Status.ObservedConfig.ParentalControl.SafeSearch)
+	assert.True(t, updated.Status.ObservedConfig.ParentalControl.BlockBypass)
+	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl.Recreation)
+	assert.Equal(t, "America/New_York", updated.Status.ObservedConfig.ParentalControl.Recreation.Timezone)
+	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl.Recreation.Times)
+	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Monday)
+	assert.Equal(t, "15:00", updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Monday.Start)
+	assert.Equal(t, "20:00", updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Monday.End)
+	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Saturday)
+	assert.Equal(t, "09:00", updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Saturday.Start)
+	assert.Equal(t, "21:00", updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Saturday.End)
+	assert.Nil(t, updated.Status.ObservedConfig.ParentalControl.Recreation.Times.Tuesday)
+	// Verify categories have Recreation field
+	require.Equal(t, 2, len(updated.Status.ObservedConfig.ParentalControl.Categories))
+	assert.Equal(t, "gambling", updated.Status.ObservedConfig.ParentalControl.Categories[0].ID)
+	assert.True(t, updated.Status.ObservedConfig.ParentalControl.Categories[0].Recreation)
+	assert.Equal(t, "adult", updated.Status.ObservedConfig.ParentalControl.Categories[1].ID)
+	assert.False(t, updated.Status.ObservedConfig.ParentalControl.Categories[1].Recreation)
+
+	// Verify suggestedSpec parental control has BlockBypass and category Recreation
+	require.NotNil(t, updated.Status.SuggestedSpec)
+	require.NotNil(t, updated.Status.SuggestedSpec.ParentalControl)
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.ParentalControl.BlockBypass)
+	require.Equal(t, 2, len(updated.Status.SuggestedSpec.ParentalControl.Categories))
+	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.ParentalControl.Categories[0].Recreation)
+	assert.Equal(t, boolPtr(false), updated.Status.SuggestedSpec.ParentalControl.Categories[1].Recreation)
 
 	// Verify suggestedSpec was populated
 	require.NotNil(t, updated.Status.SuggestedSpec)
@@ -2599,6 +2669,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, "7d", updated.Status.SuggestedSpec.Settings.Logs.Retention)
 	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogClientsIPs)
 	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", updated.Status.SuggestedSpec.Settings.Logs.Location)
 
 	// Verify conditions
 	readyCondition := findCondition(updated.Status.Conditions, ConditionTypeReady)
@@ -2830,8 +2901,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 				Enabled:   true,
 				Retention: 7,
 				Drop: &sdknextdns.SettingsLogsDrop{
-					IP:     true,  // Don't log IPs
-					Domain: true,  // Don't log domains
+					IP:     true, // Don't log IPs
+					Domain: true, // Don't log domains
 				},
 			},
 			BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
@@ -2845,8 +2916,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 			Build()
 
 		reconciler := &NextDNSProfileReconciler{
-			Client:    fakeClient,
-			Scheme:    scheme,
+			Client:     fakeClient,
+			Scheme:     scheme,
 			SyncPeriod: 5 * time.Minute,
 			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 				return mockNDS, nil
@@ -2914,8 +2985,8 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 			Build()
 
 		reconciler := &NextDNSProfileReconciler{
-			Client:    fakeClient,
-			Scheme:    scheme,
+			Client:     fakeClient,
+			Scheme:     scheme,
 			SyncPeriod: 5 * time.Minute,
 			ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
 				return mockNDS, nil
@@ -3198,9 +3269,10 @@ func TestBuildSuggestedSpec(t *testing.T) {
 		ParentalControl: &nextdnsv1alpha1.ObservedParentalControl{
 			SafeSearch:            true,
 			YouTubeRestrictedMode: false,
+			BlockBypass:           true,
 			Categories: []nextdnsv1alpha1.ObservedCategoryEntry{
-				{ID: "gambling", Active: true},
-				{ID: "adult", Active: false},
+				{ID: "gambling", Active: true, Recreation: true},
+				{ID: "adult", Active: false, Recreation: false},
 			},
 			Services: []nextdnsv1alpha1.ObservedServiceEntry{
 				{ID: "tiktok", Active: true},
@@ -3214,7 +3286,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 			{Domain: "good.com", Active: true},
 		},
 		Settings: &nextdnsv1alpha1.ObservedSettings{
-			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false},
+			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false, Location: "eu"},
 			BlockPage: &nextdnsv1alpha1.ObservedBlockPage{Enabled: true},
 			Performance: &nextdnsv1alpha1.ObservedPerformance{
 				ECS:             true,
@@ -3266,11 +3338,14 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	require.NotNil(t, suggested.ParentalControl)
 	assert.Equal(t, boolPtr(true), suggested.ParentalControl.SafeSearch)
 	assert.Equal(t, boolPtr(false), suggested.ParentalControl.YouTubeRestrictedMode)
+	assert.Equal(t, boolPtr(true), suggested.ParentalControl.BlockBypass)
 	require.Equal(t, 2, len(suggested.ParentalControl.Categories))
 	assert.Equal(t, "gambling", suggested.ParentalControl.Categories[0].ID)
 	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Categories[0].Active)
+	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Categories[0].Recreation)
 	assert.Equal(t, "adult", suggested.ParentalControl.Categories[1].ID)
 	assert.Equal(t, boolPtr(false), suggested.ParentalControl.Categories[1].Active)
+	assert.Equal(t, boolPtr(false), suggested.ParentalControl.Categories[1].Recreation)
 	require.Equal(t, 1, len(suggested.ParentalControl.Services))
 	assert.Equal(t, "tiktok", suggested.ParentalControl.Services[0].ID)
 	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Services[0].Active)
@@ -3292,6 +3367,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	assert.Equal(t, "30d", suggested.Settings.Logs.Retention)
 	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.LogClientsIPs)
 	assert.Equal(t, boolPtr(false), suggested.Settings.Logs.LogDomains)
+	assert.Equal(t, "eu", suggested.Settings.Logs.Location)
 	require.NotNil(t, suggested.Settings.BlockPage)
 	assert.Equal(t, boolPtr(true), suggested.Settings.BlockPage.Enabled)
 	require.NotNil(t, suggested.Settings.Performance)
@@ -3426,6 +3502,7 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 					LogClientsIPs: boolPtr(true),
 					LogDomains:    boolPtr(false),
 					Retention:     "30d",
+					Location:      "ch",
 				},
 				BlockPage: &nextdnsv1alpha1.BlockPageSpec{
 					Enabled: boolPtr(true),
@@ -3488,6 +3565,8 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
 	// LogDomains=false -> Drop.Domain=true (inverted)
 	assert.True(t, settings.Logs.Drop.Domain, "LogDomains=false should mean Drop.Domain=true")
+	// Location should be passed through
+	assert.Equal(t, "ch", settings.Logs.Location, "Location should be passed through to SDK")
 }
 
 func TestSyncWithNextDNS_Rewrites(t *testing.T) {

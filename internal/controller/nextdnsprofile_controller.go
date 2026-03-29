@@ -74,10 +74,10 @@ func DefaultClientFactory(apiKey string) (nextdns.ClientInterface, error) {
 // NextDNSProfileReconciler reconciles a NextDNSProfile object
 type NextDNSProfileReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	ClientFactory      ClientFactory
-	SyncPeriod         time.Duration
-	lastMetricsUpdate  time.Time
+	Scheme            *runtime.Scheme
+	ClientFactory     ClientFactory
+	SyncPeriod        time.Duration
+	lastMetricsUpdate time.Time
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnsprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -608,6 +608,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			Services:              services,
 			SafeSearch:            boolValue(profile.Spec.ParentalControl.SafeSearch, false),
 			YouTubeRestrictedMode: boolValue(profile.Spec.ParentalControl.YouTubeRestrictedMode, false),
+			BlockBypass:           boolValue(profile.Spec.ParentalControl.BlockBypass, false),
 		}
 		if err := client.UpdateParentalControl(ctx, profileID, pcConfig); err != nil {
 			return fmt.Errorf("failed to update parental control settings: %w", err)
@@ -635,6 +636,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			settingsConfig.LogClientsIPs = boolValue(profile.Spec.Settings.Logs.LogClientsIPs, false)
 			settingsConfig.LogDomains = boolValue(profile.Spec.Settings.Logs.LogDomains, true)
 			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
+			settingsConfig.Location = profile.Spec.Settings.Logs.Location
 		}
 		if profile.Spec.Settings.BlockPage != nil {
 			settingsConfig.BlockPageEnable = boolValue(profile.Spec.Settings.BlockPage.Enabled, true)
@@ -828,6 +830,40 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	observed.ParentalControl = &nextdnsv1alpha1.ObservedParentalControl{
 		SafeSearch:            pc.SafeSearch,
 		YouTubeRestrictedMode: pc.YoutubeRestrictedMode,
+		BlockBypass:           pc.BlockBypass,
+	}
+
+	// Map recreation schedule if present
+	if pc.Recreation != nil {
+		observed.ParentalControl.Recreation = &nextdnsv1alpha1.ObservedRecreation{
+			Timezone: pc.Recreation.Timezone,
+		}
+		if pc.Recreation.Times != nil {
+			observed.ParentalControl.Recreation.Times = &nextdnsv1alpha1.ObservedRecreationTimes{}
+			t := pc.Recreation.Times
+			rt := observed.ParentalControl.Recreation.Times
+			if t.Monday != nil {
+				rt.Monday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Monday.Start, End: t.Monday.End}
+			}
+			if t.Tuesday != nil {
+				rt.Tuesday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Tuesday.Start, End: t.Tuesday.End}
+			}
+			if t.Wednesday != nil {
+				rt.Wednesday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Wednesday.Start, End: t.Wednesday.End}
+			}
+			if t.Thursday != nil {
+				rt.Thursday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Thursday.Start, End: t.Thursday.End}
+			}
+			if t.Friday != nil {
+				rt.Friday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Friday.Start, End: t.Friday.End}
+			}
+			if t.Saturday != nil {
+				rt.Saturday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Saturday.Start, End: t.Saturday.End}
+			}
+			if t.Sunday != nil {
+				rt.Sunday = &nextdnsv1alpha1.ObservedRecreationInterval{Start: t.Sunday.Start, End: t.Sunday.End}
+			}
+		}
 	}
 
 	// Get parental control categories
@@ -837,8 +873,9 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	}
 	for _, cat := range categories {
 		observed.ParentalControl.Categories = append(observed.ParentalControl.Categories, nextdnsv1alpha1.ObservedCategoryEntry{
-			ID:     cat.ID,
-			Active: cat.Active,
+			ID:         cat.ID,
+			Active:     cat.Active,
+			Recreation: cat.Recreation,
 		})
 	}
 
@@ -899,6 +936,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 		observed.Settings.Logs = &nextdnsv1alpha1.ObservedLogs{
 			Enabled:   settings.Logs.Enabled,
 			Retention: settings.Logs.Retention,
+			Location:  settings.Logs.Location,
 		}
 		// Invert Drop fields to user-friendly positive semantics:
 		// API Drop.IP=true means "don't log IPs" -> LogClientsIPs=false
@@ -934,6 +972,25 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 			Name:    rw.Name,
 			Content: rw.Content,
 		})
+	}
+
+	// Get setup (read-only endpoint data)
+	setup, err := client.GetSetup(ctx, profileID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get setup: %w", err)
+	}
+	observed.Setup = &nextdnsv1alpha1.ObservedSetup{
+		IPv4:     setup.Ipv4,
+		IPv6:     setup.Ipv6,
+		DNSCrypt: setup.Dnscrypt,
+	}
+	if setup.LinkedIP != nil {
+		observed.Setup.LinkedIP = &nextdnsv1alpha1.ObservedLinkedIP{
+			Servers: setup.LinkedIP.Servers,
+			IP:      setup.LinkedIP.IP,
+			DDNS:    setup.LinkedIP.Ddns,
+			// updateToken intentionally excluded (sensitive)
+		}
 	}
 
 	return observed, apiFingerprint, nil
@@ -995,11 +1052,13 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 		suggested.ParentalControl = &nextdnsv1alpha1.ParentalControlSpec{
 			SafeSearch:            boolPtr(observed.ParentalControl.SafeSearch),
 			YouTubeRestrictedMode: boolPtr(observed.ParentalControl.YouTubeRestrictedMode),
+			BlockBypass:           boolPtr(observed.ParentalControl.BlockBypass),
 		}
 		for _, cat := range observed.ParentalControl.Categories {
 			suggested.ParentalControl.Categories = append(suggested.ParentalControl.Categories, nextdnsv1alpha1.CategoryEntry{
-				ID:     cat.ID,
-				Active: boolPtr(cat.Active),
+				ID:         cat.ID,
+				Active:     boolPtr(cat.Active),
+				Recreation: boolPtr(cat.Recreation),
 			})
 		}
 		for _, svc := range observed.ParentalControl.Services {
@@ -1042,6 +1101,7 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{
 				Enabled:       boolPtr(observed.Settings.Logs.Enabled),
 				Retention:     formatRetentionString(observed.Settings.Logs.Retention),
+				Location:      observed.Settings.Logs.Location,
 				LogClientsIPs: boolPtr(observed.Settings.Logs.LogClientsIPs),
 				LogDomains:    boolPtr(observed.Settings.Logs.LogDomains),
 			}

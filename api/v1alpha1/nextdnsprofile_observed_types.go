@@ -38,6 +38,11 @@ type ObservedConfig struct {
 	// BlockedTLDs contains observed blocked TLDs
 	// +optional
 	BlockedTLDs []string `json:"blockedTLDs,omitempty"`
+
+	// Setup contains observed DNS setup/endpoint configuration
+	// This is read-only data from the API — not user-configurable via spec
+	// +optional
+	Setup *ObservedSetup `json:"setup,omitempty"`
 }
 
 // ObservedSecurity represents observed security settings
@@ -78,20 +83,46 @@ type ObservedNativeEntry struct {
 type ObservedParentalControl struct {
 	SafeSearch            bool                    `json:"safeSearch"`
 	YouTubeRestrictedMode bool                    `json:"youtubeRestrictedMode"`
+	BlockBypass           bool                    `json:"blockBypass"`
 	Categories            []ObservedCategoryEntry `json:"categories,omitempty"`
 	Services              []ObservedServiceEntry  `json:"services,omitempty"`
+	Recreation            *ObservedRecreation     `json:"recreation,omitempty"`
 }
 
 // ObservedCategoryEntry represents an observed content category
 type ObservedCategoryEntry struct {
-	ID     string `json:"id"`
-	Active bool   `json:"active"`
+	ID         string `json:"id"`
+	Active     bool   `json:"active"`
+	Recreation bool   `json:"recreation"`
 }
 
 // ObservedServiceEntry represents an observed blocked service
 type ObservedServiceEntry struct {
 	ID     string `json:"id"`
 	Active bool   `json:"active"`
+}
+
+// ObservedRecreation represents observed recreation schedule settings
+type ObservedRecreation struct {
+	Times    *ObservedRecreationTimes `json:"times,omitempty"`
+	Timezone string                   `json:"timezone,omitempty"`
+}
+
+// ObservedRecreationTimes represents the days of the week with recreation intervals
+type ObservedRecreationTimes struct {
+	Monday    *ObservedRecreationInterval `json:"monday,omitempty"`
+	Tuesday   *ObservedRecreationInterval `json:"tuesday,omitempty"`
+	Wednesday *ObservedRecreationInterval `json:"wednesday,omitempty"`
+	Thursday  *ObservedRecreationInterval `json:"thursday,omitempty"`
+	Friday    *ObservedRecreationInterval `json:"friday,omitempty"`
+	Saturday  *ObservedRecreationInterval `json:"saturday,omitempty"`
+	Sunday    *ObservedRecreationInterval `json:"sunday,omitempty"`
+}
+
+// ObservedRecreationInterval represents a start and end time for recreation
+type ObservedRecreationInterval struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 // ObservedDomainEntry represents an observed domain with active state
@@ -112,6 +143,8 @@ type ObservedSettings struct {
 type ObservedLogs struct {
 	Enabled   bool `json:"enabled"`
 	Retention int  `json:"retention,omitempty"`
+	// Location is the log storage location (e.g., "eu", "us", "ch")
+	Location string `json:"location,omitempty"`
 	// LogClientsIPs indicates whether client IPs are logged.
 	// Derived from the API's Drop.IP field (inverted: LogClientsIPs = !Drop.IP).
 	LogClientsIPs bool `json:"logClientsIPs"`
@@ -136,6 +169,37 @@ type ObservedPerformance struct {
 type ObservedRewriteEntry struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
+}
+
+// ObservedSetup represents observed DNS setup/endpoint configuration.
+// This is read-only data from the API — not user-configurable via spec.
+type ObservedSetup struct {
+	// IPv4 contains DNS-over-HTTPS IPv4 addresses
+	// +optional
+	IPv4 []string `json:"ipv4,omitempty"`
+	// IPv6 contains DNS-over-HTTPS IPv6 addresses
+	// +optional
+	IPv6 []string `json:"ipv6,omitempty"`
+	// LinkedIP contains linked IP configuration
+	// +optional
+	LinkedIP *ObservedLinkedIP `json:"linkedIP,omitempty"`
+	// DNSCrypt contains the DNSCrypt protocol stamp
+	// +optional
+	DNSCrypt string `json:"dnscrypt,omitempty"`
+}
+
+// ObservedLinkedIP represents observed linked IP configuration.
+// Note: updateToken is excluded for security.
+type ObservedLinkedIP struct {
+	// Servers contains the linked IP DNS server addresses
+	// +optional
+	Servers []string `json:"servers,omitempty"`
+	// IP is the currently linked IP address
+	// +optional
+	IP string `json:"ip,omitempty"`
+	// DDNS is the dynamic DNS hostname
+	// +optional
+	DDNS string `json:"ddns,omitempty"`
 }
 
 // SuggestedSpec provides a spec-compatible translation of observed remote config.

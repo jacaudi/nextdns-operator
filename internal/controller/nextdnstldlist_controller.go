@@ -168,4 +168,3 @@ func (r *NextDNSTLDListReconciler) handleDeletion(ctx context.Context, list *nex
 
 	return ctrl.Result{}, nil
 }
-

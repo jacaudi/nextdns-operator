@@ -58,6 +58,9 @@ type ClientInterface interface {
 	// Settings operations
 	UpdateSettings(ctx context.Context, profileID string, config *SettingsConfig) error
 
+	// Setup operations
+	GetSetup(ctx context.Context, profileID string) (*nextdns.Setup, error)
+
 	// Read-only operations for observe mode
 	GetSettings(ctx context.Context, profileID string) (*nextdns.Settings, error)
 	GetPrivacyBlocklists(ctx context.Context, profileID string) ([]*nextdns.PrivacyBlocklists, error)

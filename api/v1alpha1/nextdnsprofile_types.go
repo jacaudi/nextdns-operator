@@ -245,6 +245,11 @@ type ParentalControlSpec struct {
 	// +kubebuilder:default=false
 	// +optional
 	YouTubeRestrictedMode *bool `json:"youtubeRestrictedMode,omitempty"`
+
+	// BlockBypass prevents bypassing parental controls
+	// +kubebuilder:default=false
+	// +optional
+	BlockBypass *bool `json:"blockBypass,omitempty"`
 }
 
 // CategoryEntry references a content category
@@ -257,6 +262,12 @@ type CategoryEntry struct {
 	// +kubebuilder:default=true
 	// +optional
 	Active *bool `json:"active,omitempty"`
+
+	// Recreation indicates if this category allows recreation time exceptions.
+	// Note: Observe mode reads this from the API. Managed mode write support is deferred.
+	// +kubebuilder:default=false
+	// +optional
+	Recreation *bool `json:"recreation,omitempty"`
 }
 
 // ServiceEntry references a specific service
@@ -313,6 +324,11 @@ type LogsSpec struct {
 	// +kubebuilder:default="7d"
 	// +optional
 	Retention string `json:"retention,omitempty"`
+
+	// Location specifies the log storage location (e.g., "eu", "us", "ch").
+	// Valid values depend on the NextDNS plan and may change over time.
+	// +optional
+	Location string `json:"location,omitempty"`
 }
 
 // BlockPageSpec configures the block page

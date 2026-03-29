@@ -190,6 +190,10 @@ spec:
                   ParentalControl configures content filtering.
                   Omitting this section leaves remote parental control settings unchanged.
                 properties:
+                  blockBypass:
+                    default: false
+                    description: BlockBypass prevents bypassing parental controls
+                    type: boolean
                   categories:
                     description: Categories specifies content categories to block
                     items:
@@ -203,6 +207,12 @@ spec:
                           description: ID is the category identifier (e.g., "gambling",
                             "adult", "violence")
                           type: string
+                        recreation:
+                          default: false
+                          description: |-
+                            Recreation indicates if this category allows recreation time exceptions.
+                            Note: Observe mode reads this from the API. Managed mode write support is deferred.
+                          type: boolean
                       required:
                       - id
                       type: object
@@ -389,6 +399,11 @@ spec:
                         default: true
                         description: Enabled turns logging on/off
                         type: boolean
+                      location:
+                        description: |-
+                          Location specifies the log storage location (e.g., "eu", "us", "ch").
+                          Valid values depend on the NextDNS plan and may change over time.
+                        type: string
                       logClientsIPs:
                         default: false
                         description: LogClientsIPs logs client IP addresses
@@ -585,6 +600,8 @@ spec:
                     description: ParentalControl contains observed parental control
                       settings
                     properties:
+                      blockBypass:
+                        type: boolean
                       categories:
                         items:
                           description: ObservedCategoryEntry represents an observed
@@ -594,11 +611,110 @@ spec:
                               type: boolean
                             id:
                               type: string
+                            recreation:
+                              type: boolean
                           required:
                           - active
                           - id
+                          - recreation
                           type: object
                         type: array
+                      recreation:
+                        description: ObservedRecreation represents observed recreation
+                          schedule settings
+                        properties:
+                          times:
+                            description: ObservedRecreationTimes represents the days
+                              of the week with recreation intervals
+                            properties:
+                              friday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              monday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              saturday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              sunday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              thursday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              tuesday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                              wednesday:
+                                description: ObservedRecreationInterval represents
+                                  a start and end time for recreation
+                                properties:
+                                  end:
+                                    type: string
+                                  start:
+                                    type: string
+                                required:
+                                - end
+                                - start
+                                type: object
+                            type: object
+                          timezone:
+                            type: string
+                        type: object
                       safeSearch:
                         type: boolean
                       services:
@@ -618,6 +734,7 @@ spec:
                       youtubeRestrictedMode:
                         type: boolean
                     required:
+                    - blockBypass
                     - safeSearch
                     - youtubeRestrictedMode
                     type: object
@@ -727,6 +844,10 @@ spec:
                         properties:
                           enabled:
                             type: boolean
+                          location:
+                            description: Location is the log storage location (e.g.,
+                              "eu", "us", "ch")
+                            type: string
                           logClientsIPs:
                             description: |-
                               LogClientsIPs indicates whether client IPs are logged.
@@ -763,6 +884,41 @@ spec:
                         type: boolean
                     required:
                     - web3
+                    type: object
+                  setup:
+                    description: |-
+                      Setup contains observed DNS setup/endpoint configuration
+                      This is read-only data from the API — not user-configurable via spec
+                    properties:
+                      dnscrypt:
+                        description: DNSCrypt contains the DNSCrypt protocol stamp
+                        type: string
+                      ipv4:
+                        description: IPv4 contains DNS-over-HTTPS IPv4 addresses
+                        items:
+                          type: string
+                        type: array
+                      ipv6:
+                        description: IPv6 contains DNS-over-HTTPS IPv6 addresses
+                        items:
+                          type: string
+                        type: array
+                      linkedIP:
+                        description: LinkedIP contains linked IP configuration
+                        properties:
+                          ddns:
+                            description: DDNS is the dynamic DNS hostname
+                            type: string
+                          ip:
+                            description: IP is the currently linked IP address
+                            type: string
+                          servers:
+                            description: Servers contains the linked IP DNS server
+                              addresses
+                            items:
+                              type: string
+                            type: array
+                        type: object
                     type: object
                 type: object
               observedGeneration:
@@ -917,6 +1073,10 @@ spec:
                     description: ParentalControl contains suggested parental control
                       settings
                     properties:
+                      blockBypass:
+                        default: false
+                        description: BlockBypass prevents bypassing parental controls
+                        type: boolean
                       categories:
                         description: Categories specifies content categories to block
                         items:
@@ -930,6 +1090,12 @@ spec:
                               description: ID is the category identifier (e.g., "gambling",
                                 "adult", "violence")
                               type: string
+                            recreation:
+                              default: false
+                              description: |-
+                                Recreation indicates if this category allows recreation time exceptions.
+                                Note: Observe mode reads this from the API. Managed mode write support is deferred.
+                              type: boolean
                           required:
                           - id
                           type: object
@@ -1105,6 +1271,11 @@ spec:
                             default: true
                             description: Enabled turns logging on/off
                             type: boolean
+                          location:
+                            description: |-
+                              Location specifies the log storage location (e.g., "eu", "us", "ch").
+                              Valid values depend on the NextDNS plan and may change over time.
+                            type: string
                           logClientsIPs:
                             default: false
                             description: LogClientsIPs logs client IP addresses

@@ -68,6 +68,7 @@ type ParentalControlConfig struct {
 	Services              []string
 	SafeSearch            bool
 	YouTubeRestrictedMode bool
+	BlockBypass           bool
 }
 
 // SettingsConfig represents general settings
@@ -76,6 +77,7 @@ type SettingsConfig struct {
 	LogClientsIPs   bool
 	LogDomains      bool
 	LogRetention    int
+	Location        string
 	BlockPageEnable bool
 	Web3            bool
 	// Performance settings
@@ -515,6 +517,7 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
 			Retention: config.LogRetention,
+			Location:  config.Location,
 			Drop: &nextdns.SettingsLogsDrop{
 				IP:     !config.LogClientsIPs,
 				Domain: !config.LogDomains,
@@ -583,6 +586,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 		ParentalControl: &nextdns.ParentalControl{
 			SafeSearch:            config.SafeSearch,
 			YoutubeRestrictedMode: config.YouTubeRestrictedMode,
+			BlockBypass:           config.BlockBypass,
 		},
 	}
 
@@ -780,6 +784,23 @@ func (c *Client) GetParentalControl(ctx context.Context, profileID string) (*nex
 	}
 
 	return pc, nil
+}
+
+// GetSetup retrieves the current setup/endpoint data for a profile
+func (c *Client) GetSetup(ctx context.Context, profileID string) (*nextdns.Setup, error) {
+	start := time.Now()
+	request := &nextdns.GetSetupRequest{
+		ProfileID: profileID,
+	}
+
+	setup, err := c.client.Setup.Get(ctx, request)
+	metrics.RecordAPIRequest("GetSetup", time.Since(start).Seconds(), err == nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get setup: %w", err)
+	}
+
+	return setup, nil
 }
 
 // GetSettings retrieves the current settings for a profile
