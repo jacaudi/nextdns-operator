@@ -754,29 +754,30 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
 
-	// Build new status values
-	newObserved := observed
-	newSuggested := buildSuggestedSpec(observed)
+	// Capture status snapshot before updates
+	statusBefore := profile.Status.DeepCopy()
 
-	// Check if meaningful data actually changed
-	observedChanged := !apiequality.Semantic.DeepEqual(profile.Status.ObservedConfig, newObserved) ||
-		!apiequality.Semantic.DeepEqual(profile.Status.SuggestedSpec, newSuggested) ||
-		profile.Status.ProfileID != profile.Spec.ProfileID ||
-		profile.Status.Fingerprint != fingerprint
-
-	// Always update these fields (cheap, no watch trigger on their own)
+	// Update status fields
 	profile.Status.ProfileID = profile.Spec.ProfileID
 	profile.Status.Fingerprint = fingerprint
-	profile.Status.ObservedConfig = newObserved
-	profile.Status.SuggestedSpec = newSuggested
+	profile.Status.ObservedConfig = observed
+	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
 	profile.Status.ObservedGeneration = profile.Generation
 
 	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
 	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "ObserveSuccess", "Remote profile read successfully")
 	r.setCondition(profile, ConditionTypeReady, metav1.ConditionTrue, "Observed", "Profile observed successfully")
 
+	// Check if status actually changed (compare all meaningful fields including conditions)
+	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.ObservedConfig, profile.Status.ObservedConfig) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.SuggestedSpec, profile.Status.SuggestedSpec) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		statusBefore.ProfileID != profile.Status.ProfileID ||
+		statusBefore.Fingerprint != profile.Status.Fingerprint ||
+		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
+
 	// Only update LastSyncTime and write status if data actually changed
-	if observedChanged || profile.Status.LastSyncTime == nil {
+	if statusChanged || profile.Status.LastSyncTime == nil {
 		now := metav1.Now()
 		profile.Status.LastSyncTime = &now
 
