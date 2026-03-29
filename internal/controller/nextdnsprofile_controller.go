@@ -217,12 +217,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
 
+	// Capture status snapshot before updates
+	statusBefore := profile.Status.DeepCopy()
+
 	// Record successful sync
 	metrics.RecordProfileSync(profile.Name, profile.Namespace)
 
-	// Update status
-	now := metav1.Now()
-	profile.Status.LastSyncTime = &now
+	// Update status fields
 	profile.Status.ObservedGeneration = profile.Generation
 	profile.Status.AggregatedCounts = &nextdnsv1alpha1.AggregatedCounts{
 		AllowlistDomains: len(resolvedLists.Allowlist),
@@ -240,16 +241,32 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Don't fail the reconciliation for ConfigMap errors, just log
 	}
 
-	if err := r.Status().Update(ctx, profile); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
-	}
+	// Check if status actually changed (compare without LastSyncTime)
+	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.AggregatedCounts, profile.Status.AggregatedCounts) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.ReferencedResources, profile.Status.ReferencedResources) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		statusBefore.ProfileID != profile.Status.ProfileID ||
+		statusBefore.Fingerprint != profile.Status.Fingerprint ||
+		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
 
-	logger.Info("Successfully reconciled NextDNSProfile",
-		"profileID", profile.Status.ProfileID,
-		"allowlistCount", len(resolvedLists.Allowlist),
-		"denylistCount", len(resolvedLists.Denylist),
-		"tldCount", len(resolvedLists.TLDs))
+	if statusChanged || profile.Status.LastSyncTime == nil {
+		now := metav1.Now()
+		profile.Status.LastSyncTime = &now
+
+		if err := r.Status().Update(ctx, profile); err != nil {
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Successfully reconciled NextDNSProfile",
+			"profileID", profile.Status.ProfileID,
+			"allowlistCount", len(resolvedLists.Allowlist),
+			"denylistCount", len(resolvedLists.Denylist),
+			"tldCount", len(resolvedLists.TLDs))
+	} else {
+		logger.V(1).Info("Managed profile status unchanged, skipping status update",
+			"profileID", profile.Status.ProfileID)
+	}
 
 	// Schedule next sync with jitter for drift detection
 	syncInterval := CalculateSyncInterval(r.SyncPeriod)
