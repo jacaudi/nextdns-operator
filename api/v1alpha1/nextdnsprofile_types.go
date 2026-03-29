@@ -300,6 +300,11 @@ type SettingsSpec struct {
 	// +kubebuilder:default=false
 	// +optional
 	Web3 *bool `json:"web3,omitempty"`
+
+	// BAV enables Bypass Age Verification
+	// +kubebuilder:default=false
+	// +optional
+	BAV *bool `json:"bav,omitempty"`
 }
 
 // LogsSpec configures logging settings

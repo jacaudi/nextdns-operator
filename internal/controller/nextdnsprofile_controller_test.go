@@ -2577,6 +2577,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 			CnameFlattening: true,
 		},
 		Web3: false,
+		BAV:  true,
 	}
 
 	reconciler := &NextDNSProfileReconciler{
@@ -2611,6 +2612,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogClientsIPs)
 	assert.True(t, updated.Status.ObservedConfig.Settings.Logs.LogDomains)
 	assert.Equal(t, "eu", updated.Status.ObservedConfig.Settings.Logs.Location)
+	assert.True(t, updated.Status.ObservedConfig.Settings.BAV)
 
 	// Verify setup was populated
 	require.NotNil(t, updated.Status.ObservedConfig.Setup)
@@ -3294,6 +3296,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 				CNAMEFlattening: false,
 			},
 			Web3: true,
+			BAV:  true,
 		},
 		Rewrites: []nextdnsv1alpha1.ObservedRewriteEntry{
 			{Name: "app.example.com", Content: "192.168.1.1"},
@@ -3375,6 +3378,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 	assert.Equal(t, boolPtr(true), suggested.Settings.Performance.CacheBoost)
 	assert.Equal(t, boolPtr(false), suggested.Settings.Performance.CNAMEFlattening)
 	assert.Equal(t, boolPtr(true), suggested.Settings.Web3)
+	assert.Equal(t, boolPtr(true), suggested.Settings.BAV)
 
 	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
 	require.Equal(t, 1, len(suggested.Rewrites))
@@ -3513,6 +3517,7 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 					CNAMEFlattening: boolPtr(true),
 				},
 				Web3: boolPtr(true),
+				BAV:  boolPtr(true),
 			},
 		},
 	}
@@ -3555,6 +3560,7 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 	settings := mockNDS.Settings["abc123"]
 	require.NotNil(t, settings)
 	assert.True(t, settings.Web3)
+	assert.True(t, settings.BAV)
 	require.NotNil(t, settings.Performance)
 	assert.True(t, settings.Performance.Ecs)
 	assert.False(t, settings.Performance.CacheBoost)

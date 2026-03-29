@@ -630,6 +630,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			CnameFlattening: true,
 			// Web3 default
 			Web3: false,
+			BAV:  false,
 		}
 		if profile.Spec.Settings.Logs != nil {
 			settingsConfig.LogsEnabled = boolValue(profile.Spec.Settings.Logs.Enabled, true)
@@ -647,6 +648,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			settingsConfig.CnameFlattening = boolValue(profile.Spec.Settings.Performance.CNAMEFlattening, true)
 		}
 		settingsConfig.Web3 = boolValue(profile.Spec.Settings.Web3, false)
+		settingsConfig.BAV = boolValue(profile.Spec.Settings.BAV, false)
 		if err := client.UpdateSettings(ctx, profileID, settingsConfig); err != nil {
 			return fmt.Errorf("failed to update settings: %w", err)
 		}
@@ -931,6 +933,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	}
 	observed.Settings = &nextdnsv1alpha1.ObservedSettings{
 		Web3: settings.Web3,
+		BAV:  settings.BAV,
 	}
 	if settings.Logs != nil {
 		observed.Settings.Logs = &nextdnsv1alpha1.ObservedLogs{
@@ -1096,6 +1099,7 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 	if observed.Settings != nil {
 		suggested.Settings = &nextdnsv1alpha1.SettingsSpec{
 			Web3: boolPtr(observed.Settings.Web3),
+			BAV:  boolPtr(observed.Settings.BAV),
 		}
 		if observed.Settings.Logs != nil {
 			suggested.Settings.Logs = &nextdnsv1alpha1.LogsSpec{

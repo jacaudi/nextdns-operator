@@ -80,6 +80,7 @@ type SettingsConfig struct {
 	Location        string
 	BlockPageEnable bool
 	Web3            bool
+	BAV             bool
 	// Performance settings
 	Ecs             bool
 	CacheBoost      bool
@@ -532,6 +533,7 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 			CnameFlattening: config.CnameFlattening,
 		},
 		Web3: config.Web3,
+		BAV:  config.BAV,
 	}
 
 	request := &nextdns.UpdateSettingsRequest{
