@@ -383,6 +383,10 @@ spec:
                   Settings configures logging, performance, and other options.
                   Omitting this section leaves remote settings unchanged.
                 properties:
+                  bav:
+                    default: false
+                    description: BAV enables Bypass Age Verification
+                    type: boolean
                   blockPage:
                     description: BlockPage configures the block page
                     properties:
@@ -830,6 +834,8 @@ spec:
                   settings:
                     description: Settings contains observed general settings
                     properties:
+                      bav:
+                        type: boolean
                       blockPage:
                         description: ObservedBlockPage represents observed block page
                           settings
@@ -883,6 +889,7 @@ spec:
                       web3:
                         type: boolean
                     required:
+                    - bav
                     - web3
                     type: object
                   setup:
@@ -1255,6 +1262,10 @@ spec:
                   settings:
                     description: Settings contains suggested general settings
                     properties:
+                      bav:
+                        default: false
+                        description: BAV enables Bypass Age Verification
+                        type: boolean
                       blockPage:
                         description: BlockPage configures the block page
                         properties:

@@ -513,6 +513,7 @@ func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, confi
 			CnameFlattening: config.CnameFlattening,
 		},
 		Web3: config.Web3,
+		BAV:  config.BAV,
 	}
 
 	// Also update legacy per-sub-service maps for backward compatibility with existing tests

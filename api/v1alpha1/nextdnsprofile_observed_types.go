@@ -137,6 +137,7 @@ type ObservedSettings struct {
 	BlockPage   *ObservedBlockPage   `json:"blockPage,omitempty"`
 	Performance *ObservedPerformance `json:"performance,omitempty"`
 	Web3        bool                 `json:"web3"`
+	BAV         bool                 `json:"bav"`
 }
 
 // ObservedLogs represents observed logging settings
