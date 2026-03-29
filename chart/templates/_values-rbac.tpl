@@ -27,6 +27,13 @@ rbac:
         - apiGroups:
             - ""
           resources:
+            - events
+          verbs:
+            - create
+            - patch
+        - apiGroups:
+            - ""
+          resources:
             - pods
             - secrets
           verbs:
