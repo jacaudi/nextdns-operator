@@ -649,6 +649,7 @@ Each `CategoryEntry` has:
 | `performance.cacheBoost` | *bool | `true` | Extended caching at NextDNS edge |
 | `performance.cnameFlattening` | *bool | `true` | CNAME flattening |
 | `web3` | *bool | `false` | Web3 domain resolution |
+| `bav` | *bool | `false` | Bypass Age Verification |
 
 **Shared types:**
 
