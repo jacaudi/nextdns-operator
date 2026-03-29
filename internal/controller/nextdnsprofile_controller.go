@@ -8,6 +8,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -216,12 +217,13 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
 
+	// Capture status snapshot before updates
+	statusBefore := profile.Status.DeepCopy()
+
 	// Record successful sync
 	metrics.RecordProfileSync(profile.Name, profile.Namespace)
 
-	// Update status
-	now := metav1.Now()
-	profile.Status.LastSyncTime = &now
+	// Update status fields
 	profile.Status.ObservedGeneration = profile.Generation
 	profile.Status.AggregatedCounts = &nextdnsv1alpha1.AggregatedCounts{
 		AllowlistDomains: len(resolvedLists.Allowlist),
@@ -239,16 +241,32 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Don't fail the reconciliation for ConfigMap errors, just log
 	}
 
-	if err := r.Status().Update(ctx, profile); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
-	}
+	// Check if status actually changed (compare without LastSyncTime)
+	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.AggregatedCounts, profile.Status.AggregatedCounts) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.ReferencedResources, profile.Status.ReferencedResources) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		statusBefore.ProfileID != profile.Status.ProfileID ||
+		statusBefore.Fingerprint != profile.Status.Fingerprint ||
+		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
 
-	logger.Info("Successfully reconciled NextDNSProfile",
-		"profileID", profile.Status.ProfileID,
-		"allowlistCount", len(resolvedLists.Allowlist),
-		"denylistCount", len(resolvedLists.Denylist),
-		"tldCount", len(resolvedLists.TLDs))
+	if statusChanged || profile.Status.LastSyncTime == nil {
+		now := metav1.Now()
+		profile.Status.LastSyncTime = &now
+
+		if err := r.Status().Update(ctx, profile); err != nil {
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Successfully reconciled NextDNSProfile",
+			"profileID", profile.Status.ProfileID,
+			"allowlistCount", len(resolvedLists.Allowlist),
+			"denylistCount", len(resolvedLists.Denylist),
+			"tldCount", len(resolvedLists.TLDs))
+	} else {
+		logger.V(1).Info("Managed profile status unchanged, skipping status update",
+			"profileID", profile.Status.ProfileID)
+	}
 
 	// Schedule next sync with jitter for drift detection
 	syncInterval := CalculateSyncInterval(r.SyncPeriod)
@@ -736,29 +754,47 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 		return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 	}
 
-	// Update status
+	// Capture status snapshot before updates
+	statusBefore := profile.Status.DeepCopy()
+
+	// Update status fields
 	profile.Status.ProfileID = profile.Spec.ProfileID
 	profile.Status.Fingerprint = fingerprint
 	profile.Status.ObservedConfig = observed
 	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
-	now := metav1.Now()
-	profile.Status.LastSyncTime = &now
 	profile.Status.ObservedGeneration = profile.Generation
 
 	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
 	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "ObserveSuccess", "Remote profile read successfully")
 	r.setCondition(profile, ConditionTypeReady, metav1.ConditionTrue, "Observed", "Profile observed successfully")
 
-	metrics.RecordProfileSync(profile.Name, profile.Namespace)
+	// Check if status actually changed (compare all meaningful fields including conditions)
+	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.ObservedConfig, profile.Status.ObservedConfig) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.SuggestedSpec, profile.Status.SuggestedSpec) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		statusBefore.ProfileID != profile.Status.ProfileID ||
+		statusBefore.Fingerprint != profile.Status.Fingerprint ||
+		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
 
-	if err := r.Status().Update(ctx, profile); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	// Only update LastSyncTime and write status if data actually changed
+	if statusChanged || profile.Status.LastSyncTime == nil {
+		now := metav1.Now()
+		profile.Status.LastSyncTime = &now
+
+		metrics.RecordProfileSync(profile.Name, profile.Namespace)
+
+		if err := r.Status().Update(ctx, profile); err != nil {
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Successfully observed NextDNS profile",
+			"profileID", profile.Spec.ProfileID,
+			"profileName", observed.Name)
+	} else {
+		logger.V(1).Info("Observed profile unchanged, skipping status update",
+			"profileID", profile.Spec.ProfileID)
 	}
-
-	logger.Info("Successfully observed NextDNS profile",
-		"profileID", profile.Spec.ProfileID,
-		"profileName", observed.Name)
 
 	syncInterval := CalculateSyncInterval(r.SyncPeriod)
 	return ctrl.Result{RequeueAfter: syncInterval}, nil

@@ -3717,3 +3717,180 @@ func TestFindProfilesForSecret_WithFieldIndex(t *testing.T) {
 	_, hasUnrelated := names["unrelated-profile"]
 	assert.False(t, hasUnrelated)
 }
+
+func TestReconcile_ObserveMode_SkipsUpdateWhenUnchanged(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-skip-update",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Mode:      nextdnsv1alpha1.ProfileModeObserve,
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Test Profile", "fp-abc123")
+	mockNDS.Security["abc123"] = &sdknextdns.Security{
+		AiThreatDetection:  true,
+		GoogleSafeBrowsing: true,
+	}
+	mockNDS.Privacy["abc123"] = &sdknextdns.Privacy{
+		DisguisedTrackers: true,
+	}
+	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
+		Logs:      &sdknextdns.SettingsLogs{Enabled: true, Retention: 7},
+		BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
+	}
+	mockNDS.SetupData["abc123"] = &sdknextdns.Setup{}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client:     fakeClient,
+		Scheme:     scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	nn := types.NamespacedName{Name: "test-skip-update", Namespace: "default"}
+	req := ctrl.Request{NamespacedName: nn}
+
+	// First reconcile - populates status
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	first := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, nn, first)
+	require.NoError(t, err)
+	require.NotNil(t, first.Status.LastSyncTime, "LastSyncTime should be set after first reconcile")
+
+	// Set LastSyncTime to a known past time so we can detect if it gets overwritten
+	pastTime := metav1.NewTime(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+	first.Status.LastSyncTime = &pastTime
+	err = fakeClient.Status().Update(ctx, first)
+	require.NoError(t, err)
+
+	// Second reconcile - nothing changed in API
+	_, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	second := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, nn, second)
+	require.NoError(t, err)
+
+	// LastSyncTime should still be the past time we set - not overwritten with Now()
+	require.NotNil(t, second.Status.LastSyncTime, "LastSyncTime should still be set")
+	assert.True(t, pastTime.Equal(second.Status.LastSyncTime),
+		"LastSyncTime should not change when observed data is unchanged; expected %v, got %v",
+		pastTime.Time, second.Status.LastSyncTime.Time)
+}
+
+func TestReconcile_ManagedMode_SkipsUpdateWhenUnchanged(t *testing.T) {
+	scheme := newTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-managed-skip",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name:      "Test Profile",
+			ProfileID: "abc123",
+			CredentialsRef: nextdnsv1alpha1.SecretKeySelector{
+				Name: "nextdns-secret",
+			},
+			Security: &nextdnsv1alpha1.SecuritySpec{
+				AIThreatDetection: boolPtr(true),
+			},
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nextdns-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"api-key": []byte("test-api-key"),
+		},
+	}
+
+	mockNDS := nextdns.NewMockClient()
+	mockNDS.SetProfile("abc123", "Test Profile", "fp-abc123")
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, secret).
+		WithStatusSubresource(profile).
+		WithIndex(&nextdnsv1alpha1.NextDNSProfile{}, credentialsRefIndexField, credentialsRefIndexFunc).
+		Build()
+
+	reconciler := &NextDNSProfileReconciler{
+		Client:     fakeClient,
+		Scheme:     scheme,
+		SyncPeriod: 5 * time.Minute,
+		ClientFactory: func(apiKey string) (nextdns.ClientInterface, error) {
+			return mockNDS, nil
+		},
+	}
+
+	nn := types.NamespacedName{Name: "test-managed-skip", Namespace: "default"}
+	req := ctrl.Request{NamespacedName: nn}
+
+	// First reconcile - populates status
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	first := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, nn, first)
+	require.NoError(t, err)
+	require.NotNil(t, first.Status.LastSyncTime)
+
+	// Set LastSyncTime to a known past time to detect if it gets overwritten
+	pastTime := metav1.NewTime(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+	first.Status.LastSyncTime = &pastTime
+	err = fakeClient.Status().Update(ctx, first)
+	require.NoError(t, err)
+
+	// Second reconcile - same spec, same API state
+	_, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	second := &nextdnsv1alpha1.NextDNSProfile{}
+	err = fakeClient.Get(ctx, nn, second)
+	require.NoError(t, err)
+
+	// LastSyncTime should NOT have changed from the past time
+	require.NotNil(t, second.Status.LastSyncTime, "LastSyncTime should still be set")
+	assert.True(t, pastTime.Equal(second.Status.LastSyncTime),
+		"LastSyncTime should not change when status is unchanged; expected %v, got %v",
+		pastTime.Time, second.Status.LastSyncTime.Time)
+}
