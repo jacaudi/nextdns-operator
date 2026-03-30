@@ -48,10 +48,10 @@ kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/dow
 
 ```bash
 # Install CRDs
-make install
+task install
 
 # Run locally
-make run
+task run
 ```
 
 ## Quick Start
@@ -121,10 +121,10 @@ Covers: ConfigMap export, observe mode, CoreDNS deployment (upstream protocols, 
 
 ```bash
 # Run tests
-make test
+task test
 
 # Build
-make build
+task build
 ```
 
 ## Acknowledgements
