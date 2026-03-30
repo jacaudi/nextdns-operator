@@ -39,4 +39,4 @@ docs/plans/
 .private-journal/**
 
 # Git worktrees
-.worktrees/
+.worktrees/.task/
