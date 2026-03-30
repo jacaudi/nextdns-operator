@@ -61,7 +61,7 @@ jobs:
           go-version: '1.26'
 
       - name: Install Task
-        uses: go-task/setup-task@v1
+        uses: go-task/setup-task@v2
 
       - name: Regenerate CRDs and check sync
         run: |
