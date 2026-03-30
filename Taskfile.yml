@@ -1,0 +1,129 @@
+---
+version: '3'
+
+vars:
+  IMG: '{{.IMG | default "nextdns-operator:latest"}}'
+  LOCALBIN: '{{.ROOT_DIR}}/bin'
+  CONTROLLER_TOOLS_VERSION: v0.20.1
+  CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
+
+tasks:
+  default:
+    desc: Build the operator binary
+    deps: [build]
+
+  ## Development
+
+  generate:
+    desc: Generate DeepCopy, DeepCopyInto, and DeepCopyObject implementations
+    deps: [controller-gen]
+    cmds:
+      - '{{.CONTROLLER_GEN}} object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+    sources:
+      - api/**/*.go
+      - hack/boilerplate.go.txt
+    generates:
+      - api/v1alpha1/zz_generated.deepcopy.go
+
+  manifests:
+    desc: Generate ClusterRole and CRD manifests
+    deps: [controller-gen]
+    cmds:
+      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+    sources:
+      - api/**/*.go
+      - internal/**/*.go
+    generates:
+      - config/crd/bases/*.yaml
+      - config/rbac/role.yaml
+
+  generate-helm-rbac:
+    desc: Generate Helm RBAC template from kubebuilder role.yaml
+    deps: [manifests]
+    cmds:
+      - ./hack/generate-helm-rbac.sh
+
+  sync-helm-crds:
+    desc: Sync CRDs to Helm chart
+    deps: [manifests]
+    cmds:
+      - echo "Syncing CRDs to Helm chart..."
+      - cp config/crd/bases/*.yaml chart/crds/
+      - echo "CRDs synced successfully"
+
+  fmt:
+    desc: Run go fmt
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run tests with coverage
+    deps: [manifests, generate, fmt, vet]
+    cmds:
+      - go test ./... -coverprofile cover.out
+
+  ## Build
+
+  build:
+    desc: Build the operator binary
+    deps: [manifests, generate, fmt, vet]
+    cmds:
+      - go build -o bin/manager cmd/main.go
+
+  run:
+    desc: Run the controller locally
+    deps: [manifests, generate, fmt, vet]
+    cmds:
+      - go run ./cmd/main.go
+
+  container-build:
+    desc: Build container image
+    cmds:
+      - docker build -t {{.IMG}} .
+
+  container-push:
+    desc: Push container image
+    cmds:
+      - docker push {{.IMG}}
+
+  ## Deployment
+
+  install:
+    desc: Install CRDs into the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl apply -f config/crd/bases
+
+  uninstall:
+    desc: Uninstall CRDs from the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl delete -f config/crd/bases
+
+  deploy:
+    desc: Deploy controller to the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl apply -f config/manager/
+      - kubectl apply -f config/rbac/
+
+  undeploy:
+    desc: Undeploy controller from the cluster
+    cmds:
+      - kubectl delete -f config/manager/
+      - kubectl delete -f config/rbac/
+
+  ## Dependencies
+
+  controller-gen:
+    desc: Install controller-gen if not present
+    cmds:
+      - mkdir -p {{.LOCALBIN}}
+      - test -s {{.CONTROLLER_GEN}} || GOBIN={{.LOCALBIN}} go install sigs.k8s.io/controller-tools/cmd/controller-gen@{{.CONTROLLER_TOOLS_VERSION}}
+    status:
+      - test -s {{.CONTROLLER_GEN}}
