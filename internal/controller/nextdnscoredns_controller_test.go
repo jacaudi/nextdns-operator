@@ -867,6 +867,85 @@ func TestNextDNSCoreDNSReconciler_Reconcile_ProfileNotReady(t *testing.T) {
 	assert.False(t, updatedCoreDNS.Status.Ready, "Status.Ready should be false")
 }
 
+func TestNextDNSCoreDNSReconciler_Reconcile_ProfileReadyButNoProfileID(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	// Profile is Ready but has no ProfileID (race condition)
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
+			Name: "Test Profile",
+		},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			// ProfileID is empty -- first sync hasn't set it yet
+			Conditions: []metav1.Condition{
+				{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "Synced",
+					Message:            "Profile synced",
+					LastTransitionTime: metav1.Now(),
+				},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{
+				Name: "test-profile",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Should requeue, not proceed to build Corefile
+	assert.True(t, result.RequeueAfter > 0, "Should requeue when ProfileID is empty")
+
+	// Verify condition is set
+	updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns", Namespace: "default"}, updated)
+	require.NoError(t, err)
+
+	assert.False(t, updated.Status.Ready)
+
+	// Find the Ready condition
+	var readyCondition *metav1.Condition
+	for i := range updated.Status.Conditions {
+		if updated.Status.Conditions[i].Type == ConditionTypeReady {
+			readyCondition = &updated.Status.Conditions[i]
+			break
+		}
+	}
+	require.NotNil(t, readyCondition)
+	assert.Equal(t, metav1.ConditionFalse, readyCondition.Status)
+	assert.Equal(t, "ProfileNotReady", readyCondition.Reason)
+}
+
 func TestNextDNSCoreDNSReconciler_HandleDeletion(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()
