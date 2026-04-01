@@ -125,6 +125,18 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Profile is resolved and ready
 	r.setCondition(coreDNS, ConditionTypeProfileResolved, metav1.ConditionTrue, "ProfileResolved", "Referenced profile found and ready")
 
+	// Verify profile has a ProfileID (may be empty if first sync hasn't completed)
+	if profile.Status.ProfileID == "" {
+		logger.Info("Referenced NextDNSProfile has no ProfileID yet", "profile", profile.Name)
+		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "ProfileNotReady",
+			"Referenced profile does not have a ProfileID yet")
+		coreDNS.Status.Ready = false
+		if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	// Validate Multus configuration
 	if coreDNS.Spec.Multus != nil && len(coreDNS.Spec.Multus.IPs) > 0 {
 		var warnings []string
