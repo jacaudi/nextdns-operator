@@ -35,7 +35,7 @@ const (
 )
 
 // CoreDNSServiceType specifies the type of Kubernetes Service
-// +kubebuilder:validation:Enum=ClusterIP;LoadBalancer;NodePort
+// +kubebuilder:validation:Enum=ClusterIP;LoadBalancer
 type CoreDNSServiceType string
 
 const (
@@ -43,8 +43,6 @@ const (
 	ServiceTypeClusterIP CoreDNSServiceType = "ClusterIP"
 	// ServiceTypeLoadBalancer exposes the service via a cloud load balancer
 	ServiceTypeLoadBalancer CoreDNSServiceType = "LoadBalancer"
-	// ServiceTypeNodePort exposes the service on each node's IP at a static port
-	ServiceTypeNodePort CoreDNSServiceType = "NodePort"
 )
 
 // UpstreamConfig specifies how to connect to NextDNS upstream servers
