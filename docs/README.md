@@ -263,13 +263,6 @@ service:
     metallb.universe.tf/address-pool: dns-pool  # example: MetalLB annotation
 ```
 
-**NodePort**: Exposes the service on each node's IP at a static port. Useful when you want to reach DNS via any node IP.
-
-```yaml
-service:
-  type: NodePort
-```
-
 **Name override**: By default, the service is named after the NextDNSCoreDNS resource. Use `nameOverride` to set a custom name:
 
 ```yaml
@@ -779,7 +772,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `deployment.tolerations` | Toleration[] | No | | Pod tolerations |
 | `deployment.resources` | ResourceRequirements | No | | CPU/memory requests and limits |
 | `deployment.podAnnotations` | map[string]string | No | | Additional pod annotations (prefer `spec.multus` for Multus) |
-| `service.type` | CoreDNSServiceType | No | `ClusterIP` | `ClusterIP`, `LoadBalancer`, or `NodePort` |
+| `service.type` | CoreDNSServiceType | No | `ClusterIP` | `ClusterIP` or `LoadBalancer` |
 | `service.loadBalancerIP` | string | No | | Static IP for LoadBalancer (valid IPv4) |
 | `service.annotations` | map[string]string | No | | Additional service annotations |
 | `service.nameOverride` | string | No | | Custom service name |

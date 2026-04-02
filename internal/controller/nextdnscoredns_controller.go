@@ -667,8 +667,6 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 		switch coreDNS.Spec.Service.Type {
 		case nextdnsv1alpha1.ServiceTypeLoadBalancer:
 			serviceType = corev1.ServiceTypeLoadBalancer
-		case nextdnsv1alpha1.ServiceTypeNodePort:
-			serviceType = corev1.ServiceTypeNodePort
 		}
 	}
 
@@ -919,16 +917,6 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 					)
 					coreDNS.Status.DNSIP = ip
 				}
-			}
-		case corev1.ServiceTypeNodePort:
-			// For NodePort, we'd need node IPs which requires more work
-			// Just use ClusterIP for now
-			if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
-				endpoints = append(endpoints,
-					nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "UDP"},
-					nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "TCP"},
-				)
-				coreDNS.Status.DNSIP = service.Spec.ClusterIP
 			}
 		default:
 			// ClusterIP

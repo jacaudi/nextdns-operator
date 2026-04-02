@@ -1261,7 +1261,6 @@ spec:
                     enum:
                     - ClusterIP
                     - LoadBalancer
-                    - NodePort
                     type: string
                 type: object
               upstream:
