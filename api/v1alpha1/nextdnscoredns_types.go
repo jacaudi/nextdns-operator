@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // DNSProtocol specifies the DNS protocol to use for upstream queries
@@ -65,7 +66,6 @@ type UpstreamConfig struct {
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment
-// TODO: Consider adding PodDisruptionBudget support for HA deployments.
 type CoreDNSDeploymentConfig struct {
 	// Mode specifies whether to deploy as Deployment or DaemonSet
 	// +kubebuilder:default=Deployment
@@ -103,6 +103,23 @@ type CoreDNSDeploymentConfig struct {
 	// Useful for Multus CNI network attachments, Istio sidecar injection control, etc.
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// PodDisruptionBudget configures disruption budget for HA deployments
+	// +optional
+	PodDisruptionBudget *CoreDNSPDBConfig `json:"podDisruptionBudget,omitempty"`
+}
+
+// CoreDNSPDBConfig configures PodDisruptionBudget for CoreDNS HA deployments
+type CoreDNSPDBConfig struct {
+	// MinAvailable is the minimum number of pods that must be available.
+	// Mutually exclusive with MaxUnavailable.
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable.
+	// Mutually exclusive with MinAvailable. Defaults to 1 if neither is set.
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // CoreDNSServiceConfig configures the CoreDNS Kubernetes Service
