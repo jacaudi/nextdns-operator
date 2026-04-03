@@ -13,6 +13,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +41,9 @@ const (
 	// ConditionTypeMultusIPWarning indicates Multus IP configuration issues
 	ConditionTypeMultusIPWarning = "MultusIPWarning"
 
+	// ConditionTypeDeviceNameIgnored warns that deviceName has no effect with plain DNS
+	ConditionTypeDeviceNameIgnored = "DeviceNameIgnored"
+
 	// CorefileKey is the key in the ConfigMap for the Corefile
 	CorefileKey = "Corefile"
 
@@ -66,6 +70,7 @@ type NextDNSCoreDNSReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -178,6 +183,19 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionFalse, "MultusNotConfigured", "Multus is not configured")
 	}
 
+	// Warn if deviceName is used with plain DNS protocol (device identification not possible)
+	if coreDNS.Spec.Upstream != nil &&
+		coreDNS.Spec.Upstream.Primary == nextdnsv1alpha1.DNSProtocolDNS &&
+		coreDNS.Spec.Upstream.DeviceName != "" {
+		logger.Info("WARNING: deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionTrue, "ProtocolLimitation",
+			"deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+	} else {
+		// Clear stale warning when not applicable
+		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionFalse, "NotApplicable",
+			"deviceName is not set or protocol supports device identification")
+	}
+
 	// Store profile information in status
 	coreDNS.Status.ProfileID = profile.Status.ProfileID
 	coreDNS.Status.Fingerprint = profile.Status.Fingerprint
@@ -197,6 +215,17 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err := r.reconcileWorkload(ctx, coreDNS, profile); err != nil {
 		logger.Error(err, "Failed to reconcile workload")
 		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "WorkloadFailed", err.Error())
+		coreDNS.Status.Ready = false
+		if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Reconcile the PodDisruptionBudget (only for Deployment mode)
+	if err := r.reconcilePDB(ctx, coreDNS, profile); err != nil {
+		logger.Error(err, "Failed to reconcile PodDisruptionBudget")
+		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "PDBFailed", err.Error())
 		coreDNS.Status.Ready = false
 		if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
 			logger.Error(updateErr, "Failed to update status")
@@ -400,6 +429,75 @@ func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDN
 		}
 		return r.reconcileDeployment(ctx, coreDNS, profile)
 	}
+}
+
+// reconcilePDB creates, updates, or cleans up the PodDisruptionBudget for CoreDNS HA deployments
+func (r *NextDNSCoreDNSReconciler) reconcilePDB(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
+	logger := log.FromContext(ctx)
+	resourceName := r.getResourceName(coreDNS, profile)
+	pdbName := resourceName + "-pdb"
+
+	// Determine if PDB should exist
+	shouldExist := coreDNS.Spec.Deployment != nil &&
+		coreDNS.Spec.Deployment.PodDisruptionBudget != nil &&
+		coreDNS.Spec.Deployment.Mode != nextdnsv1alpha1.DeploymentModeDaemonSet
+
+	if !shouldExist {
+		// Clean up any existing PDB
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: coreDNS.Namespace}, existing)
+		if err == nil {
+			logger.Info("Cleaning up stale PodDisruptionBudget", "name", pdbName)
+			return r.Delete(ctx, existing)
+		}
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	labels := r.buildLabels(coreDNS, profile)
+	pdbConfig := coreDNS.Spec.Deployment.PodDisruptionBudget
+
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pdbName,
+			Namespace: coreDNS.Namespace,
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, pdb, func() error {
+		pdb.Labels = labels
+		pdb.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: labels,
+		}
+
+		// Set MinAvailable or MaxUnavailable (mutually exclusive)
+		if pdbConfig.MinAvailable != nil {
+			pdb.Spec.MinAvailable = pdbConfig.MinAvailable
+			pdb.Spec.MaxUnavailable = nil
+		} else if pdbConfig.MaxUnavailable != nil {
+			pdb.Spec.MaxUnavailable = pdbConfig.MaxUnavailable
+			pdb.Spec.MinAvailable = nil
+		} else {
+			// Default to maxUnavailable: 1 if neither is specified
+			defaultMaxUnavailable := intstr.FromInt32(1)
+			pdb.Spec.MaxUnavailable = &defaultMaxUnavailable
+			pdb.Spec.MinAvailable = nil
+		}
+
+		return controllerutil.SetControllerReference(coreDNS, pdb, r.Scheme)
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to reconcile PodDisruptionBudget: %w", err)
+	}
+
+	if op != controllerutil.OperationResultNone {
+		logger.Info("PodDisruptionBudget reconciled", "operation", op, "name", pdbName)
+	}
+
+	return nil
 }
 
 // cleanupDeployment removes any existing Deployment when switching to DaemonSet mode
@@ -1047,6 +1145,7 @@ func (r *NextDNSCoreDNSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Watches(
 			&nextdnsv1alpha1.NextDNSProfile{},
 			handler.EnqueueRequestsFromMapFunc(r.findCoreDNSForProfile),

@@ -11,12 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -2320,4 +2322,413 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
 	ips, ok := parsed[0]["ips"].([]interface{})
 	require.True(t, ok)
 	assert.Len(t, ips, 2)
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameIgnoredWithPlainDNS(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "home-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary:    nextdnsv1alpha1.DNSProtocolDNS,
+				DeviceName: "MyDevice",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	// Reconcile should succeed (warning only, not blocking)
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Fetch the updated resource and check for the DeviceNameIgnored condition
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "home-dns", Namespace: "default"}, updatedCoreDNS)
+	require.NoError(t, err)
+
+	deviceNameCond := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeDeviceNameIgnored)
+	require.NotNil(t, deviceNameCond, "DeviceNameIgnored condition should exist")
+	assert.Equal(t, metav1.ConditionTrue, deviceNameCond.Status)
+	assert.Equal(t, "ProtocolLimitation", deviceNameCond.Reason)
+	assert.Contains(t, deviceNameCond.Message, "deviceName is ignored with plain DNS protocol")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameNotIgnoredWithDoT(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "home-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary:    nextdnsv1alpha1.DNSProtocolDoT,
+				DeviceName: "MyDevice",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	// Reconcile should succeed
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Fetch the updated resource - DeviceNameIgnored should NOT be True
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "home-dns", Namespace: "default"}, updatedCoreDNS)
+	require.NoError(t, err)
+
+	deviceNameCond := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeDeviceNameIgnored)
+	if deviceNameCond != nil {
+		assert.Equal(t, metav1.ConditionFalse, deviceNameCond.Status,
+			"DeviceNameIgnored should be False when using DoT")
+	}
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_PDBWithMaxUnavailable(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	replicas := int32(2)
+	maxUnavailable := intstr.FromInt(1)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ha-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+				PodDisruptionBudget: &nextdnsv1alpha1.CoreDNSPDBConfig{
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "ha-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify PDB was created
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "ha-dns-abc123-coredns-pdb",
+		Namespace: "default",
+	}, pdb)
+	require.NoError(t, err, "PDB should be created")
+
+	// Verify MaxUnavailable is set correctly
+	require.NotNil(t, pdb.Spec.MaxUnavailable, "MaxUnavailable should be set")
+	assert.Equal(t, intstr.FromInt(1), *pdb.Spec.MaxUnavailable)
+	assert.Nil(t, pdb.Spec.MinAvailable, "MinAvailable should not be set")
+
+	// Verify label selector matches deployment labels
+	expectedLabels := map[string]string{
+		"app.kubernetes.io/name":       "coredns",
+		"app.kubernetes.io/instance":   "ha-dns",
+		"app.kubernetes.io/component":  "dns",
+		"app.kubernetes.io/managed-by": "nextdns-operator",
+		"nextdns.io/profile-id":        "abc123",
+	}
+	assert.Equal(t, expectedLabels, pdb.Spec.Selector.MatchLabels)
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_PDBDefaultsToMaxUnavailable1(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	replicas := int32(3)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ha-dns-default",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+				// Empty PDB config - should default to maxUnavailable: 1
+				PodDisruptionBudget: &nextdnsv1alpha1.CoreDNSPDBConfig{},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "ha-dns-default", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify PDB was created with default maxUnavailable: 1
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "ha-dns-default-abc123-coredns-pdb",
+		Namespace: "default",
+	}, pdb)
+	require.NoError(t, err, "PDB should be created with defaults")
+
+	require.NotNil(t, pdb.Spec.MaxUnavailable, "Should default to maxUnavailable")
+	assert.Equal(t, intstr.FromInt(1), *pdb.Spec.MaxUnavailable)
+	assert.Nil(t, pdb.Spec.MinAvailable, "MinAvailable should not be set when defaulting")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_PDBNotCreatedForDaemonSet(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	maxUnavailable := intstr.FromInt(1)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ds-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Mode: nextdnsv1alpha1.DeploymentModeDaemonSet,
+				PodDisruptionBudget: &nextdnsv1alpha1.CoreDNSPDBConfig{
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "ds-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify PDB was NOT created for DaemonSet mode
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "ds-dns-abc123-coredns-pdb",
+		Namespace: "default",
+	}, pdb)
+	assert.True(t, apierrors.IsNotFound(err), "PDB should not be created for DaemonSet mode")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_PDBNotCreatedWhenNil(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	replicas := int32(2)
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "no-pdb-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+				// No PDB config
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "no-pdb-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify PDB was NOT created when PDB config is nil
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "no-pdb-dns-abc123-coredns-pdb",
+		Namespace: "default",
+	}, pdb)
+	assert.True(t, apierrors.IsNotFound(err), "PDB should not be created when config is nil")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_PDBWithMinAvailable(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	replicas := int32(3)
+	minAvailable := intstr.FromString("50%")
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ha-dns-min",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
+				Replicas: &replicas,
+				PodDisruptionBudget: &nextdnsv1alpha1.CoreDNSPDBConfig{
+					MinAvailable: &minAvailable,
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "ha-dns-min", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify PDB was created with minAvailable
+	pdb := &policyv1.PodDisruptionBudget{}
+	err = fakeClient.Get(ctx, types.NamespacedName{
+		Name:      "ha-dns-min-abc123-coredns-pdb",
+		Namespace: "default",
+	}, pdb)
+	require.NoError(t, err, "PDB should be created")
+
+	require.NotNil(t, pdb.Spec.MinAvailable, "MinAvailable should be set")
+	assert.Equal(t, intstr.FromString("50%"), *pdb.Spec.MinAvailable)
+	assert.Nil(t, pdb.Spec.MaxUnavailable, "MaxUnavailable should not be set when MinAvailable is specified")
 }

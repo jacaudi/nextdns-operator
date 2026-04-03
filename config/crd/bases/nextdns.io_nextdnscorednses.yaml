@@ -1016,6 +1016,27 @@ spec:
                       PodAnnotations specifies additional annotations for the CoreDNS pods
                       Useful for Multus CNI network attachments, Istio sidecar injection control, etc.
                     type: object
+                  podDisruptionBudget:
+                    description: PodDisruptionBudget configures disruption budget
+                      for HA deployments
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          MaxUnavailable is the maximum number of pods that can be unavailable.
+                          Mutually exclusive with MinAvailable. Defaults to 1 if neither is set.
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          MinAvailable is the minimum number of pods that must be available.
+                          Mutually exclusive with MaxUnavailable.
+                        x-kubernetes-int-or-string: true
+                    type: object
                   replicas:
                     default: 2
                     description: Replicas specifies the number of CoreDNS replicas
@@ -1170,30 +1191,6 @@ spec:
                     default: true
                     description: Enabled enables the metrics endpoint on CoreDNS
                     type: boolean
-                  serviceMonitor:
-                    description: ServiceMonitor configures Prometheus ServiceMonitor
-                      creation
-                    properties:
-                      enabled:
-                        default: false
-                        description: Enabled creates a ServiceMonitor for Prometheus
-                          Operator
-                        type: boolean
-                      interval:
-                        default: 30s
-                        description: Interval specifies the scrape interval
-                        type: string
-                      labels:
-                        additionalProperties:
-                          type: string
-                        description: Labels specifies additional labels for the ServiceMonitor
-                        type: object
-                      namespace:
-                        description: |-
-                          Namespace specifies the namespace for the ServiceMonitor
-                          Defaults to the namespace of the NextDNSCoreDNS resource
-                        type: string
-                    type: object
                 type: object
               multus:
                 description: Multus configures a secondary network interface via Multus

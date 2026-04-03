@@ -298,20 +298,7 @@ metrics:
   enabled: true  # default: true
 ```
 
-**ServiceMonitor** (for Prometheus Operator):
-
-> **Note:** ServiceMonitor reconciliation is not yet implemented in the controller. The configuration is accepted but the ServiceMonitor resource is not currently created. This is planned for a future release.
-
-```yaml
-metrics:
-  enabled: true
-  serviceMonitor:
-    enabled: true
-    namespace: monitoring  # optional, defaults to resource namespace
-    interval: "30s"        # default: 30s
-    labels:
-      release: prometheus  # match your Prometheus Operator selector
-```
+> **Note:** ServiceMonitor for Prometheus Operator is configured via Helm values, not the CRD. See the Helm chart `values.yaml` for ServiceMonitor configuration.
 
 ### Query Logging
 
@@ -440,6 +427,8 @@ The CoreDNS pods will have interfaces on both the cluster network and the VLAN, 
 ### Device Identification
 
 Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional `upstream.deviceName` field. When set, the device name is embedded in the upstream DNS endpoint so NextDNS can attribute queries to a specific deployment.
+
+> **Note:** Device identification only works with DoT (via SNI) and DoH (via URL path). When using plain DNS protocol, `deviceName` is ignored and a `DeviceNameIgnored` warning condition is set on the CR.
 
 ```yaml
 upstream:
@@ -777,10 +766,8 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `service.annotations` | map[string]string | No | | Additional service annotations |
 | `service.nameOverride` | string | No | | Custom service name |
 | `metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
-| `metrics.serviceMonitor.enabled` | bool | No | `false` | Create Prometheus ServiceMonitor |
-| `metrics.serviceMonitor.namespace` | string | No | | ServiceMonitor namespace |
-| `metrics.serviceMonitor.interval` | string | No | `30s` | Scrape interval |
-| `metrics.serviceMonitor.labels` | map[string]string | No | | Additional ServiceMonitor labels |
+| `deployment.podDisruptionBudget.minAvailable` | IntOrString | No | | Min pods available (mutually exclusive with maxUnavailable) |
+| `deployment.podDisruptionBudget.maxUnavailable` | IntOrString | No | `1` (when set) | Max pods unavailable (mutually exclusive with minAvailable) |
 | `cache.enabled` | *bool | No | `true` | Enable DNS response caching |
 | `cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
 | `logging.enabled` | *bool | No | `false` | Enable DNS query logging |

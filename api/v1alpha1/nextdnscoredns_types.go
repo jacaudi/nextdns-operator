@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // DNSProtocol specifies the DNS protocol to use for upstream queries
@@ -65,7 +66,6 @@ type UpstreamConfig struct {
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment
-// TODO: Consider adding PodDisruptionBudget support for HA deployments.
 type CoreDNSDeploymentConfig struct {
 	// Mode specifies whether to deploy as Deployment or DaemonSet
 	// +kubebuilder:default=Deployment
@@ -103,6 +103,23 @@ type CoreDNSDeploymentConfig struct {
 	// Useful for Multus CNI network attachments, Istio sidecar injection control, etc.
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// PodDisruptionBudget configures disruption budget for HA deployments
+	// +optional
+	PodDisruptionBudget *CoreDNSPDBConfig `json:"podDisruptionBudget,omitempty"`
+}
+
+// CoreDNSPDBConfig configures PodDisruptionBudget for CoreDNS HA deployments
+type CoreDNSPDBConfig struct {
+	// MinAvailable is the minimum number of pods that must be available.
+	// Mutually exclusive with MaxUnavailable.
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable.
+	// Mutually exclusive with MinAvailable. Defaults to 1 if neither is set.
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // CoreDNSServiceConfig configures the CoreDNS Kubernetes Service
@@ -129,41 +146,12 @@ type CoreDNSServiceConfig struct {
 	NameOverride string `json:"nameOverride,omitempty"`
 }
 
-// ServiceMonitorConfig configures Prometheus ServiceMonitor creation.
-// Note: The operator controller does not reconcile ServiceMonitor resources.
-// ServiceMonitor creation is handled by the Helm chart via the bjw-s common library.
-// This struct exists in the CRD for Helm values passthrough.
-type ServiceMonitorConfig struct {
-	// Enabled creates a ServiceMonitor for Prometheus Operator
-	// +kubebuilder:default=false
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Namespace specifies the namespace for the ServiceMonitor
-	// Defaults to the namespace of the NextDNSCoreDNS resource
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
-
-	// Interval specifies the scrape interval
-	// +kubebuilder:default="30s"
-	// +optional
-	Interval string `json:"interval,omitempty"`
-
-	// Labels specifies additional labels for the ServiceMonitor
-	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
-}
-
 // CoreDNSMetricsConfig configures metrics and monitoring
 type CoreDNSMetricsConfig struct {
 	// Enabled enables the metrics endpoint on CoreDNS
 	// +kubebuilder:default=true
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
-
-	// ServiceMonitor configures Prometheus ServiceMonitor creation
-	// +optional
-	ServiceMonitor *ServiceMonitorConfig `json:"serviceMonitor,omitempty"`
 }
 
 // CoreDNSCacheConfig configures DNS response caching
