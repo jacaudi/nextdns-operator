@@ -40,6 +40,9 @@ const (
 	// ConditionTypeMultusIPWarning indicates Multus IP configuration issues
 	ConditionTypeMultusIPWarning = "MultusIPWarning"
 
+	// ConditionTypeDeviceNameIgnored warns that deviceName has no effect with plain DNS
+	ConditionTypeDeviceNameIgnored = "DeviceNameIgnored"
+
 	// CorefileKey is the key in the ConfigMap for the Corefile
 	CorefileKey = "Corefile"
 
@@ -176,6 +179,19 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	} else {
 		// Clear stale warning when Multus is not configured
 		r.setCondition(coreDNS, ConditionTypeMultusIPWarning, metav1.ConditionFalse, "MultusNotConfigured", "Multus is not configured")
+	}
+
+	// Warn if deviceName is used with plain DNS protocol (device identification not possible)
+	if coreDNS.Spec.Upstream != nil &&
+		coreDNS.Spec.Upstream.Primary == nextdnsv1alpha1.DNSProtocolDNS &&
+		coreDNS.Spec.Upstream.DeviceName != "" {
+		logger.Info("WARNING: deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionTrue, "ProtocolLimitation",
+			"deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+	} else {
+		// Clear stale warning when not applicable
+		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionFalse, "NotApplicable",
+			"deviceName is not set or protocol supports device identification")
 	}
 
 	// Store profile information in status

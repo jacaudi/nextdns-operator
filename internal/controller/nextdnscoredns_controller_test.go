@@ -2321,3 +2321,115 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
 	require.True(t, ok)
 	assert.Len(t, ips, 2)
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameIgnoredWithPlainDNS(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "home-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary:    nextdnsv1alpha1.DNSProtocolDNS,
+				DeviceName: "MyDevice",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	// Reconcile should succeed (warning only, not blocking)
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Fetch the updated resource and check for the DeviceNameIgnored condition
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "home-dns", Namespace: "default"}, updatedCoreDNS)
+	require.NoError(t, err)
+
+	deviceNameCond := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeDeviceNameIgnored)
+	require.NotNil(t, deviceNameCond, "DeviceNameIgnored condition should exist")
+	assert.Equal(t, metav1.ConditionTrue, deviceNameCond.Status)
+	assert.Equal(t, "ProtocolLimitation", deviceNameCond.Reason)
+	assert.Contains(t, deviceNameCond.Message, "deviceName is ignored with plain DNS protocol")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameNotIgnoredWithDoT(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "fp-abc123",
+			Conditions: []metav1.Condition{
+				{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "home-dns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+			Upstream: &nextdnsv1alpha1.UpstreamConfig{
+				Primary:    nextdnsv1alpha1.DNSProtocolDoT,
+				DeviceName: "MyDevice",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(coreDNS, profile).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+	// Reconcile should succeed
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Fetch the updated resource - DeviceNameIgnored should NOT be True
+	updatedCoreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "home-dns", Namespace: "default"}, updatedCoreDNS)
+	require.NoError(t, err)
+
+	deviceNameCond := meta.FindStatusCondition(updatedCoreDNS.Status.Conditions, ConditionTypeDeviceNameIgnored)
+	if deviceNameCond != nil {
+		assert.Equal(t, metav1.ConditionFalse, deviceNameCond.Status,
+			"DeviceNameIgnored should be False when using DoT")
+	}
+}
