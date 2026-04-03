@@ -4,13 +4,13 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 
 ## Features
 
-- **Declarative DNS Management**: Define NextDNS profiles as Kubernetes resources
-- **Multi-CRD Architecture**: Separate resources for allowlists, denylists, and TLD lists that can be shared across profiles
-- **Full NextDNS API Coverage**: Security, privacy, parental control, and settings configuration
-- **Profile Lifecycle Management**: Create new profiles or adopt existing ones; operator-created profiles are deleted on resource removal
-- **Drift Detection**: Automatic periodic reconciliation (default: 1 hour) catches manual changes made outside the operator
-- **ConfigMap Export**: Optionally create a ConfigMap with DNS connection details for easy integration with other applications
-- **Observe Mode**: Read existing NextDNS profiles without modifying them, with a guided path to declarative management
+- Declarative DNS management as Kubernetes resources
+- Multi-CRD architecture (shared allowlists, denylists, TLD lists)
+- Full NextDNS API coverage
+- Profile lifecycle management (create, adopt, delete)
+- Automatic drift detection
+- ConfigMap export for app integration
+- Observe mode for safe profile adoption
 
 ## Custom Resources
 
