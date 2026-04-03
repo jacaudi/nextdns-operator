@@ -103,6 +103,18 @@ rbac:
             - get
             - patch
             - update
+        - apiGroups:
+            - policy
+          resources:
+            - poddisruptionbudgets
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
   bindings:
     main:
       enabled: true
