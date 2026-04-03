@@ -56,6 +56,7 @@ jobs:
     with:
       use-github-app: true
       allow-initial-development-versions: true
+      changelog-file: CHANGELOG.md
     secrets:
       app-id: ${{ secrets.APP_ID }}
       app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
