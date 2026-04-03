@@ -431,21 +431,31 @@ func (r *NextDNSCoreDNSReconciler) reconcileWorkload(ctx context.Context, coreDN
 	}
 }
 
-// reconcilePDB creates or updates the PodDisruptionBudget for CoreDNS HA deployments
+// reconcilePDB creates, updates, or cleans up the PodDisruptionBudget for CoreDNS HA deployments
 func (r *NextDNSCoreDNSReconciler) reconcilePDB(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
-	// Skip if PDB config is nil
-	if coreDNS.Spec.Deployment == nil || coreDNS.Spec.Deployment.PodDisruptionBudget == nil {
-		return nil
-	}
-
-	// Skip if deployment mode is DaemonSet
-	if coreDNS.Spec.Deployment.Mode == nextdnsv1alpha1.DeploymentModeDaemonSet {
-		return nil
-	}
-
 	logger := log.FromContext(ctx)
 	resourceName := r.getResourceName(coreDNS, profile)
 	pdbName := resourceName + "-pdb"
+
+	// Determine if PDB should exist
+	shouldExist := coreDNS.Spec.Deployment != nil &&
+		coreDNS.Spec.Deployment.PodDisruptionBudget != nil &&
+		coreDNS.Spec.Deployment.Mode != nextdnsv1alpha1.DeploymentModeDaemonSet
+
+	if !shouldExist {
+		// Clean up any existing PDB
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: coreDNS.Namespace}, existing)
+		if err == nil {
+			logger.Info("Cleaning up stale PodDisruptionBudget", "name", pdbName)
+			return r.Delete(ctx, existing)
+		}
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
 	labels := r.buildLabels(coreDNS, profile)
 	pdbConfig := coreDNS.Spec.Deployment.PodDisruptionBudget
 
