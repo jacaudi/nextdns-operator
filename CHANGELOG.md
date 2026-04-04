@@ -1,4 +1,6 @@
-## 0.14.7 (2026-04-04)
+# Changelog
+
+## v0.14.7 (2026-04-04)
 
 #### Bug Fixes
 
@@ -9,20 +11,13 @@
 * update changelog for v0.14.6 [skip ci] ([d8031c21](https://github.com/jacaudi/nextdns-operator/commit/d8031c21848a0ec7e8368a263a495fbab0f2a902))
 
 
-## 0.14.6 (2026-04-04)
+## v0.14.6 (2026-04-04)
 
 #### Bug Fixes
 
-* **docs:** add missing v0.14.4 and v0.14.5 changelog entries (e0d64d73)
+* **docs:** add missing v0.14.4 and v0.14.5 changelog entries ([e0d64d73](https://github.com/jacaudi/nextdns-operator/commit/e0d64d73))
 
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## Unreleased
+---
 
 ## [v0.14.5](https://github.com/jacaudi/nextdns-operator/releases/tag/v0.14.5) - 2026-04-04
 
