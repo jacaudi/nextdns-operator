@@ -1,17 +1,20 @@
 # Changelog
 
-## v0.14.7 (2026-04-04)
+## 0.14.8 (2026-04-04)
+
+#### Bug Fixes
+
+* **ci:** disable emojis in changelog generator ([0ce90c00](https://github.com/jacaudi/nextdns-operator/commit/0ce90c007a5550ade66301798db2a681d03ca6db))
+
+
+## 0.14.7 (2026-04-04)
 
 #### Bug Fixes
 
 * **ci:** align semrelrc config with github-actions template ([b1254e76](https://github.com/jacaudi/nextdns-operator/commit/b1254e76e095aa278d65a26d0e0b7cb5b9313863))
 
-#### Documentation
 
-* update changelog for v0.14.6 [skip ci] ([d8031c21](https://github.com/jacaudi/nextdns-operator/commit/d8031c21848a0ec7e8368a263a495fbab0f2a902))
-
-
-## v0.14.6 (2026-04-04)
+## 0.14.6 (2026-04-04)
 
 #### Bug Fixes
 
