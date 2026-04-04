@@ -1,4 +1,21 @@
 {
+  "plugins": {
+    "commit-analyzer": {
+      "name": "default@^1.0.0"
+    },
+    "ci-condition": {
+      "name": "default"
+    },
+    "changelog-generator": {
+      "name": "default",
+      "options": {
+        "emojis": "false"
+      }
+    },
+    "provider": {
+      "name": "github"
+    }
+  },
   "hooks": {
     "post-changelog": [
       "if [ -f \"chart/Chart.yaml\" ]; then\n  sed -i \"s/^version:.*/version: ${RELEASE_VERSION}/\" chart/Chart.yaml\n  sed -i \"s/^appVersion:.*/appVersion: \\\"${RELEASE_VERSION}\\\"/\" chart/Chart.yaml\n  git add chart/Chart.yaml\nfi"
