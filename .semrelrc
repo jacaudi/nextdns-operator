@@ -6,6 +6,7 @@
     "changelog-generator": {
       "name": "default@^1.0.0",
       "options": {
+        "emojis": "false",
         "format_commit_template": "* {{with .Scope -}} **{{.}}:** {{end}} {{- .Message}} ([{{trimSHA .SHA}}](https://github.com/jacaudi/nextdns-operator/commit/{{.SHA}}))"
       }
     },
