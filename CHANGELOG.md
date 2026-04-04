@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## Unreleased
 
+## [v0.14.5](https://github.com/jacaudi/nextdns-operator/releases/tag/v0.14.5) - 2026-04-04
+
+- [`082ceca`](https://github.com/jacaudi/nextdns-operator/commit/082ceca) fix: resolve lint failures from v0.15.1 upgrade
+
+## [v0.14.4](https://github.com/jacaudi/nextdns-operator/releases/tag/v0.14.4) - 2026-04-04
+
+- [`bde175d`](https://github.com/jacaudi/nextdns-operator/commit/bde175d) fix(ci): upgrade github-actions to v0.15.1 with component- prefix rename
+
 ## [v0.14.3](https://github.com/jacaudi/nextdns-operator/releases/tag/v0.14.3) - 2026-04-03
 
 - [`3289ce1`](https://github.com/jacaudi/nextdns-operator/commit/3289ce1e22acdc1d57e8c0bd096205189f5769ef) fix(ci): configure go-semantic-release with changelog and GitHub provider
