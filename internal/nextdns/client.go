@@ -249,7 +249,7 @@ func (c *Client) SyncRewrites(ctx context.Context, profileID string, entries []R
 	type rewriteKey struct{ Name, Content string }
 	desired := make(map[rewriteKey]bool, len(entries))
 	for _, e := range entries {
-		desired[rewriteKey{e.Name, e.Content}] = true
+		desired[rewriteKey(e)] = true
 	}
 
 	// Find entries to delete (in current but not in desired)
@@ -268,7 +268,7 @@ func (c *Client) SyncRewrites(ctx context.Context, profileID string, entries []R
 
 	// Create entries not in current state
 	for _, e := range entries {
-		key := rewriteKey{e.Name, e.Content}
+		key := rewriteKey(e)
 		if !currentSet[key] {
 			createReq := &nextdns.CreateRewritesRequest{
 				ProfileID: profileID,

@@ -718,7 +718,7 @@ func (m *MockClient) SyncRewrites(ctx context.Context, profileID string, entries
 	type rewriteKey struct{ Name, Content string }
 	desired := make(map[rewriteKey]bool, len(entries))
 	for _, e := range entries {
-		desired[rewriteKey{e.Name, e.Content}] = true
+		desired[rewriteKey(e)] = true
 	}
 
 	currentSet := make(map[rewriteKey]bool)
@@ -732,7 +732,7 @@ func (m *MockClient) SyncRewrites(ctx context.Context, profileID string, entries
 	}
 
 	for _, e := range entries {
-		key := rewriteKey{e.Name, e.Content}
+		key := rewriteKey(e)
 		if !currentSet[key] {
 			kept = append(kept, &nextdns.Rewrites{
 				ID:      fmt.Sprintf("rw-%s", e.Name),
