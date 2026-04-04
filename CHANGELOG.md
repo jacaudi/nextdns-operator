@@ -1,3 +1,10 @@
+## 0.14.6 (2026-04-04)
+
+#### Bug Fixes
+
+* **docs:** add missing v0.14.4 and v0.14.5 changelog entries (e0d64d73)
+
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
