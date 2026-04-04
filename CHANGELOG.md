@@ -1,3 +1,14 @@
+## 0.14.8 (2026-04-04)
+
+#### Bug Fixes
+
+* **ci:** disable emojis in changelog generator ([0ce90c00](https://github.com/jacaudi/nextdns-operator/commit/0ce90c007a5550ade66301798db2a681d03ca6db))
+
+#### Documentation
+
+* update changelog for v0.14.7 [skip ci] ([d88667dd](https://github.com/jacaudi/nextdns-operator/commit/d88667ddfcdc3169eccee799906cbed0cf6b0556))
+
+
 ## 0.14.7 (2026-04-04)
 
 #### Bug Fixes
