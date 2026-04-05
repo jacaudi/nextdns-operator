@@ -1,3 +1,14 @@
+## 0.14.10 (2026-04-05)
+
+#### Bug Fixes
+
+* **docs:** clean up changelog noise and remove stale header ([8e61a4ce](https://github.com/jacaudi/nextdns-operator/commit/8e61a4ce4cb8a698553b6ac376c15776aa22906f))
+
+#### Chores
+
+* **changelog:** update for v0.14.9 [skip ci] ([6879879b](https://github.com/jacaudi/nextdns-operator/commit/6879879be744066a343ab32f7849822257ca2058))
+
+
 ## 0.14.9 (2026-04-05)
 
 #### Bug Fixes
