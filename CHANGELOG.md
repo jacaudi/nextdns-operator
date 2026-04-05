@@ -1,3 +1,16 @@
+## 0.14.9 (2026-04-05)
+
+#### Bug Fixes
+
+* **ci:** bump github-actions to v0.15.2 ([dcf917a5](https://github.com/jacaudi/nextdns-operator/commit/dcf917a510f17ed59710d6946f9906a242875261))
+
+#### Documentation
+
+* fix changelog formatting and structure ([fef02660](https://github.com/jacaudi/nextdns-operator/commit/fef02660f0e282599fde5baa426f3deaf03ec583))
+* fix changelog formatting and structure ([8aa80438](https://github.com/jacaudi/nextdns-operator/commit/8aa80438ea41e4b1ac81797d402e438c106f5af4))
+* update changelog for v0.14.8 [skip ci] ([9feb0d85](https://github.com/jacaudi/nextdns-operator/commit/9feb0d851f409f30b623e4c775960ea21e87b3e1))
+
+
 # Changelog
 
 ## 0.14.8 (2026-04-04)
