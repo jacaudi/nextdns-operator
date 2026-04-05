@@ -44,9 +44,22 @@ jobs:
       coverage-threshold: 70
       test-packages: './internal/controller/... ./internal/nextdns/... ./internal/coredns/...'
 
+  # Manual approval gate - pauses after lint/test until a reviewer approves.
+  # Configure the "release" environment in Settings > Environments with
+  # required reviewers.
+  approve:
+    name: Approve Release
+    needs: [lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Release approved
+        run: echo "Release approved, proceeding with semantic release..."
+
   # Create semantic version and GitHub release (main branch only)
   release:
-    needs: [lint, test]
+    needs: [approve]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: jacaudi/github-actions/.github/workflows/component-semantic-release.yml@v0.15.3
     permissions:
