@@ -1,3 +1,14 @@
+## 0.14.11 (2026-04-05)
+
+#### Bug Fixes
+
+* **ci:** bump github-actions to v0.15.3 ([5e2f0aef](https://github.com/jacaudi/nextdns-operator/commit/5e2f0aefef658ec5b423c487bf0e51a85031c884))
+
+#### Chores
+
+* **changelog:** update for v0.14.10 [skip ci] ([0e2fccec](https://github.com/jacaudi/nextdns-operator/commit/0e2fccece3c68d0277ed8aaa2b3a24e30ac51e1e))
+
+
 ## 0.14.10 (2026-04-05)
 
 #### Bug Fixes
