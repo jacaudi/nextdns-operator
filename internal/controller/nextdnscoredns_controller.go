@@ -387,8 +387,13 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	}
 
 	// Use profile-specific upstream IPs if available
+	// Prefer Setup.IPv4, fall back to LinkedIP.Servers (linked-IP profiles
+	// expose per-profile IPs there instead of in the top-level IPv4 field)
 	if profile.Status.Setup != nil {
 		cfg.UpstreamIPv4 = profile.Status.Setup.IPv4
+		if len(cfg.UpstreamIPv4) == 0 && profile.Status.Setup.LinkedIP != nil {
+			cfg.UpstreamIPv4 = profile.Status.Setup.LinkedIP.Servers
+		}
 	}
 
 	// Add domain overrides if specified
@@ -994,6 +999,9 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 	var upstreamIPs []string
 	if profile.Status.Setup != nil {
 		upstreamIPs = profile.Status.Setup.IPv4
+		if len(upstreamIPs) == 0 && profile.Status.Setup.LinkedIP != nil {
+			upstreamIPs = profile.Status.Setup.LinkedIP.Servers
+		}
 	}
 	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName, upstreamIPs)
 

@@ -2755,6 +2755,32 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithSetupIPs(t *testing.T)
 	assert.Equal(t, []string{"45.90.28.198", "45.90.30.198"}, cfg.UpstreamIPv4)
 }
 
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithLinkedIPFallback(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	// Linked-IP profiles have no top-level IPv4 — IPs are in LinkedIP.Servers
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "ce63cd",
+			Setup: &nextdnsv1alpha1.ProfileSetup{
+				IPv6: []string{"2a07:a8c0::ce:63cd", "2a07:a8c1::ce:63cd"},
+				LinkedIP: &nextdnsv1alpha1.SetupLinkedIP{
+					Servers: []string{"45.90.28.208", "45.90.30.208"},
+				},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{},
+	}
+
+	cfg, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"45.90.28.208", "45.90.30.208"}, cfg.UpstreamIPv4)
+}
+
 func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutSetup(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
