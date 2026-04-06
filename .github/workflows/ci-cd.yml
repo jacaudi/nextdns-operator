@@ -101,6 +101,6 @@ jobs:
       chart-name: nextdns-operator
       chart-path: chart
       repository: ${{ github.repository_owner }}/charts
-      version: ${{ needs.release.outputs.new-release-version }}
+      version: v${{ needs.release.outputs.new-release-version }}
       registry: ghcr.io
       registry-username: ${{ github.repository_owner }}
