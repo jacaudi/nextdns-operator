@@ -655,7 +655,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			settingsConfig.LogsEnabled = boolValue(profile.Spec.Settings.Logs.Enabled, true)
 			settingsConfig.LogClientsIPs = boolValue(profile.Spec.Settings.Logs.LogClientsIPs, false)
 			settingsConfig.LogDomains = boolValue(profile.Spec.Settings.Logs.LogDomains, true)
-			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
+			settingsConfig.LogRetention = parseRetentionSeconds(profile.Spec.Settings.Logs.Retention)
 			settingsConfig.Location = profile.Spec.Settings.Logs.Location
 		}
 		if profile.Spec.Settings.BlockPage != nil {
@@ -1269,35 +1269,43 @@ func boolValue(ptr *bool, defaultValue bool) bool {
 	return *ptr
 }
 
-// parseRetentionDays parses a retention string (e.g., "7d", "30d") and returns days as int
-func parseRetentionDays(retention string) int {
+// parseRetentionSeconds parses a retention string (e.g., "7d", "1h") and returns seconds
+// as expected by the NextDNS API. The API uses seconds for retention values.
+func parseRetentionSeconds(retention string) int {
 	if retention == "" {
-		return 7 // default 7 days
+		return 604800 // default 7 days in seconds
 	}
 
 	retention = strings.TrimSpace(strings.ToLower(retention))
 
-	// Handle special cases
 	switch retention {
 	case "1h":
-		return 0 // Less than a day
+		return 3600
 	case "6h":
-		return 0
+		return 21600
+	case "1d":
+		return 86400
+	case "7d":
+		return 604800
+	case "30d":
+		return 2592000
+	case "90d":
+		return 7776000
 	case "1y":
-		return 365
+		return 31536000
 	case "2y":
-		return 730
+		return 63072000
 	}
 
 	// Parse numeric values with 'd' suffix
 	if strings.HasSuffix(retention, "d") {
 		days, err := strconv.Atoi(strings.TrimSuffix(retention, "d"))
 		if err == nil {
-			return days
+			return days * 86400
 		}
 	}
 
-	return 7 // default
+	return 604800 // default 7 days in seconds
 }
 
 // boolPtr returns a pointer to a bool value

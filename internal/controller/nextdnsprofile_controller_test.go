@@ -73,82 +73,30 @@ func TestBoolValue(t *testing.T) {
 	}
 }
 
-func TestParseRetentionDays(t *testing.T) {
+func TestParseRetentionSeconds(t *testing.T) {
 	tests := []struct {
 		name      string
 		retention string
 		expected  int
 	}{
-		{
-			name:      "empty string returns default",
-			retention: "",
-			expected:  7,
-		},
-		{
-			name:      "1h returns 0",
-			retention: "1h",
-			expected:  0,
-		},
-		{
-			name:      "6h returns 0",
-			retention: "6h",
-			expected:  0,
-		},
-		{
-			name:      "1d returns 1",
-			retention: "1d",
-			expected:  1,
-		},
-		{
-			name:      "7d returns 7",
-			retention: "7d",
-			expected:  7,
-		},
-		{
-			name:      "30d returns 30",
-			retention: "30d",
-			expected:  30,
-		},
-		{
-			name:      "90d returns 90",
-			retention: "90d",
-			expected:  90,
-		},
-		{
-			name:      "1y returns 365",
-			retention: "1y",
-			expected:  365,
-		},
-		{
-			name:      "2y returns 730",
-			retention: "2y",
-			expected:  730,
-		},
-		{
-			name:      "uppercase 7D returns 7",
-			retention: "7D",
-			expected:  7,
-		},
-		{
-			name:      "with whitespace",
-			retention: "  30d  ",
-			expected:  30,
-		},
-		{
-			name:      "invalid string returns default",
-			retention: "invalid",
-			expected:  7,
-		},
-		{
-			name:      "invalid number returns default",
-			retention: "abcd",
-			expected:  7,
-		},
+		{name: "empty string returns default 7d in seconds", retention: "", expected: 604800},
+		{name: "1h returns 3600", retention: "1h", expected: 3600},
+		{name: "6h returns 21600", retention: "6h", expected: 21600},
+		{name: "1d returns 86400", retention: "1d", expected: 86400},
+		{name: "7d returns 604800", retention: "7d", expected: 604800},
+		{name: "30d returns 2592000", retention: "30d", expected: 2592000},
+		{name: "90d returns 7776000", retention: "90d", expected: 7776000},
+		{name: "1y returns 31536000", retention: "1y", expected: 31536000},
+		{name: "2y returns 63072000", retention: "2y", expected: 63072000},
+		{name: "uppercase 7D returns 604800", retention: "7D", expected: 604800},
+		{name: "with whitespace", retention: "  30d  ", expected: 2592000},
+		{name: "invalid string returns default", retention: "invalid", expected: 604800},
+		{name: "invalid number returns default", retention: "abcd", expected: 604800},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseRetentionDays(tt.retention)
+			result := parseRetentionSeconds(tt.retention)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1445,7 +1393,7 @@ func TestSyncWithNextDNS_WithSettings(t *testing.T) {
 	assert.True(t, mockClient.updateSettingsCalled)
 	assert.NotNil(t, mockClient.settingsConfig)
 	assert.True(t, mockClient.settingsConfig.LogsEnabled)
-	assert.Equal(t, 30, mockClient.settingsConfig.LogRetention)
+	assert.Equal(t, 2592000, mockClient.settingsConfig.LogRetention)
 	assert.True(t, mockClient.settingsConfig.BlockPageEnable)
 }
 
