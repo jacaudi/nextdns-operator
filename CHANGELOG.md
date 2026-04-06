@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.2](https://github.com/jacaudi/nextdns-operator/compare/v0.15.1...v0.15.2) (2026-04-06)
+
+### Bug Fixes
+
+* add v prefix to helm chart OCI tag ([3b6bf2c](https://github.com/jacaudi/nextdns-operator/commit/3b6bf2c9177f800746cd8681a28c6d4ad97eb7de))
+
 ## [0.15.1](https://github.com/jacaudi/nextdns-operator/compare/v0.15.0...v0.15.1) (2026-04-06)
 
 ### Bug Fixes
