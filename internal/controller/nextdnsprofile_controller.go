@@ -265,7 +265,7 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			"denylistCount", len(resolvedLists.Denylist),
 			"tldCount", len(resolvedLists.TLDs))
 	} else {
-		logger.V(1).Info("Managed profile status unchanged, skipping status update",
+		logger.Info("Managed profile status unchanged, skipping status update",
 			"profileID", profile.Status.ProfileID)
 	}
 
@@ -793,7 +793,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 			"profileID", profile.Spec.ProfileID,
 			"profileName", observed.Name)
 	} else {
-		logger.V(1).Info("Observed profile unchanged, skipping status update",
+		logger.Info("Observed profile unchanged, skipping status update",
 			"profileID", profile.Spec.ProfileID)
 	}
 
