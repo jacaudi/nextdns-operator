@@ -865,6 +865,9 @@ spec:
                               Derived from the API's Drop.Domain field (inverted: LogDomains = !Drop.Domain).
                             type: boolean
                           retention:
+                            description: |-
+                              Retention is the log retention period in seconds as returned by the NextDNS API
+                              (e.g., 604800 for 7 days). Use formatRetentionString() to convert to spec enum values.
                             type: integer
                         required:
                         - enabled
