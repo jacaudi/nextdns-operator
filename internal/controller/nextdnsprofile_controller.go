@@ -760,7 +760,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	}
 
 	// Read full profile from NextDNS
-	observed, fingerprint, err := r.readFullProfile(ctx, client, profile.Spec.ProfileID)
+	observed, fingerprint, rawSetup, err := r.readFullProfile(ctx, client, profile.Spec.ProfileID)
 	if err != nil {
 		logger.Error(err, "Failed to read full profile from NextDNS")
 		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ObserveFailed")
@@ -779,25 +779,8 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	profile.Status.Fingerprint = fingerprint
 	profile.Status.ObservedConfig = observed
 	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
+	profile.Status.Setup = buildProfileSetup(rawSetup, profile.Spec.ProfileID)
 	profile.Status.ObservedGeneration = profile.Generation
-
-	// Setup is already fetched as part of readFullProfile; also populate status.setup
-	if observed.Setup != nil {
-		profile.Status.Setup = &nextdnsv1alpha1.ProfileSetup{
-			IPv4:        observed.Setup.IPv4,
-			IPv6:        observed.Setup.IPv6,
-			DNSCrypt:    observed.Setup.DNSCrypt,
-			DoTHostname: fmt.Sprintf("%s.dns.nextdns.io", profile.Spec.ProfileID),
-			DoHURL:      fmt.Sprintf("https://dns.nextdns.io/%s", profile.Spec.ProfileID),
-		}
-		if observed.Setup.LinkedIP != nil {
-			profile.Status.Setup.LinkedIP = &nextdnsv1alpha1.SetupLinkedIP{
-				Servers: observed.Setup.LinkedIP.Servers,
-				IP:      observed.Setup.LinkedIP.IP,
-				DDNS:    observed.Setup.LinkedIP.DDNS,
-			}
-		}
-	}
 
 	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
 	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "ObserveSuccess", "Remote profile read successfully")
@@ -837,13 +820,13 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 }
 
 // readFullProfile reads all sections of a NextDNS profile
-func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client nextdns.ClientInterface, profileID string) (*nextdnsv1alpha1.ObservedConfig, string, error) {
+func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client nextdns.ClientInterface, profileID string) (*nextdnsv1alpha1.ObservedConfig, string, *sdknextdns.Setup, error) {
 	observed := &nextdnsv1alpha1.ObservedConfig{}
 
 	// Get profile name and fingerprint
 	profile, err := client.GetProfile(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get profile: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get profile: %w", err)
 	}
 	apiFingerprint := profile.Fingerprint
 	observed.Name = profile.Name
@@ -851,7 +834,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get security settings
 	security, err := client.GetSecurity(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get security: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get security: %w", err)
 	}
 	observed.Security = &nextdnsv1alpha1.ObservedSecurity{
 		AIThreatDetection:       security.AiThreatDetection,
@@ -871,7 +854,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy settings
 	privacy, err := client.GetPrivacy(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy: %w", err)
 	}
 	observed.Privacy = &nextdnsv1alpha1.ObservedPrivacy{
 		DisguisedTrackers: privacy.DisguisedTrackers,
@@ -881,7 +864,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy blocklists
 	blocklists, err := client.GetPrivacyBlocklists(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy blocklists: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy blocklists: %w", err)
 	}
 	for _, bl := range blocklists {
 		observed.Privacy.Blocklists = append(observed.Privacy.Blocklists, nextdnsv1alpha1.ObservedBlocklistEntry{ID: bl.ID})
@@ -890,7 +873,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy natives
 	natives, err := client.GetPrivacyNatives(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy natives: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy natives: %w", err)
 	}
 	for _, n := range natives {
 		observed.Privacy.Natives = append(observed.Privacy.Natives, nextdnsv1alpha1.ObservedNativeEntry{ID: n.ID})
@@ -899,7 +882,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control settings
 	pc, err := client.GetParentalControl(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control: %w", err)
 	}
 	observed.ParentalControl = &nextdnsv1alpha1.ObservedParentalControl{
 		SafeSearch:            pc.SafeSearch,
@@ -943,7 +926,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control categories
 	categories, err := client.GetParentalControlCategories(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control categories: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control categories: %w", err)
 	}
 	for _, cat := range categories {
 		observed.ParentalControl.Categories = append(observed.ParentalControl.Categories, nextdnsv1alpha1.ObservedCategoryEntry{
@@ -956,7 +939,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control services
 	services, err := client.GetParentalControlServices(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control services: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control services: %w", err)
 	}
 	for _, svc := range services {
 		observed.ParentalControl.Services = append(observed.ParentalControl.Services, nextdnsv1alpha1.ObservedServiceEntry{
@@ -968,7 +951,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get denylist
 	denylist, err := client.GetDenylist(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get denylist: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get denylist: %w", err)
 	}
 	for _, d := range denylist {
 		observed.Denylist = append(observed.Denylist, nextdnsv1alpha1.ObservedDomainEntry{
@@ -980,7 +963,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get allowlist
 	allowlist, err := client.GetAllowlist(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get allowlist: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get allowlist: %w", err)
 	}
 	for _, a := range allowlist {
 		observed.Allowlist = append(observed.Allowlist, nextdnsv1alpha1.ObservedDomainEntry{
@@ -992,7 +975,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get blocked TLDs
 	tlds, err := client.GetSecurityTLDs(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get security TLDs: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get security TLDs: %w", err)
 	}
 	for _, tld := range tlds {
 		observed.BlockedTLDs = append(observed.BlockedTLDs, tld.ID)
@@ -1001,7 +984,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get settings
 	settings, err := client.GetSettings(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get settings: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get settings: %w", err)
 	}
 	observed.Settings = &nextdnsv1alpha1.ObservedSettings{
 		Web3: settings.Web3,
@@ -1040,7 +1023,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get rewrites
 	rewrites, err := client.GetRewrites(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get rewrites: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get rewrites: %w", err)
 	}
 	for _, rw := range rewrites {
 		observed.Rewrites = append(observed.Rewrites, nextdnsv1alpha1.ObservedRewriteEntry{
@@ -1052,7 +1035,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get setup (read-only endpoint data)
 	setup, err := client.GetSetup(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get setup: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get setup: %w", err)
 	}
 	observed.Setup = &nextdnsv1alpha1.ObservedSetup{
 		IPv4:     setup.Ipv4,
@@ -1068,7 +1051,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 		}
 	}
 
-	return observed, apiFingerprint, nil
+	return observed, apiFingerprint, setup, nil
 }
 
 // buildSuggestedSpec translates an ObservedConfig into spec-compatible types
