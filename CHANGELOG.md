@@ -1,3 +1,11 @@
+# Changelog
+
+## [0.15.1](https://github.com/jacaudi/nextdns-operator/compare/v0.15.0...v0.15.1) (2026-04-06)
+
+### Bug Fixes
+
+* fall back to linkedIP.servers when setup.ipv4 is empty ([#100](https://github.com/jacaudi/nextdns-operator/issues/100)) ([f8a6725](https://github.com/jacaudi/nextdns-operator/commit/f8a67253b1db315d1e62029c633196a2a50f3a52))
+
 ## 0.15.0 (2026-04-06)
 
 #### Feature
@@ -268,4 +276,3 @@
 - [`22ede0b`](https://github.com/jacaudi/nextdns-operator/commit/22ede0b6ac9e6cc7c23f76bf6aea3cf07254e10e) refactor(client): update SyncDenylist to accept DomainEntry with active state
 - [`feb3860`](https://github.com/jacaudi/nextdns-operator/commit/feb38601d34a9178aea55ac1e6ae0ce1357a5ce4) refactor(client): add DomainEntry type for active state tracking
 - [`bab0743`](https://github.com/jacaudi/nextdns-operator/commit/bab07431332b724d7e4682fd991bb3f3f95b8457) fix(rbac): add full CRUD permissions for list CRDs
-
