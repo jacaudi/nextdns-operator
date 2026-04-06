@@ -1012,6 +1012,47 @@ spec:
                       type: object
                     type: array
                 type: object
+              setup:
+                description: |-
+                  Setup contains the profile's DNS endpoint configuration
+                  Always populated after successful reconciliation in any mode
+                properties:
+                  dnscrypt:
+                    description: DNSCrypt contains the DNSCrypt protocol stamp
+                    type: string
+                  dohURL:
+                    description: DoHURL is the constructed DoH URL (e.g., "https://dns.nextdns.io/abc123")
+                    type: string
+                  dotHostname:
+                    description: DoTHostname is the constructed DoT server name (e.g.,
+                      "abc123.dns.nextdns.io")
+                    type: string
+                  ipv4:
+                    description: IPv4 contains profile-specific DNS IPv4 addresses
+                    items:
+                      type: string
+                    type: array
+                  ipv6:
+                    description: IPv6 contains profile-specific DNS IPv6 addresses
+                    items:
+                      type: string
+                    type: array
+                  linkedIP:
+                    description: LinkedIP contains linked IP DNS configuration
+                    properties:
+                      ddns:
+                        description: DDNS is the dynamic DNS hostname
+                        type: string
+                      ip:
+                        description: IP is the currently linked IP address
+                        type: string
+                      servers:
+                        description: Servers contains the linked IP DNS server addresses
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                type: object
               suggestedSpec:
                 description: |-
                   SuggestedSpec contains a spec-compatible translation of the observed config
