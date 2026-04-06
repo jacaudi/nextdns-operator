@@ -242,10 +242,26 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Don't fail the reconciliation for ConfigMap errors, just log
 	}
 
+	// Populate setup data (informational, non-critical)
+	{
+		factory := r.ClientFactory
+		if factory == nil {
+			factory = DefaultClientFactory
+		}
+		if client, err := factory(apiKey); err != nil {
+			logger.V(1).Info("Failed to create client for setup data, skipping", "error", err)
+		} else if setupData, err := client.GetSetup(ctx, profile.Status.ProfileID); err != nil {
+			logger.V(1).Info("Failed to get setup data, skipping", "error", err)
+		} else {
+			profile.Status.Setup = buildProfileSetup(setupData, profile.Status.ProfileID)
+		}
+	}
+
 	// Check if status actually changed (compare without LastSyncTime)
 	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.AggregatedCounts, profile.Status.AggregatedCounts) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.ReferencedResources, profile.Status.ReferencedResources) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Setup, profile.Status.Setup) ||
 		statusBefore.ProfileID != profile.Status.ProfileID ||
 		statusBefore.Fingerprint != profile.Status.Fingerprint ||
 		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
@@ -765,6 +781,24 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
 	profile.Status.ObservedGeneration = profile.Generation
 
+	// Setup is already fetched as part of readFullProfile; also populate status.setup
+	if observed.Setup != nil {
+		profile.Status.Setup = &nextdnsv1alpha1.ProfileSetup{
+			IPv4:        observed.Setup.IPv4,
+			IPv6:        observed.Setup.IPv6,
+			DNSCrypt:    observed.Setup.DNSCrypt,
+			DoTHostname: fmt.Sprintf("%s.dns.nextdns.io", profile.Spec.ProfileID),
+			DoHURL:      fmt.Sprintf("https://dns.nextdns.io/%s", profile.Spec.ProfileID),
+		}
+		if observed.Setup.LinkedIP != nil {
+			profile.Status.Setup.LinkedIP = &nextdnsv1alpha1.SetupLinkedIP{
+				Servers: observed.Setup.LinkedIP.Servers,
+				IP:      observed.Setup.LinkedIP.IP,
+				DDNS:    observed.Setup.LinkedIP.DDNS,
+			}
+		}
+	}
+
 	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
 	r.setCondition(profile, ConditionTypeSynced, metav1.ConditionTrue, "ObserveSuccess", "Remote profile read successfully")
 	r.setCondition(profile, ConditionTypeReady, metav1.ConditionTrue, "Observed", "Profile observed successfully")
@@ -772,6 +806,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	// Check if status actually changed (compare all meaningful fields including conditions)
 	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.ObservedConfig, profile.Status.ObservedConfig) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.SuggestedSpec, profile.Status.SuggestedSpec) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Setup, profile.Status.Setup) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
 		statusBefore.ProfileID != profile.Status.ProfileID ||
 		statusBefore.Fingerprint != profile.Status.Fingerprint ||
@@ -1162,6 +1197,32 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 	}
 
 	return suggested
+}
+
+// buildProfileSetup constructs a ProfileSetup from the NextDNS API setup response.
+// Includes convenience fields DoTHostname and DoHURL constructed from the profileID.
+func buildProfileSetup(setup *sdknextdns.Setup, profileID string) *nextdnsv1alpha1.ProfileSetup {
+	if setup == nil {
+		return nil
+	}
+
+	result := &nextdnsv1alpha1.ProfileSetup{
+		IPv4:        setup.Ipv4,
+		IPv6:        setup.Ipv6,
+		DNSCrypt:    setup.Dnscrypt,
+		DoTHostname: fmt.Sprintf("%s.dns.nextdns.io", profileID),
+		DoHURL:      fmt.Sprintf("https://dns.nextdns.io/%s", profileID),
+	}
+
+	if setup.LinkedIP != nil {
+		result.LinkedIP = &nextdnsv1alpha1.SetupLinkedIP{
+			Servers: setup.LinkedIP.Servers,
+			IP:      setup.LinkedIP.IP,
+			DDNS:    setup.LinkedIP.Ddns,
+		}
+	}
+
+	return result
 }
 
 // specHasConfig checks if the spec has any configuration sections populated

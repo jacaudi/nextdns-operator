@@ -3844,3 +3844,48 @@ func TestReconcile_ManagedMode_SkipsUpdateWhenUnchanged(t *testing.T) {
 		"LastSyncTime should not change when status is unchanged; expected %v, got %v",
 		pastTime.Time, second.Status.LastSyncTime.Time)
 }
+
+func TestBuildProfileSetup(t *testing.T) {
+	setup := &sdknextdns.Setup{
+		Ipv4:     []string{"45.90.28.198", "45.90.30.198"},
+		Ipv6:     []string{"2a07:a8c0::c6", "2a07:a8c1::c6"},
+		Dnscrypt: "sdns://test-stamp",
+		LinkedIP: &sdknextdns.SetupLinkedIP{
+			Servers: []string{"45.90.28.198", "45.90.30.198"},
+			IP:      "203.0.113.1",
+			Ddns:    "test.dns1.nextdns.io",
+		},
+	}
+
+	result := buildProfileSetup(setup, "abc123")
+
+	require.NotNil(t, result)
+	assert.Equal(t, []string{"45.90.28.198", "45.90.30.198"}, result.IPv4)
+	assert.Equal(t, []string{"2a07:a8c0::c6", "2a07:a8c1::c6"}, result.IPv6)
+	assert.Equal(t, "sdns://test-stamp", result.DNSCrypt)
+	assert.Equal(t, "abc123.dns.nextdns.io", result.DoTHostname)
+	assert.Equal(t, "https://dns.nextdns.io/abc123", result.DoHURL)
+	require.NotNil(t, result.LinkedIP)
+	assert.Equal(t, []string{"45.90.28.198", "45.90.30.198"}, result.LinkedIP.Servers)
+	assert.Equal(t, "203.0.113.1", result.LinkedIP.IP)
+	assert.Equal(t, "test.dns1.nextdns.io", result.LinkedIP.DDNS)
+}
+
+func TestBuildProfileSetup_NilInput(t *testing.T) {
+	result := buildProfileSetup(nil, "abc123")
+	assert.Nil(t, result)
+}
+
+func TestBuildProfileSetup_NoLinkedIP(t *testing.T) {
+	setup := &sdknextdns.Setup{
+		Ipv4: []string{"45.90.28.198"},
+	}
+
+	result := buildProfileSetup(setup, "abc123")
+
+	require.NotNil(t, result)
+	assert.Equal(t, []string{"45.90.28.198"}, result.IPv4)
+	assert.Nil(t, result.LinkedIP)
+	assert.Equal(t, "abc123.dns.nextdns.io", result.DoTHostname)
+	assert.Equal(t, "https://dns.nextdns.io/abc123", result.DoHURL)
+}
