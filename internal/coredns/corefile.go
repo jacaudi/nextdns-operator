@@ -55,6 +55,10 @@ type CorefileConfig struct {
 
 	// DomainOverrides specifies domain-specific upstream configurations
 	DomainOverrides []DomainOverrideConfig
+
+	// UpstreamIPv4 contains profile-specific IPv4 addresses for DoT/DNS forwarding.
+	// Falls back to anycast IPs (45.90.28.0, 45.90.30.0) if empty.
+	UpstreamIPv4 []string
 }
 
 // ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
@@ -170,11 +174,13 @@ func buildDoHPath(profileID, deviceName string) string {
 // Note: Cross-protocol fallback (e.g., DoT→DoH) is not supported because CoreDNS's
 // forward plugin cannot mix tls:// and https:// upstreams with a single tls_servername.
 func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
+	ip1, ip2 := resolveUpstreamIPs(cfg.UpstreamIPv4)
+
 	switch cfg.PrimaryProtocol {
 	case ProtocolDoT:
-		// DoT uses anycast IPs with TLS and tls_servername for SNI
+		// DoT uses IPs with TLS and tls_servername for SNI
 		// The profile ID is embedded in the SNI hostname for NextDNS routing
-		fmt.Fprintf(sb, "    forward . tls://%s tls://%s {\n", nextDNSAnycastIP1, nextDNSAnycastIP2)
+		fmt.Fprintf(sb, "    forward . tls://%s tls://%s {\n", ip1, ip2)
 		fmt.Fprintf(sb, "        tls_servername %s.%s\n", buildDoTSNIHost(cfg.ProfileID, cfg.DeviceName), nextDNSDoTServer)
 		sb.WriteString("    }\n")
 
@@ -184,21 +190,32 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 		fmt.Fprintf(sb, "    forward . %s\n", upstream)
 
 	case ProtocolDNS:
-		// Plain DNS uses anycast IPs
-		fmt.Fprintf(sb, "    forward . %s %s\n", nextDNSAnycastIP1, nextDNSAnycastIP2)
+		// Plain DNS uses upstream IPs
+		fmt.Fprintf(sb, "    forward . %s %s\n", ip1, ip2)
 	}
+}
+
+// resolveUpstreamIPs returns two upstream IPs. Uses profile-specific IPs if
+// available (at least 2), otherwise falls back to NextDNS anycast IPs.
+func resolveUpstreamIPs(profileIPs []string) (string, string) {
+	if len(profileIPs) >= 2 {
+		return profileIPs[0], profileIPs[1]
+	}
+	return nextDNSAnycastIP1, nextDNSAnycastIP2
 }
 
 // GetUpstreamEndpoint returns a human-readable endpoint string for the given
 // protocol, suitable for use in status reporting.
-func GetUpstreamEndpoint(profileID, protocol, deviceName string) string {
+func GetUpstreamEndpoint(profileID, protocol, deviceName string, upstreamIPv4 []string) string {
+	ip1, ip2 := resolveUpstreamIPs(upstreamIPv4)
+
 	switch protocol {
 	case ProtocolDoT:
-		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", nextDNSAnycastIP1, nextDNSAnycastIP2, buildDoTSNIHost(profileID, deviceName), nextDNSDoTServer)
+		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", ip1, ip2, buildDoTSNIHost(profileID, deviceName), nextDNSDoTServer)
 	case ProtocolDoH:
 		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, buildDoHPath(profileID, deviceName))
 	case ProtocolDNS:
-		return fmt.Sprintf("%s, %s", nextDNSAnycastIP1, nextDNSAnycastIP2)
+		return fmt.Sprintf("%s, %s", ip1, ip2)
 	default:
 		return ""
 	}

@@ -986,7 +986,7 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 		primaryProtocol = string(coreDNS.Spec.Upstream.Primary)
 		deviceName = coreDNS.Spec.Upstream.DeviceName
 	}
-	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName)
+	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName, nil)
 
 	// Update upstream status
 	coreDNS.Status.Upstream = &nextdnsv1alpha1.UpstreamStatus{
