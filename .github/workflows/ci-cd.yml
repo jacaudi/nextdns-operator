@@ -86,7 +86,7 @@ jobs:
       platforms: 'linux/amd64,linux/arm64'
       version: ${{ needs.release.outputs.new-release-version }}
       tags: |
-        ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version }}
+        ghcr.io/${{ github.repository }}:v${{ needs.release.outputs.new-release-version }}
         ghcr.io/${{ github.repository }}:latest
 
   # Publish Helm chart to OCI registry
