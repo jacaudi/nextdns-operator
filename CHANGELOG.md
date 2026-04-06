@@ -1,3 +1,14 @@
+## 0.15.0 (2026-04-06)
+
+#### Feature
+
+* fix retention sync, add status.setup, profile-specific CoreDNS IPs (#104) ([f255102d](https://github.com/jacaudi/nextdns-operator/commit/f255102d887469a77055ca0c1259c6efdce91066))
+
+#### CI
+
+* add manual release gate and promote skip-update logs to INFO (#102) ([793ac805](https://github.com/jacaudi/nextdns-operator/commit/793ac80536f5cac28eceb3c5ea120e1b11759e41))
+
+
 ## 0.14.11 (2026-04-05)
 
 #### Bug Fixes
