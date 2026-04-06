@@ -242,10 +242,26 @@ func (r *NextDNSProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Don't fail the reconciliation for ConfigMap errors, just log
 	}
 
+	// Populate setup data (informational, non-critical)
+	{
+		factory := r.ClientFactory
+		if factory == nil {
+			factory = DefaultClientFactory
+		}
+		if client, err := factory(apiKey); err != nil {
+			logger.V(1).Info("Failed to create client for setup data, skipping", "error", err)
+		} else if setupData, err := client.GetSetup(ctx, profile.Status.ProfileID); err != nil {
+			logger.V(1).Info("Failed to get setup data, skipping", "error", err)
+		} else {
+			profile.Status.Setup = buildProfileSetup(setupData, profile.Status.ProfileID)
+		}
+	}
+
 	// Check if status actually changed (compare without LastSyncTime)
 	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.AggregatedCounts, profile.Status.AggregatedCounts) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.ReferencedResources, profile.Status.ReferencedResources) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Setup, profile.Status.Setup) ||
 		statusBefore.ProfileID != profile.Status.ProfileID ||
 		statusBefore.Fingerprint != profile.Status.Fingerprint ||
 		statusBefore.ObservedGeneration != profile.Status.ObservedGeneration
@@ -655,7 +671,7 @@ func (r *NextDNSProfileReconciler) syncWithNextDNS(ctx context.Context, profile 
 			settingsConfig.LogsEnabled = boolValue(profile.Spec.Settings.Logs.Enabled, true)
 			settingsConfig.LogClientsIPs = boolValue(profile.Spec.Settings.Logs.LogClientsIPs, false)
 			settingsConfig.LogDomains = boolValue(profile.Spec.Settings.Logs.LogDomains, true)
-			settingsConfig.LogRetention = parseRetentionDays(profile.Spec.Settings.Logs.Retention)
+			settingsConfig.LogRetention = parseRetentionSeconds(profile.Spec.Settings.Logs.Retention)
 			settingsConfig.Location = profile.Spec.Settings.Logs.Location
 		}
 		if profile.Spec.Settings.BlockPage != nil {
@@ -744,7 +760,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	}
 
 	// Read full profile from NextDNS
-	observed, fingerprint, err := r.readFullProfile(ctx, client, profile.Spec.ProfileID)
+	observed, fingerprint, rawSetup, err := r.readFullProfile(ctx, client, profile.Spec.ProfileID)
 	if err != nil {
 		logger.Error(err, "Failed to read full profile from NextDNS")
 		metrics.RecordProfileSyncError(profile.Name, profile.Namespace, "ObserveFailed")
@@ -763,6 +779,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	profile.Status.Fingerprint = fingerprint
 	profile.Status.ObservedConfig = observed
 	profile.Status.SuggestedSpec = buildSuggestedSpec(observed)
+	profile.Status.Setup = buildProfileSetup(rawSetup, profile.Spec.ProfileID)
 	profile.Status.ObservedGeneration = profile.Generation
 
 	r.setCondition(profile, ConditionTypeObserveOnly, metav1.ConditionTrue, "ObserveMode", "Profile is in observe-only mode")
@@ -772,6 +789,7 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 	// Check if status actually changed (compare all meaningful fields including conditions)
 	statusChanged := !apiequality.Semantic.DeepEqual(statusBefore.ObservedConfig, profile.Status.ObservedConfig) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.SuggestedSpec, profile.Status.SuggestedSpec) ||
+		!apiequality.Semantic.DeepEqual(statusBefore.Setup, profile.Status.Setup) ||
 		!apiequality.Semantic.DeepEqual(statusBefore.Conditions, profile.Status.Conditions) ||
 		statusBefore.ProfileID != profile.Status.ProfileID ||
 		statusBefore.Fingerprint != profile.Status.Fingerprint ||
@@ -802,13 +820,13 @@ func (r *NextDNSProfileReconciler) reconcileObserveMode(ctx context.Context, pro
 }
 
 // readFullProfile reads all sections of a NextDNS profile
-func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client nextdns.ClientInterface, profileID string) (*nextdnsv1alpha1.ObservedConfig, string, error) {
+func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client nextdns.ClientInterface, profileID string) (*nextdnsv1alpha1.ObservedConfig, string, *sdknextdns.Setup, error) {
 	observed := &nextdnsv1alpha1.ObservedConfig{}
 
 	// Get profile name and fingerprint
 	profile, err := client.GetProfile(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get profile: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get profile: %w", err)
 	}
 	apiFingerprint := profile.Fingerprint
 	observed.Name = profile.Name
@@ -816,7 +834,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get security settings
 	security, err := client.GetSecurity(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get security: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get security: %w", err)
 	}
 	observed.Security = &nextdnsv1alpha1.ObservedSecurity{
 		AIThreatDetection:       security.AiThreatDetection,
@@ -836,7 +854,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy settings
 	privacy, err := client.GetPrivacy(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy: %w", err)
 	}
 	observed.Privacy = &nextdnsv1alpha1.ObservedPrivacy{
 		DisguisedTrackers: privacy.DisguisedTrackers,
@@ -846,7 +864,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy blocklists
 	blocklists, err := client.GetPrivacyBlocklists(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy blocklists: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy blocklists: %w", err)
 	}
 	for _, bl := range blocklists {
 		observed.Privacy.Blocklists = append(observed.Privacy.Blocklists, nextdnsv1alpha1.ObservedBlocklistEntry{ID: bl.ID})
@@ -855,7 +873,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get privacy natives
 	natives, err := client.GetPrivacyNatives(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get privacy natives: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get privacy natives: %w", err)
 	}
 	for _, n := range natives {
 		observed.Privacy.Natives = append(observed.Privacy.Natives, nextdnsv1alpha1.ObservedNativeEntry{ID: n.ID})
@@ -864,7 +882,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control settings
 	pc, err := client.GetParentalControl(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control: %w", err)
 	}
 	observed.ParentalControl = &nextdnsv1alpha1.ObservedParentalControl{
 		SafeSearch:            pc.SafeSearch,
@@ -908,7 +926,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control categories
 	categories, err := client.GetParentalControlCategories(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control categories: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control categories: %w", err)
 	}
 	for _, cat := range categories {
 		observed.ParentalControl.Categories = append(observed.ParentalControl.Categories, nextdnsv1alpha1.ObservedCategoryEntry{
@@ -921,7 +939,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get parental control services
 	services, err := client.GetParentalControlServices(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get parental control services: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get parental control services: %w", err)
 	}
 	for _, svc := range services {
 		observed.ParentalControl.Services = append(observed.ParentalControl.Services, nextdnsv1alpha1.ObservedServiceEntry{
@@ -933,7 +951,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get denylist
 	denylist, err := client.GetDenylist(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get denylist: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get denylist: %w", err)
 	}
 	for _, d := range denylist {
 		observed.Denylist = append(observed.Denylist, nextdnsv1alpha1.ObservedDomainEntry{
@@ -945,7 +963,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get allowlist
 	allowlist, err := client.GetAllowlist(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get allowlist: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get allowlist: %w", err)
 	}
 	for _, a := range allowlist {
 		observed.Allowlist = append(observed.Allowlist, nextdnsv1alpha1.ObservedDomainEntry{
@@ -957,7 +975,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get blocked TLDs
 	tlds, err := client.GetSecurityTLDs(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get security TLDs: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get security TLDs: %w", err)
 	}
 	for _, tld := range tlds {
 		observed.BlockedTLDs = append(observed.BlockedTLDs, tld.ID)
@@ -966,7 +984,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get settings
 	settings, err := client.GetSettings(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get settings: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get settings: %w", err)
 	}
 	observed.Settings = &nextdnsv1alpha1.ObservedSettings{
 		Web3: settings.Web3,
@@ -1005,7 +1023,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get rewrites
 	rewrites, err := client.GetRewrites(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get rewrites: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get rewrites: %w", err)
 	}
 	for _, rw := range rewrites {
 		observed.Rewrites = append(observed.Rewrites, nextdnsv1alpha1.ObservedRewriteEntry{
@@ -1017,7 +1035,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	// Get setup (read-only endpoint data)
 	setup, err := client.GetSetup(ctx, profileID)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get setup: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to get setup: %w", err)
 	}
 	observed.Setup = &nextdnsv1alpha1.ObservedSetup{
 		IPv4:     setup.Ipv4,
@@ -1033,7 +1051,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 		}
 	}
 
-	return observed, apiFingerprint, nil
+	return observed, apiFingerprint, setup, nil
 }
 
 // buildSuggestedSpec translates an ObservedConfig into spec-compatible types
@@ -1164,6 +1182,32 @@ func buildSuggestedSpec(observed *nextdnsv1alpha1.ObservedConfig) *nextdnsv1alph
 	return suggested
 }
 
+// buildProfileSetup constructs a ProfileSetup from the NextDNS API setup response.
+// Includes convenience fields DoTHostname and DoHURL constructed from the profileID.
+func buildProfileSetup(setup *sdknextdns.Setup, profileID string) *nextdnsv1alpha1.ProfileSetup {
+	if setup == nil {
+		return nil
+	}
+
+	result := &nextdnsv1alpha1.ProfileSetup{
+		IPv4:        setup.Ipv4,
+		IPv6:        setup.Ipv6,
+		DNSCrypt:    setup.Dnscrypt,
+		DoTHostname: fmt.Sprintf("%s.dns.nextdns.io", profileID),
+		DoHURL:      fmt.Sprintf("https://dns.nextdns.io/%s", profileID),
+	}
+
+	if setup.LinkedIP != nil {
+		result.LinkedIP = &nextdnsv1alpha1.SetupLinkedIP{
+			Servers: setup.LinkedIP.Servers,
+			IP:      setup.LinkedIP.IP,
+			DDNS:    setup.LinkedIP.Ddns,
+		}
+	}
+
+	return result
+}
+
 // specHasConfig checks if the spec has any configuration sections populated
 func specHasConfig(spec *nextdnsv1alpha1.NextDNSProfileSpec) bool {
 	return spec.Security != nil ||
@@ -1269,35 +1313,43 @@ func boolValue(ptr *bool, defaultValue bool) bool {
 	return *ptr
 }
 
-// parseRetentionDays parses a retention string (e.g., "7d", "30d") and returns days as int
-func parseRetentionDays(retention string) int {
+// parseRetentionSeconds parses a retention string (e.g., "7d", "1h") and returns seconds
+// as expected by the NextDNS API. The API uses seconds for retention values.
+func parseRetentionSeconds(retention string) int {
 	if retention == "" {
-		return 7 // default 7 days
+		return 604800 // default 7 days in seconds
 	}
 
 	retention = strings.TrimSpace(strings.ToLower(retention))
 
-	// Handle special cases
 	switch retention {
 	case "1h":
-		return 0 // Less than a day
+		return 3600
 	case "6h":
-		return 0
+		return 21600
+	case "1d":
+		return 86400
+	case "7d":
+		return 604800
+	case "30d":
+		return 2592000
+	case "90d":
+		return 7776000
 	case "1y":
-		return 365
+		return 31536000
 	case "2y":
-		return 730
+		return 63072000
 	}
 
 	// Parse numeric values with 'd' suffix
 	if strings.HasSuffix(retention, "d") {
 		days, err := strconv.Atoi(strings.TrimSuffix(retention, "d"))
 		if err == nil {
-			return days
+			return days * 86400
 		}
 	}
 
-	return 7 // default
+	return 604800 // default 7 days in seconds
 }
 
 // boolPtr returns a pointer to a bool value
@@ -1305,24 +1357,24 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// formatRetentionString converts a retention value in days to the spec string format
-// formatRetentionString converts a retention value in days to the nearest valid
-// CRD enum value. The NextDNS API may return unexpected values (e.g., 31536000
-// for "unlimited"), so we clamp to the nearest supported retention period.
+// formatRetentionString converts a retention value in seconds (as returned by the
+// NextDNS API) to the nearest valid CRD enum value.
 // Valid values: 1h, 6h, 1d, 7d, 30d, 90d, 1y, 2y
-func formatRetentionString(days int) string {
+func formatRetentionString(seconds int) string {
 	switch {
-	case days <= 0:
+	case seconds <= 3600: // <= 1h
 		return "1h"
-	case days == 1:
+	case seconds <= 21600: // <= 6h
+		return "6h"
+	case seconds <= 86400: // <= 1d
 		return "1d"
-	case days <= 7:
+	case seconds <= 604800: // <= 7d
 		return "7d"
-	case days <= 30:
+	case seconds <= 2592000: // <= 30d
 		return "30d"
-	case days <= 90:
+	case seconds <= 7776000: // <= 90d
 		return "90d"
-	case days <= 365:
+	case seconds <= 31536000: // <= 1y
 		return "1y"
 	default:
 		return "2y"

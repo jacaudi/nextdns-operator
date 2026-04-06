@@ -389,6 +389,42 @@ type ReferencedResources struct {
 	TLDLists []ReferencedResourceStatus `json:"tldLists,omitempty"`
 }
 
+// SetupLinkedIP contains linked IP DNS configuration from the NextDNS API
+type SetupLinkedIP struct {
+	// Servers contains the linked IP DNS server addresses
+	// +optional
+	Servers []string `json:"servers,omitempty"`
+	// IP is the currently linked IP address
+	// +optional
+	IP string `json:"ip,omitempty"`
+	// DDNS is the dynamic DNS hostname
+	// +optional
+	DDNS string `json:"ddns,omitempty"`
+}
+
+// ProfileSetup contains the profile's DNS endpoint configuration from the NextDNS API.
+// Always populated after successful reconciliation in any mode.
+type ProfileSetup struct {
+	// IPv4 contains profile-specific DNS IPv4 addresses
+	// +optional
+	IPv4 []string `json:"ipv4,omitempty"`
+	// IPv6 contains profile-specific DNS IPv6 addresses
+	// +optional
+	IPv6 []string `json:"ipv6,omitempty"`
+	// LinkedIP contains linked IP DNS configuration
+	// +optional
+	LinkedIP *SetupLinkedIP `json:"linkedIP,omitempty"`
+	// DNSCrypt contains the DNSCrypt protocol stamp
+	// +optional
+	DNSCrypt string `json:"dnscrypt,omitempty"`
+	// DoTHostname is the constructed DoT server name (e.g., "abc123.dns.nextdns.io")
+	// +optional
+	DoTHostname string `json:"dotHostname,omitempty"`
+	// DoHURL is the constructed DoH URL (e.g., "https://dns.nextdns.io/abc123")
+	// +optional
+	DoHURL string `json:"dohURL,omitempty"`
+}
+
 // NextDNSProfileStatus defines the observed state of NextDNSProfile
 type NextDNSProfileStatus struct {
 	// ProfileID is the NextDNS-assigned profile identifier
@@ -429,6 +465,11 @@ type NextDNSProfileStatus struct {
 	// Populated in observe mode; cleared after first successful managed sync
 	// +optional
 	SuggestedSpec *SuggestedSpec `json:"suggestedSpec,omitempty"`
+
+	// Setup contains the profile's DNS endpoint configuration
+	// Always populated after successful reconciliation in any mode
+	// +optional
+	Setup *ProfileSetup `json:"setup,omitempty"`
 }
 
 // +kubebuilder:object:root=true

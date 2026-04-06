@@ -142,8 +142,10 @@ type ObservedSettings struct {
 
 // ObservedLogs represents observed logging settings
 type ObservedLogs struct {
-	Enabled   bool `json:"enabled"`
-	Retention int  `json:"retention,omitempty"`
+	Enabled bool `json:"enabled"`
+	// Retention is the log retention period in seconds as returned by the NextDNS API
+	// (e.g., 604800 for 7 days). Use formatRetentionString() to convert to spec enum values.
+	Retention int `json:"retention,omitempty"`
 	// Location is the log storage location (e.g., "eu", "us", "ch")
 	Location string `json:"location,omitempty"`
 	// LogClientsIPs indicates whether client IPs are logged.

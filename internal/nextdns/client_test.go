@@ -104,7 +104,7 @@ func TestSettingsConfig(t *testing.T) {
 		LogsEnabled:     true,
 		LogClientsIPs:   false,
 		LogDomains:      true,
-		LogRetention:    30,
+		LogRetention:    2592000, // 30 days in seconds
 		BlockPageEnable: true,
 		Web3:            false,
 	}
@@ -112,7 +112,7 @@ func TestSettingsConfig(t *testing.T) {
 	assert.True(t, config.LogsEnabled)
 	assert.False(t, config.LogClientsIPs)
 	assert.True(t, config.LogDomains)
-	assert.Equal(t, 30, config.LogRetention)
+	assert.Equal(t, 2592000, config.LogRetention)
 	assert.True(t, config.BlockPageEnable)
 	assert.False(t, config.Web3)
 }
@@ -380,7 +380,7 @@ func TestMockClient_UpdateSettings(t *testing.T) {
 
 	config := &SettingsConfig{
 		LogsEnabled:     true,
-		LogRetention:    30,
+		LogRetention:    2592000, // 30 days in seconds
 		BlockPageEnable: true,
 	}
 
@@ -388,7 +388,7 @@ func TestMockClient_UpdateSettings(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, mock.SettingsLogs["profile-1"].Enabled)
-	assert.Equal(t, 30, mock.SettingsLogs["profile-1"].Retention)
+	assert.Equal(t, 2592000, mock.SettingsLogs["profile-1"].Retention)
 	assert.True(t, mock.SettingsBlockPage["profile-1"].Enabled)
 }
 
@@ -954,7 +954,7 @@ func TestUpdateSettings_FullConfig(t *testing.T) {
 		LogsEnabled:     true,
 		LogClientsIPs:   true,
 		LogDomains:      true,
-		LogRetention:    30,
+		LogRetention:    2592000, // 30 days in seconds
 		BlockPageEnable: true,
 		Web3:            true,
 		Ecs:             true,
@@ -974,7 +974,7 @@ func TestUpdateSettings_FullConfig(t *testing.T) {
 	assert.False(t, settings.Performance.CnameFlattening)
 	require.NotNil(t, settings.Logs)
 	assert.True(t, settings.Logs.Enabled)
-	assert.Equal(t, 30, settings.Logs.Retention)
+	assert.Equal(t, 2592000, settings.Logs.Retention)
 	// LogClientsIPs=true means Drop.IP=false (inverted logic)
 	require.NotNil(t, settings.Logs.Drop)
 	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
@@ -992,7 +992,7 @@ func TestUpdateSettings_InvertedDropLogic(t *testing.T) {
 		LogsEnabled:   true,
 		LogClientsIPs: false,
 		LogDomains:    false,
-		LogRetention:  7,
+		LogRetention:  604800, // 7 days in seconds
 	}
 
 	err := mockClient.UpdateSettings(ctx, "test-profile", config)

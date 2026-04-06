@@ -2732,3 +2732,44 @@ func TestNextDNSCoreDNSReconciler_Reconcile_PDBWithMinAvailable(t *testing.T) {
 	assert.Equal(t, intstr.FromString("50%"), *pdb.Spec.MinAvailable)
 	assert.Nil(t, pdb.Spec.MaxUnavailable, "MaxUnavailable should not be set when MinAvailable is specified")
 }
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithSetupIPs(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+			Setup: &nextdnsv1alpha1.ProfileSetup{
+				IPv4: []string{"45.90.28.198", "45.90.30.198"},
+			},
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{},
+	}
+
+	cfg, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"45.90.28.198", "45.90.30.198"}, cfg.UpstreamIPv4)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutSetup(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{},
+	}
+
+	cfg, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.UpstreamIPv4)
+}

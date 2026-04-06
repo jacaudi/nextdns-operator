@@ -174,22 +174,22 @@ func TestGenerateCorefile_ZeroCacheTTL(t *testing.T) {
 }
 
 func TestGetUpstreamEndpoint_DoT(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "")
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "", nil)
 	assert.Equal(t, "tls://45.90.28.0, tls://45.90.30.0 (SNI: abc123.dns.nextdns.io)", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DoH(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("def456", ProtocolDoH, "")
+	endpoint := GetUpstreamEndpoint("def456", ProtocolDoH, "", nil)
 	assert.Equal(t, "https://dns.nextdns.io/def456", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DNS(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("ghi789", ProtocolDNS, "")
+	endpoint := GetUpstreamEndpoint("ghi789", ProtocolDNS, "", nil)
 	assert.Equal(t, "45.90.28.0, 45.90.30.0", endpoint)
 }
 
 func TestGetUpstreamEndpoint_UnknownProtocol(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("xyz", "UNKNOWN", "")
+	endpoint := GetUpstreamEndpoint("xyz", "UNKNOWN", "", nil)
 	// Should return empty string or some default for unknown protocols
 	assert.Empty(t, endpoint)
 }
@@ -362,17 +362,17 @@ func TestGenerateCorefile_DNSWithDeviceName(t *testing.T) {
 }
 
 func TestGetUpstreamEndpoint_DoTWithDeviceName(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "Home Router")
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "Home Router", nil)
 	assert.Contains(t, endpoint, "Home--Router-abc123.dns.nextdns.io")
 }
 
 func TestGetUpstreamEndpoint_DoHWithDeviceName(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoH, "Home Router")
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoH, "Home Router", nil)
 	assert.Contains(t, endpoint, "/abc123/Home%20Router")
 }
 
 func TestGetUpstreamEndpoint_DNSWithDeviceName(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDNS, "Home Router")
+	endpoint := GetUpstreamEndpoint("abc123", ProtocolDNS, "Home Router", nil)
 	// Plain DNS ignores device name
 	assert.NotContains(t, endpoint, "Home")
 	assert.Equal(t, "45.90.28.0, 45.90.30.0", endpoint)
@@ -415,6 +415,52 @@ func TestBuildDoHPath(t *testing.T) {
 			assert.Equal(t, tt.expected, buildDoHPath(tt.profileID, tt.deviceName))
 		})
 	}
+}
+
+func TestGenerateCorefile_DoT_ProfileSpecificIPs(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		UpstreamIPv4:    []string{"45.90.28.198", "45.90.30.198"},
+	}
+
+	result := GenerateCorefile(cfg)
+
+	assert.Contains(t, result, "tls://45.90.28.198 tls://45.90.30.198")
+	assert.NotContains(t, result, "tls://45.90.28.0")
+	assert.Contains(t, result, "tls_servername abc123.dns.nextdns.io")
+}
+
+func TestGenerateCorefile_DNS_ProfileSpecificIPs(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDNS,
+		UpstreamIPv4:    []string{"45.90.28.198", "45.90.30.198"},
+	}
+
+	result := GenerateCorefile(cfg)
+
+	assert.Contains(t, result, "forward . 45.90.28.198 45.90.30.198")
+	assert.NotContains(t, result, "45.90.28.0")
+}
+
+func TestGenerateCorefile_DoT_FallbackToAnycast(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+	}
+
+	result := GenerateCorefile(cfg)
+
+	assert.Contains(t, result, "tls://45.90.28.0 tls://45.90.30.0")
+}
+
+func TestGetUpstreamEndpoint_ProfileSpecificIPs(t *testing.T) {
+	result := GetUpstreamEndpoint("abc123", ProtocolDoT, "", []string{"45.90.28.198", "45.90.30.198"})
+	assert.Contains(t, result, "45.90.28.198")
+	assert.NotContains(t, result, "45.90.28.0")
 }
 
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
