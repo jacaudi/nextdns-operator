@@ -386,6 +386,11 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		cfg.MetricsEnabled = *coreDNS.Spec.Metrics.Enabled
 	}
 
+	// Use profile-specific upstream IPs if available
+	if profile.Status.Setup != nil {
+		cfg.UpstreamIPv4 = profile.Status.Setup.IPv4
+	}
+
 	// Add domain overrides if specified
 	if len(coreDNS.Spec.DomainOverrides) > 0 {
 		cfg.DomainOverrides = make([]coredns.DomainOverrideConfig, len(coreDNS.Spec.DomainOverrides))
@@ -986,7 +991,11 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 		primaryProtocol = string(coreDNS.Spec.Upstream.Primary)
 		deviceName = coreDNS.Spec.Upstream.DeviceName
 	}
-	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName, nil)
+	var upstreamIPs []string
+	if profile.Status.Setup != nil {
+		upstreamIPs = profile.Status.Setup.IPv4
+	}
+	upstreamURL := coredns.GetUpstreamEndpoint(profile.Status.ProfileID, primaryProtocol, deviceName, upstreamIPs)
 
 	// Update upstream status
 	coreDNS.Status.Upstream = &nextdnsv1alpha1.UpstreamStatus{
