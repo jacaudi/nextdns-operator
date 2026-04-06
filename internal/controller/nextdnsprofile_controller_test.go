@@ -2511,7 +2511,7 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
 		Logs: &sdknextdns.SettingsLogs{
 			Enabled:   true,
-			Retention: 7,
+			Retention: 604800,
 			Location:  "eu",
 			Drop: &sdknextdns.SettingsLogsDrop{
 				IP:     false,
@@ -2849,7 +2849,7 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 		mockNDS.Settings["abc123"] = &sdknextdns.Settings{
 			Logs: &sdknextdns.SettingsLogs{
 				Enabled:   true,
-				Retention: 7,
+				Retention: 604800,
 				Drop: &sdknextdns.SettingsLogsDrop{
 					IP:     true, // Don't log IPs
 					Domain: true, // Don't log domains
@@ -2921,7 +2921,7 @@ func TestReadFullProfile_LogDropInversion(t *testing.T) {
 		mockNDS.Settings["def456"] = &sdknextdns.Settings{
 			Logs: &sdknextdns.SettingsLogs{
 				Enabled:   true,
-				Retention: 30,
+				Retention: 2592000,
 				// Drop is nil
 			},
 			BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
@@ -3158,30 +3158,32 @@ func TestSpecHasConfig(t *testing.T) {
 func TestFormatRetentionString(t *testing.T) {
 	tests := []struct {
 		name     string
-		days     int
+		seconds  int
 		expected string
 	}{
-		{name: "zero maps to 1h (sub-day retention)", days: 0, expected: "1h"},
-		{name: "1 day", days: 1, expected: "1d"},
-		{name: "7 days", days: 7, expected: "7d"},
-		{name: "30 days", days: 30, expected: "30d"},
-		{name: "90 days", days: 90, expected: "90d"},
-		{name: "365 days is 1y", days: 365, expected: "1y"},
-		{name: "730 days is 2y", days: 730, expected: "2y"},
-		// Out-of-range values clamp UP to next valid enum (safer: retains more data)
-		{name: "negative clamps to 1h", days: -1, expected: "1h"},
-		{name: "2 days rounds up to 7d", days: 2, expected: "7d"},
-		{name: "15 days rounds up to 30d", days: 15, expected: "30d"},
-		{name: "60 days rounds up to 90d", days: 60, expected: "90d"},
-		{name: "180 days rounds up to 1y", days: 180, expected: "1y"},
-		{name: "500 days rounds up to 2y", days: 500, expected: "2y"},
-		{name: "1000 days clamps to 2y", days: 1000, expected: "2y"},
-		{name: "31536000 days (API bug) clamps to 2y", days: 31536000, expected: "2y"},
+		{name: "3600 seconds is 1h", seconds: 3600, expected: "1h"},
+		{name: "21600 seconds is 6h", seconds: 21600, expected: "6h"},
+		{name: "86400 seconds is 1d", seconds: 86400, expected: "1d"},
+		{name: "604800 seconds is 7d", seconds: 604800, expected: "7d"},
+		{name: "2592000 seconds is 30d", seconds: 2592000, expected: "30d"},
+		{name: "7776000 seconds is 90d", seconds: 7776000, expected: "90d"},
+		{name: "31536000 seconds is 1y", seconds: 31536000, expected: "1y"},
+		{name: "63072000 seconds is 2y", seconds: 63072000, expected: "2y"},
+		// Edge cases: clamp to nearest valid enum
+		{name: "zero clamps to 1h", seconds: 0, expected: "1h"},
+		{name: "negative clamps to 1h", seconds: -1, expected: "1h"},
+		{name: "1800 clamps to 1h", seconds: 1800, expected: "1h"},
+		{name: "43200 (12h) clamps to 1d", seconds: 43200, expected: "1d"},
+		{name: "172800 (2d) clamps to 7d", seconds: 172800, expected: "7d"},
+		{name: "1296000 (15d) clamps to 30d", seconds: 1296000, expected: "30d"},
+		{name: "5184000 (60d) clamps to 90d", seconds: 5184000, expected: "90d"},
+		{name: "15552000 (180d) clamps to 1y", seconds: 15552000, expected: "1y"},
+		{name: "huge value clamps to 2y", seconds: 999999999, expected: "2y"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatRetentionString(tt.days)
+			result := formatRetentionString(tt.seconds)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -3236,7 +3238,7 @@ func TestBuildSuggestedSpec(t *testing.T) {
 			{Domain: "good.com", Active: true},
 		},
 		Settings: &nextdnsv1alpha1.ObservedSettings{
-			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 30, LogClientsIPs: true, LogDomains: false, Location: "eu"},
+			Logs:      &nextdnsv1alpha1.ObservedLogs{Enabled: true, Retention: 2592000, LogClientsIPs: true, LogDomains: false, Location: "eu"},
 			BlockPage: &nextdnsv1alpha1.ObservedBlockPage{Enabled: true},
 			Performance: &nextdnsv1alpha1.ObservedPerformance{
 				ECS:             true,
@@ -3705,7 +3707,7 @@ func TestReconcile_ObserveMode_SkipsUpdateWhenUnchanged(t *testing.T) {
 		DisguisedTrackers: true,
 	}
 	mockNDS.Settings["abc123"] = &sdknextdns.Settings{
-		Logs:      &sdknextdns.SettingsLogs{Enabled: true, Retention: 7},
+		Logs:      &sdknextdns.SettingsLogs{Enabled: true, Retention: 604800},
 		BlockPage: &sdknextdns.SettingsBlockPage{Enabled: true},
 	}
 	mockNDS.SetupData["abc123"] = &sdknextdns.Setup{}
