@@ -13,7 +13,14 @@
         ]
       }
     ],
-    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "writerOpts": {
+          "headerPartial": "## {{#if @root.linkCompare~}}[{{version}}]({{@root.host}}/{{@root.owner}}/{{@root.repository}}/compare/{{previousTag}}...{{currentTag}}){{~else}}{{~version}}{{~/if}} ({{date}})"
+        }
+      }
+    ],
     [
       "@semantic-release/changelog",
       {
