@@ -28,11 +28,9 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, gw, func() error {
-		// Set annotations from spec
-		if coreDNS.Spec.Gateway != nil && coreDNS.Spec.Gateway.Annotations != nil {
-			if gw.Annotations == nil {
-				gw.Annotations = make(map[string]string)
-			}
+		// Reset annotations to match spec (removes stale annotations from prior reconciles)
+		gw.Annotations = make(map[string]string)
+		if coreDNS.Spec.Gateway != nil {
 			for k, v := range coreDNS.Spec.Gateway.Annotations {
 				gw.Annotations[k] = v
 			}
@@ -206,6 +204,11 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 // updateGatewayStatus populates the NextDNSCoreDNS status fields from the Gateway status
 func (r *NextDNSCoreDNSReconciler) updateGatewayStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) {
 	logger := log.FromContext(ctx)
+
+	if coreDNS.Spec.Gateway == nil {
+		coreDNS.Status.GatewayReady = false
+		return
+	}
 
 	gatewayName := coreDNS.Name + "-dns"
 	gw := &gatewayv1.Gateway{}
