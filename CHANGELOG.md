@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.16.0](https://github.com/jacaudi/nextdns-operator/compare/v0.15.4...v0.16.0) (2026-04-07)
+
+### Bug Fixes
+
+* address final review findings in gateway helpers ([d47eccf](https://github.com/jacaudi/nextdns-operator/commit/d47eccf605eb56d8851f191bc74651c97d39659d))
+* auto-sync CRDs to Helm chart in manifests task ([00a0a93](https://github.com/jacaudi/nextdns-operator/commit/00a0a9374d4158f142f47331e157f4990966b89c))
+* ignore .worktrees/ directory in gitignore ([db659aa](https://github.com/jacaudi/nextdns-operator/commit/db659aa0f6229c5b5c08a852c9ebed7d87446050))
+* sync Helm chart CRDs with generated CRDs ([71ce048](https://github.com/jacaudi/nextdns-operator/commit/71ce048df6ede34268369b7734b81c36cf285e37))
+
+
+### Features
+
+* add Gateway API CRD detection and GatewayClass startup creation ([09472e0](https://github.com/jacaudi/nextdns-operator/commit/09472e004875a0782b852246c6e3939530016c6b))
+* add Gateway API RBAC markers, update Helm chart, add sample CR ([8ca8136](https://github.com/jacaudi/nextdns-operator/commit/8ca813697c8a22b00a8780aafd9eab680cff0fae))
+* add gateway validation (mutual exclusivity and CRD detection) ([43f8292](https://github.com/jacaudi/nextdns-operator/commit/43f8292002aa2d88c8f6fcd891de050311bf0aa9))
+* add GatewayConfig and GatewayAddress API types ([726cc19](https://github.com/jacaudi/nextdns-operator/commit/726cc19fafca334a890b52376969403364a4ef98))
+* add sigs.k8s.io/gateway-api dependency ([24babc6](https://github.com/jacaudi/nextdns-operator/commit/24babc67ee91e8e7f6a909e0899474ec9c289a18))
+* implement gateway, TCPRoute, and UDPRoute reconciliation helpers ([4a11746](https://github.com/jacaudi/nextdns-operator/commit/4a11746617246ebef69935522288b0d4ffeb55fa))
+* wire gateway reconciliation into main loop and force ClusterIP when gateway is set ([986e8ca](https://github.com/jacaudi/nextdns-operator/commit/986e8cac32223384da70a50a247b5be9d5c15f5e))
+* wire gateway status updates into reconcile loop and add conditional watches ([1aa57ee](https://github.com/jacaudi/nextdns-operator/commit/1aa57ee4b99854550e38f027ad71cfde11612ec9))
+
 ## [0.15.4](https://github.com/jacaudi/nextdns-operator/compare/v0.15.3...v0.15.4) (2026-04-07)
 
 ### Bug Fixes
