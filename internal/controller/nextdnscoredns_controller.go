@@ -44,6 +44,15 @@ const (
 	// ConditionTypeDeviceNameIgnored warns that deviceName has no effect with plain DNS
 	ConditionTypeDeviceNameIgnored = "DeviceNameIgnored"
 
+	// ConditionTypeGatewayReady indicates the Gateway is programmed
+	ConditionTypeGatewayReady = "GatewayReady"
+
+	// ConditionTypeTCPRouteReady indicates the TCPRoute is accepted
+	ConditionTypeTCPRouteReady = "TCPRouteReady"
+
+	// ConditionTypeUDPRouteReady indicates the UDPRoute is accepted
+	ConditionTypeUDPRouteReady = "UDPRouteReady"
+
 	// CorefileKey is the key in the ConfigMap for the Corefile
 	CorefileKey = "Corefile"
 
@@ -196,6 +205,37 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Clear stale warning when not applicable
 		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionFalse, "NotApplicable",
 			"deviceName is not set or protocol supports device identification")
+	}
+
+	// Validate Gateway configuration
+	if coreDNS.Spec.Gateway != nil {
+		// Check mutual exclusivity with LoadBalancer
+		if coreDNS.Spec.Service != nil && coreDNS.Spec.Service.Type == nextdnsv1alpha1.ServiceTypeLoadBalancer {
+			logger.Info("Invalid configuration: gateway and LoadBalancer service are mutually exclusive")
+			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "InvalidConfiguration",
+				"spec.gateway and spec.service.type=LoadBalancer are mutually exclusive; use one or the other")
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "InvalidConfiguration",
+				"Gateway and LoadBalancer service are mutually exclusive")
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, nil
+		}
+
+		// Check if Gateway API CRDs are available
+		if !r.GatewayAPIAvailable {
+			logger.Info("Gateway API CRDs not available but spec.gateway is set")
+			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "GatewayAPICRDsMissing",
+				"Gateway API CRDs are not installed in the cluster; install them or remove spec.gateway")
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "GatewayAPICRDsMissing",
+				"Gateway API CRDs are not available")
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// Store profile information in status
