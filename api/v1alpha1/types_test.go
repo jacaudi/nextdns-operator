@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -803,6 +804,41 @@ func TestNextDNSProfileSpec_DeepCopy_Independent(t *testing.T) {
 	assert.True(t, *original.Security.AIThreatDetection)
 	assert.Equal(t, "nextdns-recommended", original.Privacy.Blocklists[0].ID)
 	assert.True(t, *original.Privacy.DisguisedTrackers)
+}
+
+func TestNextDNSCoreDNS_GatewayConfig(t *testing.T) {
+	ipType := "IPAddress"
+	coreDNS := &NextDNSCoreDNS{
+		Spec: NextDNSCoreDNSSpec{
+			ProfileRef: ResourceReference{Name: "test"},
+			Gateway: &GatewayConfig{
+				Addresses: []GatewayAddress{
+					{
+						Type:  &ipType,
+						Value: "192.168.1.53",
+					},
+				},
+				Annotations: map[string]string{
+					"test-key": "test-value",
+				},
+			},
+		},
+	}
+
+	require.NotNil(t, coreDNS.Spec.Gateway)
+	assert.Len(t, coreDNS.Spec.Gateway.Addresses, 1)
+	assert.Equal(t, "192.168.1.53", coreDNS.Spec.Gateway.Addresses[0].Value)
+	assert.Equal(t, "IPAddress", *coreDNS.Spec.Gateway.Addresses[0].Type)
+	assert.Equal(t, "test-value", coreDNS.Spec.Gateway.Annotations["test-key"])
+}
+
+func TestNextDNSCoreDNS_GatewayStatus(t *testing.T) {
+	coreDNS := &NextDNSCoreDNS{
+		Status: NextDNSCoreDNSStatus{
+			GatewayReady: true,
+		},
+	}
+	assert.True(t, coreDNS.Status.GatewayReady)
 }
 
 func TestDeepCopy_NilReceiver(t *testing.T) {
