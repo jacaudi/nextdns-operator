@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
@@ -9,13 +10,19 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 	"github.com/jacaudi/nextdns-operator/internal/controller"
@@ -29,6 +36,8 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(nextdnsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 }
 
 // lookupEnvOrString looks up an environment variable or returns a default string
@@ -53,6 +62,10 @@ func main() {
 	flag.StringVar(&syncPeriod, "sync-period", lookupEnvOrString("SYNC_PERIOD", "1h"),
 		"The period at which resources are resynced for drift detection. "+
 			"Set to 0 to disable periodic syncing. Can also be set via SYNC_PERIOD environment variable.")
+
+	var gatewayClassName string
+	flag.StringVar(&gatewayClassName, "gateway-class-name", lookupEnvOrString("GATEWAY_CLASS_NAME", "nextdns-coredns"),
+		"The name of the GatewayClass to create. Can also be set via GATEWAY_CLASS_NAME environment variable.")
 
 	opts := zap.Options{
 		Development: true,
@@ -83,6 +96,62 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	// Detect Gateway API CRDs
+	gatewayAPIAvailable := false
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create discovery client")
+		os.Exit(1)
+	}
+
+	_, apiResourceList, err := discoveryClient.ServerGroupsAndResources()
+	if err != nil {
+		setupLog.Info("Warning: could not fully discover API resources", "error", err)
+	}
+	for _, resourceList := range apiResourceList {
+		if resourceList.GroupVersion == "gateway.networking.k8s.io/v1" {
+			for _, resource := range resourceList.APIResources {
+				if resource.Kind == "GatewayClass" {
+					gatewayAPIAvailable = true
+					break
+				}
+			}
+		}
+		if gatewayAPIAvailable {
+			break
+		}
+	}
+
+	if gatewayAPIAvailable {
+		setupLog.Info("Gateway API CRDs detected, enabling gateway support", "gatewayClassName", gatewayClassName)
+
+		mgrc := mgr.GetClient()
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			gc := &gatewayv1.GatewayClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: gatewayClassName,
+				},
+			}
+			op, err := controllerutil.CreateOrUpdate(ctx, mgrc, gc, func() error {
+				gc.Spec = gatewayv1.GatewayClassSpec{
+					ControllerName: gatewayv1.GatewayController("nextdns.io/coredns-gateway"),
+				}
+				return nil
+			})
+			if err != nil {
+				setupLog.Error(err, "failed to create/update GatewayClass", "name", gatewayClassName)
+				return nil // Don't crash the manager
+			}
+			setupLog.Info("GatewayClass reconciled", "name", gatewayClassName, "operation", op)
+			return nil
+		})); err != nil {
+			setupLog.Error(err, "unable to add GatewayClass runnable")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("Gateway API CRDs not detected, gateway support disabled")
 	}
 
 	if err = (&controller.NextDNSProfileReconciler{
@@ -122,9 +191,11 @@ func main() {
 	}
 
 	if err = (&controller.NextDNSCoreDNSReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		SyncPeriod: syncDuration,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		SyncPeriod:          syncDuration,
+		GatewayAPIAvailable: gatewayAPIAvailable,
+		GatewayClassName:    gatewayClassName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NextDNSCoreDNS")
 		os.Exit(1)

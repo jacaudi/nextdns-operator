@@ -57,8 +57,10 @@ const (
 // NextDNSCoreDNSReconciler reconciles a NextDNSCoreDNS object
 type NextDNSCoreDNSReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	SyncPeriod time.Duration
+	Scheme              *runtime.Scheme
+	SyncPeriod          time.Duration
+	GatewayAPIAvailable bool
+	GatewayClassName    string
 }
 
 // +kubebuilder:rbac:groups=nextdns.io,resources=nextdnscorednses,verbs=get;list;watch;create;update;patch;delete
