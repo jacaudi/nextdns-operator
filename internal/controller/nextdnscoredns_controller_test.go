@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // newCoreDNSTestScheme creates a scheme for CoreDNS controller tests
@@ -2929,4 +2931,88 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayCRDsMissing(t *testing.T) {
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	assert.Equal(t, "GatewayAPICRDsMissing", cond.Reason)
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: true,
+		GatewayClassName:    "nextdns-coredns",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	resourceName := "test-coredns-abc123-coredns"
+
+	// Verify Service is ClusterIP (not LoadBalancer)
+	service := &corev1.Service{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: "default"}, service)
+	require.NoError(t, err)
+	assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type)
+
+	// Verify Gateway was created
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+	assert.Equal(t, gatewayv1.ObjectName("nextdns-coredns"), gw.Spec.GatewayClassName)
+
+	// Verify TCPRoute was created
+	tcpRoute := &gatewayv1alpha2.TCPRoute{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-tcp", Namespace: "default"}, tcpRoute)
+	require.NoError(t, err)
+	require.Len(t, tcpRoute.Spec.Rules[0].BackendRefs, 1)
+	assert.Equal(t, gatewayv1.ObjectName(resourceName), tcpRoute.Spec.Rules[0].BackendRefs[0].Name)
+
+	// Verify UDPRoute was created
+	udpRoute := &gatewayv1alpha2.UDPRoute{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-udp", Namespace: "default"}, udpRoute)
+	require.NoError(t, err)
+	require.Len(t, udpRoute.Spec.Rules[0].BackendRefs, 1)
+	assert.Equal(t, gatewayv1.ObjectName(resourceName), udpRoute.Spec.Rules[0].BackendRefs[0].Name)
 }
