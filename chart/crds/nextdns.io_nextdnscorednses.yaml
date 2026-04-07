@@ -1176,6 +1176,45 @@ spec:
                   - upstreams
                   type: object
                 type: array
+              gateway:
+                description: |-
+                  Gateway configures Gateway API resources for DNS traffic exposure.
+                  When set, the operator creates a Gateway with TCPRoute and UDPRoute
+                  instead of a LoadBalancer Service. A ClusterIP Service is always
+                  created as the route backend target.
+                  Mutually exclusive with Service.Type=LoadBalancer.
+                properties:
+                  addresses:
+                    description: |-
+                      Addresses specifies the IP addresses for the Gateway.
+                      These are requested from the Gateway implementation (e.g., Envoy Gateway + Cilium LB IPAM).
+                    items:
+                      description: GatewayAddress specifies an address for the Gateway
+                      properties:
+                        type:
+                          default: IPAddress
+                          description: Type specifies the address type
+                          enum:
+                          - IPAddress
+                          - Hostname
+                          type: string
+                        value:
+                          description: Value is the address value (e.g., "192.168.1.53")
+                          type: string
+                      required:
+                      - value
+                      type: object
+                    minItems: 1
+                    type: array
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations specifies additional annotations for
+                      the Gateway resource
+                    type: object
+                required:
+                - addresses
+                type: object
               logging:
                 description: Logging configures DNS query logging
                 properties:
@@ -1377,6 +1416,10 @@ spec:
                 description: Fingerprint is the DNS fingerprint from the referenced
                   profile
                 type: string
+              gatewayReady:
+                description: GatewayReady indicates if the Gateway is programmed and
+                  accepting traffic
+                type: boolean
               lastUpdated:
                 description: LastUpdated is the time the status was last updated
                 format: date-time
