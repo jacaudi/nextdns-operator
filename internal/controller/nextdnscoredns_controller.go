@@ -286,6 +286,48 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// Reconcile Gateway API resources if configured
+	if coreDNS.Spec.Gateway != nil && r.GatewayAPIAvailable {
+		serviceName := r.getServiceName(coreDNS, profile)
+
+		if err := r.reconcileGateway(ctx, coreDNS); err != nil {
+			logger.Error(err, "Failed to reconcile Gateway")
+			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "GatewayFailed", err.Error())
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "GatewayFailed", err.Error())
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		if err := r.reconcileTCPRoute(ctx, coreDNS, serviceName); err != nil {
+			logger.Error(err, "Failed to reconcile TCPRoute")
+			r.setCondition(coreDNS, ConditionTypeTCPRouteReady, metav1.ConditionFalse, "TCPRouteFailed", err.Error())
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "TCPRouteFailed", err.Error())
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		if err := r.reconcileUDPRoute(ctx, coreDNS, serviceName); err != nil {
+			logger.Error(err, "Failed to reconcile UDPRoute")
+			r.setCondition(coreDNS, ConditionTypeUDPRouteReady, metav1.ConditionFalse, "UDPRouteFailed", err.Error())
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "UDPRouteFailed", err.Error())
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionTrue, "GatewayReconciled", "Gateway and routes reconciled successfully")
+		r.setCondition(coreDNS, ConditionTypeTCPRouteReady, metav1.ConditionTrue, "TCPRouteReconciled", "TCPRoute reconciled successfully")
+		r.setCondition(coreDNS, ConditionTypeUDPRouteReady, metav1.ConditionTrue, "UDPRouteReconciled", "UDPRoute reconciled successfully")
+	}
+
 	// Update status with current state
 	if err := r.updateStatus(ctx, coreDNS, profile); err != nil {
 		logger.Error(err, "Failed to update status")
@@ -813,7 +855,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 
 	// Determine service type
 	serviceType := corev1.ServiceTypeClusterIP // default
-	if coreDNS.Spec.Service != nil && coreDNS.Spec.Service.Type != "" {
+	if coreDNS.Spec.Gateway == nil && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.Type != "" {
 		switch coreDNS.Spec.Service.Type {
 		case nextdnsv1alpha1.ServiceTypeLoadBalancer:
 			serviceType = corev1.ServiceTypeLoadBalancer
@@ -869,7 +911,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 		// NOTE: service.Spec.LoadBalancerIP is deprecated since Kubernetes v1.24
 		// but is still honored by most cloud providers. We continue to set it for
 		// backward compatibility.
-		if serviceType == corev1.ServiceTypeLoadBalancer && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.LoadBalancerIP != "" {
+		if coreDNS.Spec.Gateway == nil && serviceType == corev1.ServiceTypeLoadBalancer && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.LoadBalancerIP != "" {
 			service.Spec.LoadBalancerIP = coreDNS.Spec.Service.LoadBalancerIP //nolint:staticcheck // deprecated but still functional
 		}
 
