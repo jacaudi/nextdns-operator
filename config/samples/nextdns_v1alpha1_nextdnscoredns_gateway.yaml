@@ -1,0 +1,22 @@
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns-gateway
+  namespace: dns
+spec:
+  profileRef:
+    name: my-profile
+  upstream:
+    primary: DoT
+    deviceName: Home DNS
+  deployment:
+    replicas: 2
+  gateway:
+    addresses:
+      - value: "192.168.1.53"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: dns.example.com
+  cache:
+    enabled: true
+  metrics:
+    enabled: true

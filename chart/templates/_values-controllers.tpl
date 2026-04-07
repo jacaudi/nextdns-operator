@@ -21,6 +21,7 @@ controllers:
           {{- end }}
           - --health-probe-bind-address=:8081
           - --metrics-bind-address=:8080
+          - --gateway-class-name={{ .Values.gatewayAPI.gatewayClassName }}
         env:
           TZ: {{ .Values.timezone }}
         resources:

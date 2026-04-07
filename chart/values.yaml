@@ -54,3 +54,8 @@ metrics:
     interval: 30s
     # -- Scrape timeout
     scrapeTimeout: 10s
+
+# -- Gateway API configuration
+gatewayAPI:
+  # -- Name of the GatewayClass to create (requires Gateway API CRDs installed)
+  gatewayClassName: nextdns-coredns
