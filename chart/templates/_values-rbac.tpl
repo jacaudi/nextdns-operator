@@ -66,6 +66,37 @@ rbac:
             - update
             - watch
         - apiGroups:
+            - gateway.networking.k8s.io
+          resources:
+            - gatewayclasses
+          verbs:
+            - create
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - gateway.networking.k8s.io
+          resources:
+            - gateways
+            - tcproutes
+            - udproutes
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - gateway.networking.k8s.io
+          resources:
+            - gateways/status
+          verbs:
+            - get
+        - apiGroups:
             - nextdns.io
           resources:
             - nextdnsallowlists
