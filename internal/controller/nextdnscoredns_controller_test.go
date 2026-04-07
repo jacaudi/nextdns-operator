@@ -2799,3 +2799,134 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutSetup(t *testing.T)
 	require.NoError(t, err)
 	assert.Nil(t, cfg.UpstreamIPv4)
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_GatewayMutualExclusivity(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Service: &nextdnsv1alpha1.CoreDNSServiceConfig{
+				Type: nextdnsv1alpha1.ServiceTypeLoadBalancer,
+			},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: true,
+		GatewayClassName:    "nextdns-coredns",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Reload to check status
+	updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updated)
+	require.NoError(t, err)
+
+	// Should have GatewayReady condition with InvalidConfiguration reason
+	cond := meta.FindStatusCondition(updated.Status.Conditions, ConditionTypeGatewayReady)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "InvalidConfiguration", cond.Reason)
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_GatewayCRDsMissing(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: false, // CRDs not installed
+		GatewayClassName:    "nextdns-coredns",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updated)
+	require.NoError(t, err)
+
+	cond := meta.FindStatusCondition(updated.Status.Conditions, ConditionTypeGatewayReady)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "GatewayAPICRDsMissing", cond.Reason)
+}
