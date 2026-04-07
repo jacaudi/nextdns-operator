@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -200,4 +201,42 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 	}
 
 	return nil
+}
+
+// updateGatewayStatus populates the NextDNSCoreDNS status fields from the Gateway status
+func (r *NextDNSCoreDNSReconciler) updateGatewayStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) {
+	logger := log.FromContext(ctx)
+
+	gatewayName := coreDNS.Name + "-dns"
+	gw := &gatewayv1.Gateway{}
+	if err := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: coreDNS.Namespace}, gw); err != nil {
+		logger.V(1).Info("Gateway not found for status update", "name", gatewayName)
+		coreDNS.Status.GatewayReady = false
+		return
+	}
+
+	// Reset endpoints to avoid accumulation across reconcile cycles
+	coreDNS.Status.Endpoints = nil
+
+	// Check if Gateway has status addresses (indicates it's programmed)
+	if len(gw.Status.Addresses) > 0 {
+		coreDNS.Status.GatewayReady = true
+		for _, addr := range gw.Status.Addresses {
+			coreDNS.Status.DNSIP = addr.Value
+			coreDNS.Status.Endpoints = append(coreDNS.Status.Endpoints,
+				nextdnsv1alpha1.DNSEndpoint{IP: addr.Value, Port: 53, Protocol: "UDP"},
+				nextdnsv1alpha1.DNSEndpoint{IP: addr.Value, Port: 53, Protocol: "TCP"},
+			)
+		}
+	} else {
+		// Fall back to requested addresses from spec
+		coreDNS.Status.GatewayReady = false
+		for _, addr := range coreDNS.Spec.Gateway.Addresses {
+			coreDNS.Status.DNSIP = addr.Value
+			coreDNS.Status.Endpoints = append(coreDNS.Status.Endpoints,
+				nextdnsv1alpha1.DNSEndpoint{IP: addr.Value, Port: 53, Protocol: "UDP"},
+				nextdnsv1alpha1.DNSEndpoint{IP: addr.Value, Port: 53, Protocol: "TCP"},
+			)
+		}
+	}
 }

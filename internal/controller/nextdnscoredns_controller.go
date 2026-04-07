@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 	"github.com/jacaudi/nextdns-operator/internal/coredns"
@@ -1094,41 +1096,43 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 		URL: upstreamURL,
 	}
 
-	// Get service to determine DNS IP
-	serviceName := r.getServiceName(coreDNS, profile)
-	service := &corev1.Service{}
-	if err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: coreDNS.Namespace}, service); err == nil {
-		// Build endpoints from service
-		var endpoints []nextdnsv1alpha1.DNSEndpoint
+	// Get endpoints from Gateway or Service
+	if coreDNS.Spec.Gateway != nil && r.GatewayAPIAvailable {
+		r.updateGatewayStatus(ctx, coreDNS)
+	} else {
+		// Get service to determine DNS IP
+		serviceName := r.getServiceName(coreDNS, profile)
+		service := &corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: coreDNS.Namespace}, service); err == nil {
+			var endpoints []nextdnsv1alpha1.DNSEndpoint
 
-		switch service.Spec.Type {
-		case corev1.ServiceTypeLoadBalancer:
-			// Get LoadBalancer IP
-			for _, ingress := range service.Status.LoadBalancer.Ingress {
-				ip := ingress.IP
-				if ip == "" {
-					ip = ingress.Hostname
+			switch service.Spec.Type {
+			case corev1.ServiceTypeLoadBalancer:
+				for _, ingress := range service.Status.LoadBalancer.Ingress {
+					ip := ingress.IP
+					if ip == "" {
+						ip = ingress.Hostname
+					}
+					if ip != "" {
+						endpoints = append(endpoints,
+							nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "UDP"},
+							nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "TCP"},
+						)
+						coreDNS.Status.DNSIP = ip
+					}
 				}
-				if ip != "" {
+			default:
+				if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
 					endpoints = append(endpoints,
-						nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "UDP"},
-						nextdnsv1alpha1.DNSEndpoint{IP: ip, Port: 53, Protocol: "TCP"},
+						nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "UDP"},
+						nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "TCP"},
 					)
-					coreDNS.Status.DNSIP = ip
+					coreDNS.Status.DNSIP = service.Spec.ClusterIP
 				}
 			}
-		default:
-			// ClusterIP
-			if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
-				endpoints = append(endpoints,
-					nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "UDP"},
-					nextdnsv1alpha1.DNSEndpoint{IP: service.Spec.ClusterIP, Port: 53, Protocol: "TCP"},
-				)
-				coreDNS.Status.DNSIP = service.Spec.ClusterIP
-			}
-		}
 
-		coreDNS.Status.Endpoints = endpoints
+			coreDNS.Status.Endpoints = endpoints
+		}
 	}
 
 	// Extract Multus IPs from pod annotations if Multus is configured
@@ -1240,7 +1244,7 @@ func (r *NextDNSCoreDNSReconciler) findCoreDNSForProfile(ctx context.Context, ob
 
 // SetupWithManager sets up the controller with the Manager
 func (r *NextDNSCoreDNSReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&nextdnsv1alpha1.NextDNSCoreDNS{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.DaemonSet{}).
@@ -1250,6 +1254,14 @@ func (r *NextDNSCoreDNSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&nextdnsv1alpha1.NextDNSProfile{},
 			handler.EnqueueRequestsFromMapFunc(r.findCoreDNSForProfile),
-		).
-		Complete(r)
+		)
+
+	if r.GatewayAPIAvailable {
+		builder = builder.
+			Owns(&gatewayv1.Gateway{}).
+			Owns(&gatewayv1alpha2.TCPRoute{}).
+			Owns(&gatewayv1alpha2.UDPRoute{})
+	}
+
+	return builder.Complete(r)
 }
