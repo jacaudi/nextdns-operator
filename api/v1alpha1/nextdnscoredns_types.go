@@ -215,6 +215,32 @@ type MultusConfig struct {
 	IPs []string `json:"ips,omitempty"`
 }
 
+// GatewayConfig configures Gateway API resources for DNS traffic exposure
+type GatewayConfig struct {
+	// Addresses specifies the IP addresses for the Gateway.
+	// These are requested from the Gateway implementation (e.g., Envoy Gateway + Cilium LB IPAM).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Addresses []GatewayAddress `json:"addresses"`
+
+	// Annotations specifies additional annotations for the Gateway resource
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// GatewayAddress specifies an address for the Gateway
+type GatewayAddress struct {
+	// Type specifies the address type
+	// +kubebuilder:validation:Enum=IPAddress;Hostname
+	// +kubebuilder:default=IPAddress
+	// +optional
+	Type *string `json:"type,omitempty"`
+
+	// Value is the address value (e.g., "192.168.1.53")
+	// +kubebuilder:validation:Required
+	Value string `json:"value"`
+}
+
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
 type NextDNSCoreDNSSpec struct {
 	// ProfileRef references the NextDNSProfile to use for DNS resolution
@@ -254,6 +280,14 @@ type NextDNSCoreDNSSpec struct {
 	// Multus configures a secondary network interface via Multus CNI
 	// +optional
 	Multus *MultusConfig `json:"multus,omitempty"`
+
+	// Gateway configures Gateway API resources for DNS traffic exposure.
+	// When set, the operator creates a Gateway with TCPRoute and UDPRoute
+	// instead of a LoadBalancer Service. A ClusterIP Service is always
+	// created as the route backend target.
+	// Mutually exclusive with Service.Type=LoadBalancer.
+	// +optional
+	Gateway *GatewayConfig `json:"gateway,omitempty"`
 }
 
 // DNSEndpoint represents a DNS endpoint exposed by the service
@@ -319,6 +353,10 @@ type NextDNSCoreDNSStatus struct {
 	// Ready indicates if the CoreDNS deployment is fully ready
 	// +optional
 	Ready bool `json:"ready,omitempty"`
+
+	// GatewayReady indicates if the Gateway is programmed and accepting traffic
+	// +optional
+	GatewayReady bool `json:"gatewayReady,omitempty"`
 
 	// Conditions represent the latest available observations
 	// +optional
