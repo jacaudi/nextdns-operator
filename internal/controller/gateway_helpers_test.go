@@ -193,6 +193,103 @@ func TestReconcileTCPRoute(t *testing.T) {
 	assert.Equal(t, "NextDNSCoreDNS", route.OwnerReferences[0].Kind)
 }
 
+func TestUpdateGatewayStatus(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	// Create a Gateway with status addresses
+	addrType := gatewayv1.IPAddressType
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns-dns",
+			Namespace: "default",
+		},
+		Status: gatewayv1.GatewayStatus{
+			Addresses: []gatewayv1.GatewayStatusAddress{
+				{Type: &addrType, Value: "192.168.1.53"},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, gw).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	r.updateGatewayStatus(ctx, coreDNS)
+
+	assert.Equal(t, "192.168.1.53", coreDNS.Status.DNSIP)
+	assert.True(t, coreDNS.Status.GatewayReady)
+	require.Len(t, coreDNS.Status.Endpoints, 2)
+	assert.Equal(t, "UDP", coreDNS.Status.Endpoints[0].Protocol)
+	assert.Equal(t, "TCP", coreDNS.Status.Endpoints[1].Protocol)
+}
+
+func TestUpdateGatewayStatus_FallbackToRequestedAddresses(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.0.0.53"},
+				},
+			},
+		},
+	}
+
+	// Gateway exists but has no status addresses yet
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns-dns",
+			Namespace: "default",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, gw).
+		Build()
+
+	r := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	r.updateGatewayStatus(ctx, coreDNS)
+
+	assert.Equal(t, "10.0.0.53", coreDNS.Status.DNSIP)
+	assert.False(t, coreDNS.Status.GatewayReady) // No status addresses = not ready
+}
+
 func TestReconcileUDPRoute(t *testing.T) {
 	scheme := newGatewayTestScheme()
 	ctx := context.Background()
