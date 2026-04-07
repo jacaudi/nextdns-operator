@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.4](https://github.com/jacaudi/nextdns-operator/compare/v0.15.3...v0.15.4) (2026-04-07)
+
+### Bug Fixes
+
+* use new-release-version-v output for v-prefixed versions ([db3a2a1](https://github.com/jacaudi/nextdns-operator/commit/db3a2a1e7717d0c014f3e5e3ea6829008e61417f))
+
 ## [0.15.3](https://github.com/jacaudi/nextdns-operator/compare/v0.15.2...v0.15.3) (2026-04-06)
 
 ### Bug Fixes
