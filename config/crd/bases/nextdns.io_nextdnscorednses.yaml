@@ -1212,6 +1212,13 @@ spec:
                     description: Annotations specifies additional annotations for
                       the Gateway resource
                     type: object
+                  gatewayClassName:
+                    description: |-
+                      GatewayClassName specifies which GatewayClass to use for the Gateway.
+                      This must reference a GatewayClass managed by an external controller
+                      (e.g., Envoy Gateway, Cilium, Istio).
+                      If omitted, uses the operator's default gateway class name.
+                    type: string
                 required:
                 - addresses
                 type: object

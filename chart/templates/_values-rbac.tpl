@@ -68,17 +68,6 @@ rbac:
         - apiGroups:
             - gateway.networking.k8s.io
           resources:
-            - gatewayclasses
-          verbs:
-            - create
-            - get
-            - list
-            - patch
-            - update
-            - watch
-        - apiGroups:
-            - gateway.networking.k8s.io
-          resources:
             - gateways
             - tcproutes
             - udproutes

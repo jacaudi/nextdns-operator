@@ -84,7 +84,6 @@ type NextDNSCoreDNSReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
@@ -243,6 +242,35 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 			return ctrl.Result{}, nil
 		}
+
+		// Validate that a GatewayClass name is resolvable
+		resolvedClassName := r.GatewayClassName
+		if coreDNS.Spec.Gateway.GatewayClassName != nil {
+			resolvedClassName = *coreDNS.Spec.Gateway.GatewayClassName
+		}
+		if resolvedClassName == "" {
+			logger.Info("No gatewayClassName specified and no operator default configured")
+			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "NoGatewayClassName",
+				"No gatewayClassName specified in spec.gateway and no operator default configured")
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "NoGatewayClassName",
+				"No gatewayClassName available")
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, nil
+		}
+	} else if r.GatewayAPIAvailable {
+		// spec.gateway was removed -- clean up any orphaned gateway resources
+		if err := r.cleanupGatewayResources(ctx, coreDNS); err != nil {
+			logger.Error(err, "Failed to clean up gateway resources")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		// Clear gateway-related conditions
+		meta.RemoveStatusCondition(&coreDNS.Status.Conditions, ConditionTypeGatewayReady)
+		meta.RemoveStatusCondition(&coreDNS.Status.Conditions, ConditionTypeTCPRouteReady)
+		meta.RemoveStatusCondition(&coreDNS.Status.Conditions, ConditionTypeUDPRouteReady)
+		coreDNS.Status.GatewayReady = false
 	}
 
 	// Store profile information in status

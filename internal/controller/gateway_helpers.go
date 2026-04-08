@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -17,6 +18,15 @@ import (
 // reconcileGateway creates or updates the Gateway resource for DNS traffic exposure.
 func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
 	logger := log.FromContext(ctx)
+
+	// Resolve GatewayClass name: CR-level override > operator default
+	gatewayClassName := r.GatewayClassName
+	if coreDNS.Spec.Gateway != nil && coreDNS.Spec.Gateway.GatewayClassName != nil {
+		gatewayClassName = *coreDNS.Spec.Gateway.GatewayClassName
+	}
+	if gatewayClassName == "" {
+		return fmt.Errorf("no gatewayClassName specified in spec.gateway and no operator default configured")
+	}
 
 	gatewayName := coreDNS.Name + "-dns"
 
@@ -53,7 +63,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 
 		// Build the gateway spec
 		gw.Spec = gatewayv1.GatewaySpec{
-			GatewayClassName: gatewayv1.ObjectName(r.GatewayClassName),
+			GatewayClassName: gatewayv1.ObjectName(gatewayClassName),
 			Listeners: []gatewayv1.Listener{
 				{
 					Name:     gatewayv1.SectionName("dns-udp"),
@@ -196,6 +206,57 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 
 	if op != controllerutil.OperationResultNone {
 		logger.Info("UDPRoute reconciled", "operation", op, "name", routeName)
+	}
+
+	return nil
+}
+
+// cleanupGatewayResources deletes Gateway, TCPRoute, and UDPRoute resources
+// that were previously created for this NextDNSCoreDNS CR. This is called
+// when spec.gateway is removed from a CR.
+func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+	logger := log.FromContext(ctx)
+
+	// Delete UDPRoute
+	udpRoute := &gatewayv1alpha2.UDPRoute{}
+	udpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-udp", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, udpRouteName, udpRoute); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get UDPRoute %s: %w", udpRouteName.Name, err)
+		}
+	} else {
+		if err := r.Delete(ctx, udpRoute); err != nil {
+			return fmt.Errorf("failed to delete UDPRoute %s: %w", udpRouteName.Name, err)
+		}
+		logger.Info("Deleted orphaned UDPRoute", "name", udpRouteName.Name)
+	}
+
+	// Delete TCPRoute
+	tcpRoute := &gatewayv1alpha2.TCPRoute{}
+	tcpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-tcp", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, tcpRouteName, tcpRoute); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get TCPRoute %s: %w", tcpRouteName.Name, err)
+		}
+	} else {
+		if err := r.Delete(ctx, tcpRoute); err != nil {
+			return fmt.Errorf("failed to delete TCPRoute %s: %w", tcpRouteName.Name, err)
+		}
+		logger.Info("Deleted orphaned TCPRoute", "name", tcpRouteName.Name)
+	}
+
+	// Delete Gateway
+	gw := &gatewayv1.Gateway{}
+	gwName := types.NamespacedName{Name: coreDNS.Name + "-dns", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, gwName, gw); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get Gateway %s: %w", gwName.Name, err)
+		}
+	} else {
+		if err := r.Delete(ctx, gw); err != nil {
+			return fmt.Errorf("failed to delete Gateway %s: %w", gwName.Name, err)
+		}
+		logger.Info("Deleted orphaned Gateway", "name", gwName.Name)
 	}
 
 	return nil

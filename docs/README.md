@@ -13,6 +13,7 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
   - [Upstream Protocols](#upstream-protocols)
   - [Deployment Modes](#deployment-modes)
   - [Service Configuration](#service-configuration)
+  - [Gateway API](#gateway-api)
   - [Caching](#caching)
   - [Metrics & Monitoring](#metrics--monitoring)
   - [Query Logging](#query-logging)
@@ -269,6 +270,40 @@ service:
 service:
   nameOverride: my-dns-service
 ```
+
+### Gateway API
+
+As an alternative to LoadBalancer, DNS traffic can be exposed through Gateway API using TCPRoute and UDPRoute resources. The operator creates a dedicated Gateway per NextDNSCoreDNS CR and attaches routes for port 53 TCP and UDP traffic.
+
+Gateway API requires an external gateway controller (e.g., Envoy Gateway, Cilium, Istio) to be installed in the cluster. The operator references a GatewayClass managed by that controller -- it does not implement its own gateway data plane.
+
+**Gateway and LoadBalancer are mutually exclusive.** When `gateway` is configured, the operator forces the Service type to ClusterIP (used as the route backend).
+
+```yaml
+spec:
+  gateway:
+    gatewayClassName: envoy-gateway  # references an external GatewayClass
+    addresses:
+      - value: "192.168.1.53"        # IP requested from the gateway implementation
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: dns.example.com
+```
+
+The `gatewayClassName` can be specified per-CR or set as an operator-level default via the `--gateway-class-name` flag or `GATEWAY_CLASS_NAME` environment variable. If set per-CR, it overrides the operator default.
+
+**Supported gateway controllers:**
+
+| Controller | GatewayClass Name | Notes |
+|---|---|---|
+| Envoy Gateway | User-created (e.g., `eg-nextdns`) | Programs Envoy proxy |
+| Cilium | `cilium` | Uses eBPF data plane |
+| Istio | `istio` | Programs Envoy gateway |
+| Kong | `kong` | Programs Kong proxy |
+| Contour | `contour` | Programs Envoy via Contour |
+
+**Status:** When the Gateway is programmed by the controller, `status.gatewayReady` becomes `true` and `status.endpoints` is populated with the assigned addresses. If the Gateway is not yet programmed, the operator falls back to reporting the requested addresses from the spec.
+
+**Cleanup:** If `spec.gateway` is removed from a CR, the operator deletes the orphaned Gateway, TCPRoute, and UDPRoute resources and clears the gateway-related conditions.
 
 ### Caching
 
@@ -775,6 +810,9 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
 | `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
+| `gateway.gatewayClassName` | *string | No | Operator default | GatewayClass to reference (e.g., `envoy-gateway`, `cilium`) |
+| `gateway.addresses` | GatewayAddress[] | Yes (if `gateway` set) | | IP addresses requested from the gateway implementation |
+| `gateway.annotations` | map[string]string | No | | Additional annotations for the Gateway resource |
 
 Each `DomainOverride` has:
 
@@ -797,6 +835,7 @@ Each `DomainOverride` has:
 | `replicas.desired` | int32 | Desired replica count |
 | `replicas.ready` | int32 | Ready replica count |
 | `replicas.available` | int32 | Available replica count |
+| `gatewayReady` | bool | Whether the Gateway is programmed and accepting traffic |
 | `ready` | bool | Whether the CoreDNS deployment is fully ready |
 | `conditions` | []Condition | Standard Kubernetes conditions |
 | `lastUpdated` | Time | Last time the status was updated |
@@ -808,6 +847,9 @@ Each `DomainOverride` has:
 |------|-------------|
 | `Ready` | Overall readiness -- `True` when all CoreDNS resources (workload, service, configmap) are deployed and healthy |
 | `ProfileResolved` | `True` when the referenced NextDNSProfile exists and is in Ready state |
+| `GatewayReady` | `True` when the Gateway is programmed (only present when `spec.gateway` is configured) |
+| `TCPRouteReady` | `True` when the TCPRoute is reconciled (only present when `spec.gateway` is configured) |
+| `UDPRouteReady` | `True` when the UDPRoute is reconciled (only present when `spec.gateway` is configured) |
 
 ---
 
@@ -843,6 +885,9 @@ kubectl get nextdnscoredns home-dns -o yaml
 |-----------|------|-------|
 | **Ready** | All CoreDNS resources deployed and healthy | Workload, service, or configmap has issues |
 | **ProfileResolved** | Referenced NextDNSProfile exists and is Ready | Profile not found or not in Ready state |
+| **GatewayReady** | Gateway is programmed by external controller | Gateway not programmed, CRDs missing, or no class name configured |
+| **TCPRouteReady** | TCPRoute reconciled successfully | TCPRoute creation/update failed |
+| **UDPRouteReady** | UDPRoute reconciled successfully | UDPRoute creation/update failed |
 
 ### Common Status Patterns
 

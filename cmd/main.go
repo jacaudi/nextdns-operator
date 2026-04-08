@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
 	"time"
@@ -10,16 +9,13 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -64,8 +60,10 @@ func main() {
 			"Set to 0 to disable periodic syncing. Can also be set via SYNC_PERIOD environment variable.")
 
 	var gatewayClassName string
-	flag.StringVar(&gatewayClassName, "gateway-class-name", lookupEnvOrString("GATEWAY_CLASS_NAME", "nextdns-coredns"),
-		"The name of the GatewayClass to create. Can also be set via GATEWAY_CLASS_NAME environment variable.")
+	flag.StringVar(&gatewayClassName, "gateway-class-name", lookupEnvOrString("GATEWAY_CLASS_NAME", ""),
+		"Default GatewayClass name to reference for Gateway API resources. "+
+			"Can be overridden per-CR via spec.gateway.gatewayClassName. "+
+			"Can also be set via GATEWAY_CLASS_NAME environment variable.")
 
 	opts := zap.Options{
 		Development: true,
@@ -125,31 +123,7 @@ func main() {
 	}
 
 	if gatewayAPIAvailable {
-		setupLog.Info("Gateway API CRDs detected, enabling gateway support", "gatewayClassName", gatewayClassName)
-
-		mgrc := mgr.GetClient()
-		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			gc := &gatewayv1.GatewayClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: gatewayClassName,
-				},
-			}
-			op, err := controllerutil.CreateOrUpdate(ctx, mgrc, gc, func() error {
-				gc.Spec = gatewayv1.GatewayClassSpec{
-					ControllerName: gatewayv1.GatewayController("nextdns.io/coredns-gateway"),
-				}
-				return nil
-			})
-			if err != nil {
-				setupLog.Error(err, "failed to create/update GatewayClass", "name", gatewayClassName)
-				return nil // Don't crash the manager
-			}
-			setupLog.Info("GatewayClass reconciled", "name", gatewayClassName, "operation", op)
-			return nil
-		})); err != nil {
-			setupLog.Error(err, "unable to add GatewayClass runnable")
-			os.Exit(1)
-		}
+		setupLog.Info("Gateway API CRDs detected, enabling gateway support")
 	} else {
 		setupLog.Info("Gateway API CRDs not detected, gateway support disabled")
 	}

@@ -12,6 +12,10 @@ spec:
   deployment:
     replicas: 2
   gateway:
+    # gatewayClassName references an external GatewayClass managed by a gateway
+    # controller (e.g., Envoy Gateway, Cilium, Istio). If omitted, the operator's
+    # default --gateway-class-name is used.
+    gatewayClassName: envoy-gateway
     addresses:
       - value: "192.168.1.53"
     annotations:
