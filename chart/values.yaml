@@ -57,5 +57,8 @@ metrics:
 
 # -- Gateway API configuration
 gatewayAPI:
-  # -- Name of the GatewayClass to create (requires Gateway API CRDs installed)
-  gatewayClassName: nextdns-coredns
+  # -- Default GatewayClass name to reference for Gateway API resources.
+  # -- Must reference an existing GatewayClass managed by an external controller
+  # -- (e.g., Envoy Gateway, Cilium, Istio). Can be overridden per-CR via spec.gateway.gatewayClassName.
+  # -- Leave empty if all CRs specify their own gatewayClassName.
+  gatewayClassName: ""
