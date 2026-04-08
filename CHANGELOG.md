@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.1](https://github.com/jacaudi/nextdns-operator/compare/v0.16.0...v0.16.1) (2026-04-08)
+
+### Bug Fixes
+
+* GatewayClass redesign - operator as consumer, not controller ([#112](https://github.com/jacaudi/nextdns-operator/issues/112)) ([24f4c8a](https://github.com/jacaudi/nextdns-operator/commit/24f4c8a592dc4e759dbdb7f18cf863dc19440359))
+
 ## [0.16.0](https://github.com/jacaudi/nextdns-operator/compare/v0.15.4...v0.16.0) (2026-04-07)
 
 ### Bug Fixes
