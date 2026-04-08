@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -433,4 +434,90 @@ func TestReconcileUDPRoute(t *testing.T) {
 	require.Len(t, route.OwnerReferences, 1)
 	assert.Equal(t, "test-coredns", route.OwnerReferences[0].Name)
 	assert.Equal(t, "NextDNSCoreDNS", route.OwnerReferences[0].Kind)
+}
+
+func TestCleanupGatewayResources(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+		},
+	}
+
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns-dns",
+			Namespace: "default",
+		},
+	}
+	tcpRoute := &gatewayv1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns-dns-tcp",
+			Namespace: "default",
+		},
+	}
+	udpRoute := &gatewayv1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns-dns-udp",
+			Namespace: "default",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS, gw, tcpRoute, udpRoute).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	err := reconciler.cleanupGatewayResources(ctx, coreDNS)
+	require.NoError(t, err)
+
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, &gatewayv1.Gateway{})
+	assert.True(t, apierrors.IsNotFound(err), "Gateway should be deleted")
+
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-tcp", Namespace: "default"}, &gatewayv1alpha2.TCPRoute{})
+	assert.True(t, apierrors.IsNotFound(err), "TCPRoute should be deleted")
+
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-udp", Namespace: "default"}, &gatewayv1alpha2.UDPRoute{})
+	assert.True(t, apierrors.IsNotFound(err), "UDPRoute should be deleted")
+}
+
+func TestCleanupGatewayResources_AlreadyGone(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	err := reconciler.cleanupGatewayResources(ctx, coreDNS)
+	require.NoError(t, err)
 }

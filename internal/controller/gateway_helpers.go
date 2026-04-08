@@ -210,6 +210,45 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 	return nil
 }
 
+// cleanupGatewayResources deletes Gateway, TCPRoute, and UDPRoute resources
+// that were previously created for this NextDNSCoreDNS CR. This is called
+// when spec.gateway is removed from a CR.
+func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+	logger := log.FromContext(ctx)
+
+	// Delete UDPRoute
+	udpRoute := &gatewayv1alpha2.UDPRoute{}
+	udpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-udp", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, udpRouteName, udpRoute); err == nil {
+		if err := r.Delete(ctx, udpRoute); err != nil {
+			return fmt.Errorf("failed to delete UDPRoute %s: %w", udpRouteName.Name, err)
+		}
+		logger.Info("Deleted orphaned UDPRoute", "name", udpRouteName.Name)
+	}
+
+	// Delete TCPRoute
+	tcpRoute := &gatewayv1alpha2.TCPRoute{}
+	tcpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-tcp", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, tcpRouteName, tcpRoute); err == nil {
+		if err := r.Delete(ctx, tcpRoute); err != nil {
+			return fmt.Errorf("failed to delete TCPRoute %s: %w", tcpRouteName.Name, err)
+		}
+		logger.Info("Deleted orphaned TCPRoute", "name", tcpRouteName.Name)
+	}
+
+	// Delete Gateway
+	gw := &gatewayv1.Gateway{}
+	gwName := types.NamespacedName{Name: coreDNS.Name + "-dns", Namespace: coreDNS.Namespace}
+	if err := r.Get(ctx, gwName, gw); err == nil {
+		if err := r.Delete(ctx, gw); err != nil {
+			return fmt.Errorf("failed to delete Gateway %s: %w", gwName.Name, err)
+		}
+		logger.Info("Deleted orphaned Gateway", "name", gwName.Name)
+	}
+
+	return nil
+}
+
 // updateGatewayStatus populates the NextDNSCoreDNS status fields from the Gateway status
 func (r *NextDNSCoreDNSReconciler) updateGatewayStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) {
 	logger := log.FromContext(ctx)
