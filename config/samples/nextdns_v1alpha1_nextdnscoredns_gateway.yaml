@@ -20,6 +20,11 @@ spec:
       - value: "192.168.1.53"
     annotations:
       external-dns.alpha.kubernetes.io/hostname: dns.example.com
+    # infrastructure propagates metadata to resources created by the gateway
+    # implementation (e.g., the LoadBalancer Service that Envoy Gateway creates).
+    infrastructure:
+      annotations:
+        lbipam.cilium.io/ips: "192.168.1.53"
   cache:
     enabled: true
   metrics:

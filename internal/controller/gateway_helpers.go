@@ -89,6 +89,44 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 			Addresses: addresses,
 		}
 
+		// Build infrastructure from spec if any sub-fields are populated
+		if coreDNS.Spec.Gateway.Infrastructure != nil {
+			infra := &gatewayv1.GatewayInfrastructure{}
+			hasContent := false
+
+			if len(coreDNS.Spec.Gateway.Infrastructure.Annotations) > 0 {
+				annotations := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue)
+				for k, v := range coreDNS.Spec.Gateway.Infrastructure.Annotations {
+					annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
+				}
+				infra.Annotations = annotations
+				hasContent = true
+			}
+
+			if len(coreDNS.Spec.Gateway.Infrastructure.Labels) > 0 {
+				labels := make(map[gatewayv1.LabelKey]gatewayv1.LabelValue)
+				for k, v := range coreDNS.Spec.Gateway.Infrastructure.Labels {
+					labels[gatewayv1.LabelKey(k)] = gatewayv1.LabelValue(v)
+				}
+				infra.Labels = labels
+				hasContent = true
+			}
+
+			if coreDNS.Spec.Gateway.Infrastructure.ParametersRef != nil {
+				ref := coreDNS.Spec.Gateway.Infrastructure.ParametersRef
+				infra.ParametersRef = &gatewayv1.LocalParametersReference{
+					Group: gatewayv1.Group(ref.Group),
+					Kind:  gatewayv1.Kind(ref.Kind),
+					Name:  ref.Name,
+				}
+				hasContent = true
+			}
+
+			if hasContent {
+				gw.Spec.Infrastructure = infra
+			}
+		}
+
 		return controllerutil.SetControllerReference(coreDNS, gw, r.Scheme)
 	})
 

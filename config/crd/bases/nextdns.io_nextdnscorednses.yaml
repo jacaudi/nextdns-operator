@@ -1219,6 +1219,43 @@ spec:
                       (e.g., Envoy Gateway, Cilium, Istio).
                       If omitted, uses the operator's default gateway class name.
                     type: string
+                  infrastructure:
+                    description: |-
+                      Infrastructure defines metadata propagated to resources created by the
+                      Gateway implementation (e.g., LoadBalancer Service, Deployment).
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations to propagate to generated infrastructure
+                          resources.
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Labels to propagate to generated infrastructure
+                          resources.
+                        type: object
+                      parametersRef:
+                        description: |-
+                          ParametersRef is a reference to an implementation-specific resource
+                          that contains additional configuration for the Gateway infrastructure.
+                        properties:
+                          group:
+                            description: Group is the API group of the referent.
+                            type: string
+                          kind:
+                            description: Kind is the kind of the referent.
+                            type: string
+                          name:
+                            description: Name is the name of the referent.
+                            type: string
+                        required:
+                        - group
+                        - kind
+                        - name
+                        type: object
+                    type: object
                 required:
                 - addresses
                 type: object

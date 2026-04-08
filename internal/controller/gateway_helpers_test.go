@@ -213,6 +213,314 @@ func TestReconcileGateway_NoClassName(t *testing.T) {
 	assert.Contains(t, err.Error(), "no gatewayClassName")
 }
 
+func TestReconcileGateway_InfrastructureAnnotations(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					Annotations: map[string]string{
+						"lbipam.cilium.io/ips": "10.10.21.81",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	require.NotNil(t, gw.Spec.Infrastructure)
+	assert.Equal(t, gatewayv1.AnnotationValue("10.10.21.81"), gw.Spec.Infrastructure.Annotations[gatewayv1.AnnotationKey("lbipam.cilium.io/ips")])
+	assert.Nil(t, gw.Spec.Infrastructure.Labels)
+	assert.Nil(t, gw.Spec.Infrastructure.ParametersRef)
+}
+
+func TestReconcileGateway_InfrastructureLabels(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by": "nextdns-operator",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	require.NotNil(t, gw.Spec.Infrastructure)
+	assert.Nil(t, gw.Spec.Infrastructure.Annotations)
+	assert.Equal(t, gatewayv1.LabelValue("nextdns-operator"), gw.Spec.Infrastructure.Labels[gatewayv1.LabelKey("app.kubernetes.io/managed-by")])
+	assert.Nil(t, gw.Spec.Infrastructure.ParametersRef)
+}
+
+func TestReconcileGateway_InfrastructureParametersRef(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					ParametersRef: &nextdnsv1alpha1.GatewayParametersReference{
+						Group: "gateway.envoyproxy.io",
+						Kind:  "EnvoyProxy",
+						Name:  "custom-proxy-config",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	require.NotNil(t, gw.Spec.Infrastructure)
+	assert.Nil(t, gw.Spec.Infrastructure.Annotations)
+	assert.Nil(t, gw.Spec.Infrastructure.Labels)
+	require.NotNil(t, gw.Spec.Infrastructure.ParametersRef)
+	assert.Equal(t, gatewayv1.Group("gateway.envoyproxy.io"), gw.Spec.Infrastructure.ParametersRef.Group)
+	assert.Equal(t, gatewayv1.Kind("EnvoyProxy"), gw.Spec.Infrastructure.ParametersRef.Kind)
+	assert.Equal(t, "custom-proxy-config", gw.Spec.Infrastructure.ParametersRef.Name)
+}
+
+func TestReconcileGateway_InfrastructureAllFields(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					Annotations: map[string]string{
+						"lbipam.cilium.io/ips": "10.10.21.81",
+					},
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by": "nextdns-operator",
+					},
+					ParametersRef: &nextdnsv1alpha1.GatewayParametersReference{
+						Group: "gateway.envoyproxy.io",
+						Kind:  "EnvoyProxy",
+						Name:  "custom-proxy-config",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	require.NotNil(t, gw.Spec.Infrastructure)
+
+	// Annotations
+	assert.Equal(t, gatewayv1.AnnotationValue("10.10.21.81"), gw.Spec.Infrastructure.Annotations[gatewayv1.AnnotationKey("lbipam.cilium.io/ips")])
+
+	// Labels
+	assert.Equal(t, gatewayv1.LabelValue("nextdns-operator"), gw.Spec.Infrastructure.Labels[gatewayv1.LabelKey("app.kubernetes.io/managed-by")])
+
+	// ParametersRef
+	require.NotNil(t, gw.Spec.Infrastructure.ParametersRef)
+	assert.Equal(t, gatewayv1.Group("gateway.envoyproxy.io"), gw.Spec.Infrastructure.ParametersRef.Group)
+	assert.Equal(t, gatewayv1.Kind("EnvoyProxy"), gw.Spec.Infrastructure.ParametersRef.Kind)
+	assert.Equal(t, "custom-proxy-config", gw.Spec.Infrastructure.ParametersRef.Name)
+}
+
+func TestReconcileGateway_InfrastructureNil(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	assert.Nil(t, gw.Spec.Infrastructure)
+}
+
+func TestReconcileGateway_InfrastructureEmpty(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "10.10.21.81"},
+				},
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	// Empty infrastructure should not set spec.infrastructure
+	assert.Nil(t, gw.Spec.Infrastructure)
+}
+
 func TestReconcileTCPRoute(t *testing.T) {
 	scheme := newGatewayTestScheme()
 	ctx := context.Background()
