@@ -72,3 +72,12 @@ func TestSetupLogger_CaseInsensitiveLevel(t *testing.T) {
 
 	assert.True(t, logger.Handler().Enabled(t.Context(), slog.LevelDebug))
 }
+
+func TestSetupLogger_CaseInsensitiveFormat(t *testing.T) {
+	logger := setupLogger("info", "TEXT")
+	require.NotNil(t, logger)
+
+	handler := logger.Handler()
+	_, ok := handler.(*slog.TextHandler)
+	assert.True(t, ok, "expected TextHandler for format=TEXT (uppercase)")
+}

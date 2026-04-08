@@ -215,7 +215,7 @@ func setupLogger(level, format string) *slog.Logger {
 	}
 
 	var handler slog.Handler
-	if format == "text" {
+	if strings.ToLower(format) == "text" {
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel})
 	} else {
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel})
