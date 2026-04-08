@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.17.0](https://github.com/jacaudi/nextdns-operator/compare/v0.16.1...v0.17.0) (2026-04-08)
+
+### Features
+
+* add Gateway spec.infrastructure support ([#114](https://github.com/jacaudi/nextdns-operator/issues/114)) ([4edd518](https://github.com/jacaudi/nextdns-operator/commit/4edd5189d53e65c6656bcf77b791636eaad64114)), closes [#113](https://github.com/jacaudi/nextdns-operator/issues/113)
+
 ## [0.16.1](https://github.com/jacaudi/nextdns-operator/compare/v0.16.0...v0.16.1) (2026-04-08)
 
 ### Bug Fixes
