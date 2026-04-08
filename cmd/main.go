@@ -2,20 +2,23 @@ package main
 
 import (
 	"flag"
+	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -65,13 +68,19 @@ func main() {
 			"Can be overridden per-CR via spec.gateway.gatewayClassName. "+
 			"Can also be set via GATEWAY_CLASS_NAME environment variable.")
 
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+	var logLevel string
+	var logFormat string
+	flag.StringVar(&logLevel, "log-level", lookupEnvOrString("LOG_LEVEL", "info"),
+		"Log level (debug, info, warn, error). Can also be set via LOG_LEVEL environment variable.")
+	flag.StringVar(&logFormat, "log-format", lookupEnvOrString("LOG_FORMAT", "json"),
+		"Log format (json, text). Can also be set via LOG_FORMAT environment variable.")
+
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	slogLogger := setupLogger(logLevel, logFormat)
+	slog.SetDefault(slogLogger)
+	ctrl.SetLogger(logr.FromSlogHandler(slogLogger.Handler()))
+	klog.SetSlogLogger(slogLogger)
 
 	// Parse sync period
 	syncDuration, err := time.ParseDuration(syncPeriod)
@@ -189,4 +198,27 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// setupLogger creates a slog.Logger with the specified level and format.
+func setupLogger(level, format string) *slog.Logger {
+	var slogLevel slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	var handler slog.Handler
+	if format == "text" {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel})
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel})
+	}
+	return slog.New(handler)
 }
