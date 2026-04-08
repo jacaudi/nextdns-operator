@@ -130,6 +130,88 @@ func TestReconcileGateway(t *testing.T) {
 	assert.Equal(t, "NextDNSCoreDNS", gw.OwnerReferences[0].Kind)
 }
 
+func TestReconcileGateway_CRLevelClassName(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	crClassName := "cilium"
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				GatewayClassName: &crClassName,
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway", // operator default should be overridden
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.NoError(t, err)
+
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+
+	// CR-level className should win over operator default
+	assert.Equal(t, gatewayv1.ObjectName("cilium"), gw.Spec.GatewayClassName)
+}
+
+func TestReconcileGateway_NoClassName(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				Addresses: []nextdnsv1alpha1.GatewayAddress{
+					{Type: &ipType, Value: "192.168.1.53"},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "", // no operator default
+	}
+
+	err := reconciler.reconcileGateway(ctx, coreDNS)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no gatewayClassName")
+}
+
 func TestReconcileTCPRoute(t *testing.T) {
 	scheme := newGatewayTestScheme()
 	ctx := context.Background()

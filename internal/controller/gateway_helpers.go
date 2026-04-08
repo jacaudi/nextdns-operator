@@ -18,6 +18,15 @@ import (
 func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
 	logger := log.FromContext(ctx)
 
+	// Resolve GatewayClass name: CR-level override > operator default
+	gatewayClassName := r.GatewayClassName
+	if coreDNS.Spec.Gateway != nil && coreDNS.Spec.Gateway.GatewayClassName != nil {
+		gatewayClassName = *coreDNS.Spec.Gateway.GatewayClassName
+	}
+	if gatewayClassName == "" {
+		return fmt.Errorf("no gatewayClassName specified in spec.gateway and no operator default configured")
+	}
+
 	gatewayName := coreDNS.Name + "-dns"
 
 	gw := &gatewayv1.Gateway{
@@ -53,7 +62,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 
 		// Build the gateway spec
 		gw.Spec = gatewayv1.GatewaySpec{
-			GatewayClassName: gatewayv1.ObjectName(r.GatewayClassName),
+			GatewayClassName: gatewayv1.ObjectName(gatewayClassName),
 			Listeners: []gatewayv1.Listener{
 				{
 					Name:     gatewayv1.SectionName("dns-udp"),
