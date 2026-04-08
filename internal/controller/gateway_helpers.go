@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -219,7 +220,11 @@ func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, 
 	// Delete UDPRoute
 	udpRoute := &gatewayv1alpha2.UDPRoute{}
 	udpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-udp", Namespace: coreDNS.Namespace}
-	if err := r.Get(ctx, udpRouteName, udpRoute); err == nil {
+	if err := r.Get(ctx, udpRouteName, udpRoute); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get UDPRoute %s: %w", udpRouteName.Name, err)
+		}
+	} else {
 		if err := r.Delete(ctx, udpRoute); err != nil {
 			return fmt.Errorf("failed to delete UDPRoute %s: %w", udpRouteName.Name, err)
 		}
@@ -229,7 +234,11 @@ func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, 
 	// Delete TCPRoute
 	tcpRoute := &gatewayv1alpha2.TCPRoute{}
 	tcpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-tcp", Namespace: coreDNS.Namespace}
-	if err := r.Get(ctx, tcpRouteName, tcpRoute); err == nil {
+	if err := r.Get(ctx, tcpRouteName, tcpRoute); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get TCPRoute %s: %w", tcpRouteName.Name, err)
+		}
+	} else {
 		if err := r.Delete(ctx, tcpRoute); err != nil {
 			return fmt.Errorf("failed to delete TCPRoute %s: %w", tcpRouteName.Name, err)
 		}
@@ -239,7 +248,11 @@ func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, 
 	// Delete Gateway
 	gw := &gatewayv1.Gateway{}
 	gwName := types.NamespacedName{Name: coreDNS.Name + "-dns", Namespace: coreDNS.Namespace}
-	if err := r.Get(ctx, gwName, gw); err == nil {
+	if err := r.Get(ctx, gwName, gw); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get Gateway %s: %w", gwName.Name, err)
+		}
+	} else {
 		if err := r.Delete(ctx, gw); err != nil {
 			return fmt.Errorf("failed to delete Gateway %s: %w", gwName.Name, err)
 		}

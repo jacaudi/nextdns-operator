@@ -2851,7 +2851,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayMutualExclusivity(t *testing.
 		Client:              fakeClient,
 		Scheme:              scheme,
 		GatewayAPIAvailable: true,
-		GatewayClassName:    "nextdns-coredns",
+		GatewayClassName:    "envoy-gateway",
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
@@ -2916,7 +2916,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayCRDsMissing(t *testing.T) {
 		Client:              fakeClient,
 		Scheme:              scheme,
 		GatewayAPIAvailable: false, // CRDs not installed
-		GatewayClassName:    "nextdns-coredns",
+		GatewayClassName:    "envoy-gateway",
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
@@ -2981,7 +2981,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
 		Client:              fakeClient,
 		Scheme:              scheme,
 		GatewayAPIAvailable: true,
-		GatewayClassName:    "nextdns-coredns",
+		GatewayClassName:    "envoy-gateway",
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
@@ -3000,7 +3000,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
 	gw := &gatewayv1.Gateway{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
 	require.NoError(t, err)
-	assert.Equal(t, gatewayv1.ObjectName("nextdns-coredns"), gw.Spec.GatewayClassName)
+	assert.Equal(t, gatewayv1.ObjectName("envoy-gateway"), gw.Spec.GatewayClassName)
 
 	// Verify TCPRoute was created
 	tcpRoute := &gatewayv1alpha2.TCPRoute{}
