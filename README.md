@@ -11,6 +11,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - Automatic drift detection
 - ConfigMap export for app integration
 - Observe mode for safe profile adoption
+- Gateway API support (TCPRoute/UDPRoute) for DNS traffic exposure
 
 ## Custom Resources
 
@@ -110,6 +111,7 @@ See the [config/samples](config/samples/) directory for complete examples:
 - [NextDNSDenylist](config/samples/nextdns_v1alpha1_nextdnsdenylist.yaml) - Shared denylist for malicious domains
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
 - [NextDNSCoreDNS](config/samples/nextdns_v1alpha1_nextdnscoredns.yaml) - CoreDNS deployment with NextDNS upstream
+- [NextDNSCoreDNS with Gateway](config/samples/nextdns_v1alpha1_nextdnscoredns_gateway.yaml) - CoreDNS with Gateway API exposure
 
 ## Documentation
 
