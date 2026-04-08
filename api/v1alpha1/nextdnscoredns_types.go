@@ -233,6 +233,11 @@ type GatewayConfig struct {
 	// Annotations specifies additional annotations for the Gateway resource
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Infrastructure defines metadata propagated to resources created by the
+	// Gateway implementation (e.g., LoadBalancer Service, Deployment).
+	// +optional
+	Infrastructure *GatewayInfrastructure `json:"infrastructure,omitempty"`
 }
 
 // GatewayAddress specifies an address for the Gateway
@@ -246,6 +251,39 @@ type GatewayAddress struct {
 	// Value is the address value (e.g., "192.168.1.53")
 	// +kubebuilder:validation:Required
 	Value string `json:"value"`
+}
+
+// GatewayInfrastructure defines infrastructure-level metadata to propagate
+// to resources created by the Gateway implementation (e.g., LoadBalancer Service).
+type GatewayInfrastructure struct {
+	// Annotations to propagate to generated infrastructure resources.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels to propagate to generated infrastructure resources.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// ParametersRef is a reference to an implementation-specific resource
+	// that contains additional configuration for the Gateway infrastructure.
+	// +optional
+	ParametersRef *GatewayParametersReference `json:"parametersRef,omitempty"`
+}
+
+// GatewayParametersReference identifies a resource that contains
+// implementation-specific Gateway infrastructure parameters.
+type GatewayParametersReference struct {
+	// Group is the API group of the referent.
+	// +kubebuilder:validation:Required
+	Group string `json:"group"`
+
+	// Kind is the kind of the referent.
+	// +kubebuilder:validation:Required
+	Kind string `json:"kind"`
+
+	// Name is the name of the referent.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 }
 
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
