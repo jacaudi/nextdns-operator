@@ -217,6 +217,13 @@ type MultusConfig struct {
 
 // GatewayConfig configures Gateway API resources for DNS traffic exposure
 type GatewayConfig struct {
+	// GatewayClassName specifies which GatewayClass to use for the Gateway.
+	// This must reference a GatewayClass managed by an external controller
+	// (e.g., Envoy Gateway, Cilium, Istio).
+	// If omitted, uses the operator's default gateway class name.
+	// +optional
+	GatewayClassName *string `json:"gatewayClassName,omitempty"`
+
 	// Addresses specifies the IP addresses for the Gateway.
 	// These are requested from the Gateway implementation (e.g., Envoy Gateway + Cilium LB IPAM).
 	// +kubebuilder:validation:Required
