@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.17.2](https://github.com/jacaudi/nextdns-operator/compare/v0.17.1...v0.17.2) (2026-04-09)
+
+### Bug Fixes
+
+* include refactor and chore(deps) commits in release notes ([#120](https://github.com/jacaudi/nextdns-operator/issues/120)) ([551b0ee](https://github.com/jacaudi/nextdns-operator/commit/551b0eeee834e8d4e5573d3ae361de51c2e019da)), closes [#119](https://github.com/jacaudi/nextdns-operator/issues/119)
+
 ## [0.17.1](https://github.com/jacaudi/nextdns-operator/compare/v0.17.0...v0.17.1) (2026-04-09)
 
 ### Bug Fixes
