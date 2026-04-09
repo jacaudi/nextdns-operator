@@ -289,7 +289,55 @@ spec:
       external-dns.alpha.kubernetes.io/hostname: dns.example.com
 ```
 
+Multiple addresses are supported for high availability or dual-stack deployments:
+
+```yaml
+spec:
+  gateway:
+    gatewayClassName: envoy
+    addresses:
+      - value: "10.10.21.81"
+      - value: "10.10.21.82"
+```
+
 The `gatewayClassName` can be specified per-CR or set as an operator-level default via the `--gateway-class-name` flag or `GATEWAY_CLASS_NAME` environment variable. If set per-CR, it overrides the operator default.
+
+#### Infrastructure
+
+The `infrastructure` field propagates metadata to resources created by the gateway implementation (e.g., the LoadBalancer Service that Envoy Gateway creates). This is useful for passing annotations or labels that the gateway controller's generated resources need.
+
+For example, when using Envoy Gateway with Cilium LB IPAM, the `lbipam.cilium.io/ips` annotation must reach the generated LoadBalancer Service for IP allocation:
+
+```yaml
+spec:
+  gateway:
+    gatewayClassName: envoy
+    addresses:
+      - value: "10.10.21.81"
+      - value: "10.10.21.82"
+    infrastructure:
+      annotations:
+        lbipam.cilium.io/ips: "10.10.21.81,10.10.21.82"
+```
+
+Labels and a `parametersRef` (for implementation-specific configuration) are also supported:
+
+```yaml
+spec:
+  gateway:
+    gatewayClassName: envoy
+    addresses:
+      - value: "192.168.1.53"
+    infrastructure:
+      annotations:
+        lbipam.cilium.io/ips: "192.168.1.53"
+      labels:
+        app.kubernetes.io/managed-by: nextdns-operator
+      parametersRef:
+        group: gateway.envoyproxy.io
+        kind: EnvoyProxy
+        name: custom-proxy-config
+```
 
 **Supported gateway controllers:**
 
@@ -813,6 +861,11 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `gateway.gatewayClassName` | *string | No | Operator default | GatewayClass to reference (e.g., `envoy-gateway`, `cilium`) |
 | `gateway.addresses` | GatewayAddress[] | Yes (if `gateway` set) | | IP addresses requested from the gateway implementation |
 | `gateway.annotations` | map[string]string | No | | Additional annotations for the Gateway resource |
+| `gateway.infrastructure.annotations` | map[string]string | No | | Annotations propagated to gateway-generated resources (e.g., LB Service) |
+| `gateway.infrastructure.labels` | map[string]string | No | | Labels propagated to gateway-generated resources |
+| `gateway.infrastructure.parametersRef.group` | string | Yes (if `parametersRef` set) | | API group of the implementation-specific config resource |
+| `gateway.infrastructure.parametersRef.kind` | string | Yes (if `parametersRef` set) | | Kind of the implementation-specific config resource |
+| `gateway.infrastructure.parametersRef.name` | string | Yes (if `parametersRef` set) | | Name of the implementation-specific config resource |
 
 Each `DomainOverride` has:
 

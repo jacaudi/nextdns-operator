@@ -22,9 +22,17 @@ spec:
       external-dns.alpha.kubernetes.io/hostname: dns.example.com
     # infrastructure propagates metadata to resources created by the gateway
     # implementation (e.g., the LoadBalancer Service that Envoy Gateway creates).
+    # Use this to pass annotations needed for IP allocation (e.g., Cilium LB IPAM)
+    # or labels for resource identification.
     infrastructure:
       annotations:
         lbipam.cilium.io/ips: "192.168.1.53"
+      # labels:
+      #   app.kubernetes.io/managed-by: nextdns-operator
+      # parametersRef:
+      #   group: gateway.envoyproxy.io
+      #   kind: EnvoyProxy
+      #   name: custom-proxy-config
   cache:
     enabled: true
   metrics:
