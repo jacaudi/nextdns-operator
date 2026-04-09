@@ -6,16 +6,23 @@
       "@semantic-release/commit-analyzer",
       {
         "releaseRules": [
-          {
-            "breaking": true,
-            "release": "minor"
-          }
+          { "breaking": true, "release": "minor" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "chore", "scope": "deps", "release": "patch" }
         ]
       }
     ],
     [
       "@semantic-release/release-notes-generator",
       {
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "refactor", "section": "Code Refactoring" },
+            { "type": "chore", "scope": "deps", "section": "Dependencies" }
+          ]
+        },
         "writerOpts": {
           "headerPartial": "## {{#if @root.linkCompare~}}[{{version}}]({{@root.host}}/{{@root.owner}}/{{@root.repository}}/compare/{{previousTag}}...{{currentTag}}){{~else}}{{~version}}{{~/if}} ({{date}})"
         }
