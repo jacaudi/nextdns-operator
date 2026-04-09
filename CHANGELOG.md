@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/jacaudi/nextdns-operator/compare/v0.17.0...v0.17.1) (2026-04-09)
+
+### Bug Fixes
+
+* deduplicate setup data in NextDNSProfile status ([#118](https://github.com/jacaudi/nextdns-operator/issues/118)) ([a55bf1c](https://github.com/jacaudi/nextdns-operator/commit/a55bf1c68369f90024434672bb09e130cb218602)), closes [#111](https://github.com/jacaudi/nextdns-operator/issues/111) [#111](https://github.com/jacaudi/nextdns-operator/issues/111)
+* **deps:** update module k8s.io/klog/v2 to v2.140.0 ([8e0a304](https://github.com/jacaudi/nextdns-operator/commit/8e0a3046f6d3d1ee1128780be9636869d59ccca5))
+
 ## [0.17.0](https://github.com/jacaudi/nextdns-operator/compare/v0.16.1...v0.17.0) (2026-04-08)
 
 ### Features
