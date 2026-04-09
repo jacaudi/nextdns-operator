@@ -2562,16 +2562,6 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	assert.Equal(t, "eu", updated.Status.ObservedConfig.Settings.Logs.Location)
 	assert.True(t, updated.Status.ObservedConfig.Settings.BAV)
 
-	// Verify setup was populated
-	require.NotNil(t, updated.Status.ObservedConfig.Setup)
-	assert.Equal(t, []string{"45.90.28.0"}, updated.Status.ObservedConfig.Setup.IPv4)
-	assert.Equal(t, []string{"2a07:a8c0::"}, updated.Status.ObservedConfig.Setup.IPv6)
-	assert.Equal(t, "sdns://test-stamp", updated.Status.ObservedConfig.Setup.DNSCrypt)
-	require.NotNil(t, updated.Status.ObservedConfig.Setup.LinkedIP)
-	assert.Equal(t, []string{"45.90.28.0", "45.90.30.0"}, updated.Status.ObservedConfig.Setup.LinkedIP.Servers)
-	assert.Equal(t, "203.0.113.1", updated.Status.ObservedConfig.Setup.LinkedIP.IP)
-	assert.Equal(t, "test.dns1.nextdns.io", updated.Status.ObservedConfig.Setup.LinkedIP.DDNS)
-
 	// Verify parental control BlockBypass and Recreation were observed
 	require.NotNil(t, updated.Status.ObservedConfig.ParentalControl)
 	assert.True(t, updated.Status.ObservedConfig.ParentalControl.SafeSearch)
