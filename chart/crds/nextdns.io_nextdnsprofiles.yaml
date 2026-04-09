@@ -895,41 +895,6 @@ spec:
                     - bav
                     - web3
                     type: object
-                  setup:
-                    description: |-
-                      Setup contains observed DNS setup/endpoint configuration
-                      This is read-only data from the API — not user-configurable via spec
-                    properties:
-                      dnscrypt:
-                        description: DNSCrypt contains the DNSCrypt protocol stamp
-                        type: string
-                      ipv4:
-                        description: IPv4 contains DNS-over-HTTPS IPv4 addresses
-                        items:
-                          type: string
-                        type: array
-                      ipv6:
-                        description: IPv6 contains DNS-over-HTTPS IPv6 addresses
-                        items:
-                          type: string
-                        type: array
-                      linkedIP:
-                        description: LinkedIP contains linked IP configuration
-                        properties:
-                          ddns:
-                            description: DDNS is the dynamic DNS hostname
-                            type: string
-                          ip:
-                            description: IP is the currently linked IP address
-                            type: string
-                          servers:
-                            description: Servers contains the linked IP DNS server
-                              addresses
-                            items:
-                              type: string
-                            type: array
-                        type: object
-                    type: object
                 type: object
               observedGeneration:
                 description: ObservedGeneration is the generation last processed by
