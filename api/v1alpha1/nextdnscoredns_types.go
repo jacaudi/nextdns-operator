@@ -207,6 +207,87 @@ type CoreDNSMetricsConfig struct {
 	// +kubebuilder:default=true
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
+
+	// Port is the TCP port the prometheus plugin listens on.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=9153
+	// +optional
+	Port *int32 `json:"port,omitempty"`
+}
+
+// CoreDNSHealthConfig configures the CoreDNS health plugin used for
+// liveness probing. Maps to https://coredns.io/plugins/health/.
+type CoreDNSHealthConfig struct {
+	// Enabled enables the health plugin. Defaults to true.
+	// Disabling this also removes the deployment's liveness probe.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Port is the TCP port the health plugin listens on.
+	// Must match the deployment's liveness probe port (the operator
+	// keeps these in sync automatically).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8080
+	// +optional
+	Port *int32 `json:"port,omitempty"`
+
+	// Lameduck delays health endpoint failure during shutdown so load
+	// balancers can drain traffic cleanly. Must be a Go duration string
+	// (e.g., "10s"). When unset, the lameduck directive is omitted.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(ns|us|µs|ms|s|m|h)$`
+	Lameduck string `json:"lameduck,omitempty"`
+}
+
+// CoreDNSReadyConfig configures the CoreDNS ready plugin used for
+// readiness probing. Maps to https://coredns.io/plugins/ready/.
+type CoreDNSReadyConfig struct {
+	// Enabled enables the ready plugin. Defaults to true.
+	// Disabling this also removes the deployment's readiness probe.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Port is the TCP port the ready plugin listens on.
+	// Must match the deployment's readiness probe port (the operator
+	// keeps these in sync automatically).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8181
+	// +optional
+	Port *int32 `json:"port,omitempty"`
+}
+
+// ConsolidateRule defines a single CoreDNS errors plugin consolidate
+// directive used to reduce log spam from repeated errors.
+type ConsolidateRule struct {
+	// Interval is the consolidation window (Go duration string,
+	// e.g., "5m").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[0-9]+(ns|us|µs|ms|s|m|h)$`
+	Interval string `json:"interval"`
+
+	// Pattern is the regular expression matched against error log lines.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Pattern string `json:"pattern"`
+}
+
+// CoreDNSErrorsConfig configures the CoreDNS errors plugin.
+// Maps to https://coredns.io/plugins/errors/.
+type CoreDNSErrorsConfig struct {
+	// Enabled enables the errors plugin. Defaults to true.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Consolidate optionally reduces log spam by consolidating
+	// repeated error messages matching a pattern within an interval.
+	// +optional
+	Consolidate []ConsolidateRule `json:"consolidate,omitempty"`
 }
 
 // CoreDNSCacheConfig configures DNS response caching
@@ -450,6 +531,18 @@ type CorefileSpec struct {
 	// DNS server.
 	// +optional
 	Hosts *HostsConfig `json:"hosts,omitempty"`
+
+	// Health configures the CoreDNS health plugin (liveness endpoint).
+	// +optional
+	Health *CoreDNSHealthConfig `json:"health,omitempty"`
+
+	// Ready configures the CoreDNS ready plugin (readiness endpoint).
+	// +optional
+	Ready *CoreDNSReadyConfig `json:"ready,omitempty"`
+
+	// Errors configures the CoreDNS errors plugin (error logging).
+	// +optional
+	Errors *CoreDNSErrorsConfig `json:"errors,omitempty"`
 }
 
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
