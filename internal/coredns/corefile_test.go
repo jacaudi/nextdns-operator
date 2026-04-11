@@ -720,6 +720,145 @@ func TestValidateHostsEntries(t *testing.T) {
 	}
 }
 
+// TestGenerateCorefile_DefaultPlugins_Unchanged is a regression guard:
+// when Health/Ready/Errors/Metrics configs are nil (or zero-value),
+// the generated Corefile MUST match today's hardcoded output exactly.
+// Any deviation is a silent default-behavior regression.
+func TestGenerateCorefile_DefaultPlugins_Unchanged(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+	}
+	out := GenerateCorefile(cfg)
+	for _, want := range []string{"health :8080", "ready :8181", "prometheus :9153", "errors"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected default %q in output:\n%s", want, out)
+		}
+	}
+	// The errors directive must appear as a bare keyword, not a block,
+	// when no consolidate rules are configured.
+	hasBareErrors := false
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == "errors" {
+			hasBareErrors = true
+			break
+		}
+	}
+	if !hasBareErrors {
+		t.Errorf("expected bare 'errors' directive (no block) when defaults are used:\n%s", out)
+	}
+}
+
+func TestGenerateCorefile_ConfigurablePlugins(t *testing.T) {
+	healthPort := int32(9090)
+	readyPort := int32(9191)
+	metricsPort := int32(9292)
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		MetricsPort:     metricsPort,
+		Health: &HealthPluginConfig{
+			Enabled:  true,
+			Port:     healthPort,
+			Lameduck: "10s",
+		},
+		Ready: &ReadyPluginConfig{
+			Enabled: true,
+			Port:    readyPort,
+		},
+		Errors: &ErrorsPluginConfig{
+			Enabled: true,
+			Consolidate: []ConsolidateRuleConfig{
+				{Interval: "5m", Pattern: "^[a-z]+error"},
+			},
+		},
+	}
+	out := GenerateCorefile(cfg)
+	if !strings.Contains(out, "health :9090 {") {
+		t.Errorf("expected configured health port; got:\n%s", out)
+	}
+	if !strings.Contains(out, "lameduck 10s") {
+		t.Errorf("expected lameduck directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "ready :9191") {
+		t.Errorf("expected configured ready port; got:\n%s", out)
+	}
+	if !strings.Contains(out, "prometheus :9292") {
+		t.Errorf("expected configured metrics port; got:\n%s", out)
+	}
+	if !strings.Contains(out, "errors {") || !strings.Contains(out, `consolidate 5m "^[a-z]+error"`) {
+		t.Errorf("expected errors block with consolidate directive; got:\n%s", out)
+	}
+}
+
+func TestGenerateCorefile_DisabledPlugins(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  false,
+		Health:          &HealthPluginConfig{Enabled: false},
+		Ready:           &ReadyPluginConfig{Enabled: false},
+		Errors:          &ErrorsPluginConfig{Enabled: false},
+	}
+	out := GenerateCorefile(cfg)
+	// Walk line by line so we only match standalone plugin directives,
+	// not substrings (e.g., DNS names containing "ready").
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Each disabled plugin must not appear as a directive.
+		if strings.HasPrefix(trimmed, "health ") || trimmed == "health" {
+			t.Errorf("did not expect health directive in disabled output:\n%s", out)
+		}
+		if strings.HasPrefix(trimmed, "ready ") || trimmed == "ready" {
+			t.Errorf("did not expect ready directive in disabled output:\n%s", out)
+		}
+		if strings.HasPrefix(trimmed, "prometheus ") || trimmed == "prometheus" {
+			t.Errorf("did not expect prometheus directive in disabled output:\n%s", out)
+		}
+		if trimmed == "errors" || strings.HasPrefix(trimmed, "errors ") || trimmed == "errors {" {
+			t.Errorf("did not expect errors directive in disabled output:\n%s", out)
+		}
+	}
+}
+
+func TestValidatePluginConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		health      *HealthPluginConfig
+		ready       *ReadyPluginConfig
+		errors      *ErrorsPluginConfig
+		metricsPort int32
+		wantErr     bool
+	}{
+		{"defaults", nil, nil, nil, 0, false},
+		{"distinct ports", &HealthPluginConfig{Enabled: true, Port: 9090}, &ReadyPluginConfig{Enabled: true, Port: 9091}, nil, 9092, false},
+		{"health == ready", &HealthPluginConfig{Enabled: true, Port: 9090}, &ReadyPluginConfig{Enabled: true, Port: 9090}, nil, 9092, true},
+		{"health == metrics", &HealthPluginConfig{Enabled: true, Port: 9092}, nil, nil, 9092, true},
+		{"ready == metrics", nil, &ReadyPluginConfig{Enabled: true, Port: 9092}, nil, 9092, true},
+		{"valid lameduck", &HealthPluginConfig{Enabled: true, Lameduck: "10s"}, nil, nil, 0, false},
+		{"bad lameduck", &HealthPluginConfig{Enabled: true, Lameduck: "10x"}, nil, nil, 0, true},
+		{"valid consolidate", nil, nil, &ErrorsPluginConfig{Enabled: true, Consolidate: []ConsolidateRuleConfig{{Interval: "5m", Pattern: "x"}}}, 0, false},
+		{"bad consolidate interval", nil, nil, &ErrorsPluginConfig{Enabled: true, Consolidate: []ConsolidateRuleConfig{{Interval: "5x", Pattern: "x"}}}, 0, true},
+		{"missing consolidate pattern", nil, nil, &ErrorsPluginConfig{Enabled: true, Consolidate: []ConsolidateRuleConfig{{Interval: "5m"}}}, 0, true},
+		{"missing consolidate interval", nil, nil, &ErrorsPluginConfig{Enabled: true, Consolidate: []ConsolidateRuleConfig{{Pattern: "x"}}}, 0, true},
+		{"disabled health skips collision", &HealthPluginConfig{Enabled: false, Port: 9090}, &ReadyPluginConfig{Enabled: true, Port: 9090}, nil, 0, false},
+		{"out of range port", &HealthPluginConfig{Enabled: true, Port: 70000}, nil, nil, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePluginConfig(tt.health, tt.ready, tt.errors, tt.metricsPort)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("got err=%v, wantErr=%v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string
