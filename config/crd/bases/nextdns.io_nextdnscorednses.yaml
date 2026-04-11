@@ -54,20 +54,102 @@ spec:
           spec:
             description: NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
             properties:
-              cache:
-                description: Cache configures DNS response caching
+              corefile:
+                description: |-
+                  Corefile groups CoreDNS plugin-level configuration (upstream, cache,
+                  metrics, logging, domain overrides).
                 properties:
-                  enabled:
-                    default: true
-                    description: Enabled enables DNS response caching
-                    type: boolean
-                  successTTL:
-                    default: 3600
-                    description: SuccessTTL specifies the TTL for successful responses
-                      (in seconds)
-                    format: int32
-                    minimum: 0
-                    type: integer
+                  cache:
+                    description: Cache configures DNS response caching
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled enables DNS response caching
+                        type: boolean
+                      successTTL:
+                        default: 3600
+                        description: SuccessTTL specifies the TTL for successful responses
+                          (in seconds)
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                  domainOverrides:
+                    description: |-
+                      DomainOverrides configures domain-specific DNS upstream servers.
+                      Queries for these domains will be forwarded to the specified upstreams
+                      instead of NextDNS.
+                    items:
+                      description: DomainOverride specifies a domain-specific DNS
+                        upstream configuration
+                      properties:
+                        cacheTTL:
+                          description: CacheTTL specifies the cache TTL for this domain
+                            in seconds (optional)
+                          format: int32
+                          minimum: 0
+                          type: integer
+                        domain:
+                          description: Domain is the DNS domain to override (e.g.,
+                            "corp.example.com")
+                          minLength: 1
+                          type: string
+                        upstreams:
+                          description: |-
+                            Upstreams is the list of upstream DNS server IPs for this domain
+                            Each entry must be a valid IPv4 address or IPv4:port
+                          items:
+                            type: string
+                          minItems: 1
+                          type: array
+                      required:
+                      - domain
+                      - upstreams
+                      type: object
+                    type: array
+                  logging:
+                    description: Logging configures DNS query logging
+                    properties:
+                      enabled:
+                        default: false
+                        description: Enabled enables DNS query logging
+                        type: boolean
+                    type: object
+                  metrics:
+                    description: Metrics configures metrics and monitoring
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled enables the metrics endpoint on CoreDNS
+                        type: boolean
+                    type: object
+                  upstream:
+                    description: Upstream configures the upstream DNS connection to
+                      NextDNS
+                    properties:
+                      deviceName:
+                        description: |-
+                          DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
+                          The name is embedded in the upstream endpoint: prepended to the DoT SNI
+                          hostname or appended to the DoH URL path.
+                          Only alphanumeric characters, hyphens, and spaces are allowed.
+                          Spaces are converted to -- for DoT and URL-encoded for DoH.
+                          Ignored when using plain DNS protocol.
+                        maxLength: 63
+                        pattern: ^[-a-zA-Z0-9 ]+$
+                        type: string
+                      primary:
+                        default: DoT
+                        description: Primary specifies the primary protocol for DNS
+                          queries
+                        enum:
+                        - DoT
+                        - DoH
+                        - DNS
+                        type: string
+                    required:
+                    - primary
+                    type: object
                 type: object
               deployment:
                 description: Deployment configures the CoreDNS deployment
@@ -1144,38 +1226,6 @@ spec:
                       type: object
                     type: array
                 type: object
-              domainOverrides:
-                description: |-
-                  DomainOverrides configures domain-specific DNS upstream servers
-                  Queries for these domains will be forwarded to the specified upstreams
-                  instead of NextDNS
-                items:
-                  description: DomainOverride specifies a domain-specific DNS upstream
-                    configuration
-                  properties:
-                    cacheTTL:
-                      description: CacheTTL specifies the cache TTL for this domain
-                        in seconds (optional)
-                      format: int32
-                      minimum: 0
-                      type: integer
-                    domain:
-                      description: Domain is the DNS domain to override (e.g., "corp.example.com")
-                      minLength: 1
-                      type: string
-                    upstreams:
-                      description: |-
-                        Upstreams is the list of upstream DNS server IPs for this domain
-                        Each entry must be a valid IPv4 address or IPv4:port
-                      items:
-                        type: string
-                      minItems: 1
-                      type: array
-                  required:
-                  - domain
-                  - upstreams
-                  type: object
-                type: array
               gateway:
                 description: |-
                   Gateway configures Gateway API resources for DNS traffic exposure.
@@ -1259,22 +1309,6 @@ spec:
                 required:
                 - addresses
                 type: object
-              logging:
-                description: Logging configures DNS query logging
-                properties:
-                  enabled:
-                    default: false
-                    description: Enabled enables DNS query logging
-                    type: boolean
-                type: object
-              metrics:
-                description: Metrics configures metrics and monitoring
-                properties:
-                  enabled:
-                    default: true
-                    description: Enabled enables the metrics endpoint on CoreDNS
-                    type: boolean
-                type: object
               multus:
                 description: Multus configures a secondary network interface via Multus
                   CNI
@@ -1342,31 +1376,6 @@ spec:
                     - ClusterIP
                     - LoadBalancer
                     type: string
-                type: object
-              upstream:
-                description: Upstream configures the upstream DNS connection to NextDNS
-                properties:
-                  deviceName:
-                    description: |-
-                      DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
-                      The name is embedded in the upstream endpoint: prepended to the DoT SNI
-                      hostname or appended to the DoH URL path.
-                      Only alphanumeric characters, hyphens, and spaces are allowed.
-                      Spaces are converted to -- for DoT and URL-encoded for DoH.
-                      Ignored when using plain DNS protocol.
-                    maxLength: 63
-                    pattern: ^[-a-zA-Z0-9 ]+$
-                    type: string
-                  primary:
-                    default: DoT
-                    description: Primary specifies the primary protocol for DNS queries
-                    enum:
-                    - DoT
-                    - DoH
-                    - DNS
-                    type: string
-                required:
-                - primary
                 type: object
             required:
             - profileRef

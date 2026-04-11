@@ -613,11 +613,13 @@ func TestNextDNSCoreDNSReconciler_Reconcile_HappyPath(t *testing.T) {
 			ProfileRef: nextdnsv1alpha1.ResourceReference{
 				Name: "test-profile",
 			},
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary: nextdnsv1alpha1.DNSProtocolDoT,
-			},
 			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
 				Replicas: &replicas,
+			},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+				},
 			},
 		},
 	}
@@ -1207,17 +1209,19 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-					Upstream: &nextdnsv1alpha1.UpstreamConfig{
-						Primary: nextdnsv1alpha1.DNSProtocolDoT,
-					},
-					Cache: &nextdnsv1alpha1.CoreDNSCacheConfig{
-						SuccessTTL: int32Ptr(60),
-					},
-					Logging: &nextdnsv1alpha1.CoreDNSLoggingConfig{
-						Enabled: boolPtr(true),
-					},
-					Metrics: &nextdnsv1alpha1.CoreDNSMetricsConfig{
-						Enabled: boolPtr(true),
+					Corefile: &nextdnsv1alpha1.CorefileSpec{
+						Upstream: &nextdnsv1alpha1.UpstreamConfig{
+							Primary: nextdnsv1alpha1.DNSProtocolDoT,
+						},
+						Cache: &nextdnsv1alpha1.CoreDNSCacheConfig{
+							SuccessTTL: int32Ptr(60),
+						},
+						Metrics: &nextdnsv1alpha1.CoreDNSMetricsConfig{
+							Enabled: boolPtr(true),
+						},
+						Logging: &nextdnsv1alpha1.CoreDNSLoggingConfig{
+							Enabled: boolPtr(true),
+						},
 					},
 				},
 			},
@@ -1240,8 +1244,10 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-					Upstream: &nextdnsv1alpha1.UpstreamConfig{
-						Primary: nextdnsv1alpha1.DNSProtocolDNS,
+					Corefile: &nextdnsv1alpha1.CorefileSpec{
+						Upstream: &nextdnsv1alpha1.UpstreamConfig{
+							Primary: nextdnsv1alpha1.DNSProtocolDNS,
+						},
 					},
 					// Use defaults for cache, logging, metrics
 				},
@@ -1516,8 +1522,10 @@ func TestNextDNSCoreDNSReconciler_UpdateStatus(t *testing.T) {
 			ProfileRef: nextdnsv1alpha1.ResourceReference{
 				Name: "test-profile",
 			},
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary: nextdnsv1alpha1.DNSProtocolDoT,
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+				},
 			},
 		},
 	}
@@ -1785,15 +1793,17 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithDomainOverrides(t *tes
 			Namespace: "default",
 		},
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
-				{
-					Domain:    "internal.corp.com",
-					Upstreams: []string{"10.0.0.53", "10.0.0.54"},
-					CacheTTL:  &cacheTTL,
-				},
-				{
-					Domain:    "home.local",
-					Upstreams: []string{"192.168.1.1"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+					{
+						Domain:    "internal.corp.com",
+						Upstreams: []string{"10.0.0.53", "10.0.0.54"},
+						CacheTTL:  &cacheTTL,
+					},
+					{
+						Domain:    "home.local",
+						Upstreams: []string{"192.168.1.1"},
+					},
 				},
 			},
 		},
@@ -1831,14 +1841,16 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_DuplicateDomainError(t *te
 			Namespace: "default",
 		},
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
-				{
-					Domain:    "corp.example.com",
-					Upstreams: []string{"10.0.0.1"},
-				},
-				{
-					Domain:    "corp.example.com",
-					Upstreams: []string{"10.0.0.2"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+					{
+						Domain:    "corp.example.com",
+						Upstreams: []string{"10.0.0.1"},
+					},
+					{
+						Domain:    "corp.example.com",
+						Upstreams: []string{"10.0.0.2"},
+					},
 				},
 			},
 		},
@@ -1861,9 +1873,11 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithDeviceName(t *testing.
 
 	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary:    nextdnsv1alpha1.DNSProtocolDoT,
-				DeviceName: "Home Router",
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary:    nextdnsv1alpha1.DNSProtocolDoT,
+					DeviceName: "Home Router",
+				},
 			},
 		},
 	}
@@ -1885,8 +1899,10 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutDeviceName(t *testi
 
 	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary: nextdnsv1alpha1.DNSProtocolDoT,
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+				},
 			},
 		},
 	}
@@ -1939,11 +1955,13 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {
 			ProfileRef: nextdnsv1alpha1.ResourceReference{
 				Name: "test-profile",
 			},
-			DomainOverrides: []nextdnsv1alpha1.DomainOverride{
-				{
-					Domain:    "internal.corp.com",
-					Upstreams: []string{"10.0.0.53", "10.0.0.54"},
-					CacheTTL:  &cacheTTL,
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				DomainOverrides: []nextdnsv1alpha1.DomainOverride{
+					{
+						Domain:    "internal.corp.com",
+						Upstreams: []string{"10.0.0.53", "10.0.0.54"},
+						CacheTTL:  &cacheTTL,
+					},
 				},
 			},
 		},
@@ -2276,7 +2294,6 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
 		},
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
-			Upstream:   &nextdnsv1alpha1.UpstreamConfig{Primary: nextdnsv1alpha1.DNSProtocolDoT},
 			Deployment: &nextdnsv1alpha1.CoreDNSDeploymentConfig{
 				Replicas: &replicas,
 			},
@@ -2286,6 +2303,9 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
 			Multus: &nextdnsv1alpha1.MultusConfig{
 				NetworkAttachmentDefinition: "vlan30-macvlan",
 				IPs:                         []string{"10.10.30.100", "10.10.30.101"},
+			},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{Primary: nextdnsv1alpha1.DNSProtocolDoT},
 			},
 		},
 	}
@@ -2349,9 +2369,11 @@ func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameIgnoredWithPlainDNS(t *tes
 		},
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary:    nextdnsv1alpha1.DNSProtocolDNS,
-				DeviceName: "MyDevice",
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary:    nextdnsv1alpha1.DNSProtocolDNS,
+					DeviceName: "MyDevice",
+				},
 			},
 		},
 	}
@@ -2405,9 +2427,11 @@ func TestNextDNSCoreDNSReconciler_Reconcile_DeviceNameNotIgnoredWithDoT(t *testi
 		},
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
-			Upstream: &nextdnsv1alpha1.UpstreamConfig{
-				Primary:    nextdnsv1alpha1.DNSProtocolDoT,
-				DeviceName: "MyDevice",
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary:    nextdnsv1alpha1.DNSProtocolDoT,
+					DeviceName: "MyDevice",
+				},
 			},
 		},
 	}
