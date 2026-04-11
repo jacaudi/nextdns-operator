@@ -3040,3 +3040,79 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
 	require.Len(t, udpRoute.Spec.Rules[0].BackendRefs, 1)
 	assert.Equal(t, gatewayv1.ObjectName(resourceName), udpRoute.Spec.Rules[0].BackendRefs[0].Name)
 }
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithRewriteRules(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Rewrite: []nextdnsv1alpha1.RewriteRule{
+					{Type: "name", Match: "service.example.com", Replacement: "ingress.cluster.local"},
+					{Type: "name", Matcher: "suffix", Match: "old.example.com", Replacement: "new.example.com"},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.Len(t, cfg.RewriteRules, 2)
+
+	assert.Equal(t, "name", cfg.RewriteRules[0].Type)
+	assert.Equal(t, "service.example.com", cfg.RewriteRules[0].Match)
+	assert.Equal(t, "ingress.cluster.local", cfg.RewriteRules[0].Replacement)
+	assert.Equal(t, "", cfg.RewriteRules[0].Matcher)
+
+	assert.Equal(t, "name", cfg.RewriteRules[1].Type)
+	assert.Equal(t, "suffix", cfg.RewriteRules[1].Matcher)
+	assert.Equal(t, "old.example.com", cfg.RewriteRules[1].Match)
+	assert.Equal(t, "new.example.com", cfg.RewriteRules[1].Replacement)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithInvalidRewriteRule(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+
+	r := &NextDNSCoreDNSReconciler{
+		Scheme: scheme,
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Rewrite: []nextdnsv1alpha1.RewriteRule{
+					// Missing Type — should fail validation
+					{Match: "service.example.com", Replacement: "ingress.cluster.local"},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	_, err := r.buildCorefileConfig(coreDNS, profile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rewrite rule validation failed")
+}

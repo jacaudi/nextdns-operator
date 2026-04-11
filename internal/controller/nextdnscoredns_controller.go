@@ -537,6 +537,22 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		}
 	}
 
+	// Add rewrite rules if specified
+	if cf != nil && len(cf.Rewrite) > 0 {
+		cfg.RewriteRules = make([]coredns.RewriteRuleConfig, len(cf.Rewrite))
+		for i, r := range cf.Rewrite {
+			cfg.RewriteRules[i] = coredns.RewriteRuleConfig{
+				Type:        r.Type,
+				Match:       r.Match,
+				Replacement: r.Replacement,
+				Matcher:     r.Matcher,
+			}
+		}
+		if err := coredns.ValidateRewriteRules(cfg.RewriteRules); err != nil {
+			return nil, err
+		}
+	}
+
 	return cfg, nil
 }
 
