@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+	"github.com/jacaudi/nextdns-operator/internal/coredns"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -2010,6 +2011,151 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_InvalidForwardTuning(t *te
 	_, err := r.buildCorefileConfig(coreDNS, profile)
 	require.Error(t, err, "buildCorefileConfig should return error for invalid forward tuning")
 	assert.Contains(t, err.Error(), "forward tuning validation failed")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithPluginConfig verifies
+// that spec.corefile.{health,ready,errors,metrics.port} are copied into the
+// internal coredns.CorefileConfig and that ValidatePluginConfig is called.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithPluginConfig(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled:  boolPtr(true),
+					Port:     int32Ptr(9090),
+					Lameduck: "10s",
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9191),
+				},
+				Errors: &nextdnsv1alpha1.CoreDNSErrorsConfig{
+					Enabled: boolPtr(true),
+					Consolidate: []nextdnsv1alpha1.ConsolidateRule{
+						{Interval: "5m", Pattern: "^[a-z]+error"},
+					},
+				},
+				Metrics: &nextdnsv1alpha1.CoreDNSMetricsConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9292),
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+
+	require.NotNil(t, cfg.Health, "Health plugin config should be copied")
+	assert.True(t, cfg.Health.Enabled)
+	assert.Equal(t, int32(9090), cfg.Health.Port)
+	assert.Equal(t, "10s", cfg.Health.Lameduck)
+
+	require.NotNil(t, cfg.Ready, "Ready plugin config should be copied")
+	assert.True(t, cfg.Ready.Enabled)
+	assert.Equal(t, int32(9191), cfg.Ready.Port)
+
+	require.NotNil(t, cfg.Errors, "Errors plugin config should be copied")
+	assert.True(t, cfg.Errors.Enabled)
+	require.Len(t, cfg.Errors.Consolidate, 1)
+	assert.Equal(t, "5m", cfg.Errors.Consolidate[0].Interval)
+	assert.Equal(t, "^[a-z]+error", cfg.Errors.Consolidate[0].Pattern)
+
+	assert.Equal(t, int32(9292), cfg.MetricsPort, "MetricsPort should be copied")
+
+	// Verify the resulting config is actually used by the generator.
+	out := coredns.GenerateCorefile(cfg)
+	assert.Contains(t, out, "health :9090 {")
+	assert.Contains(t, out, "lameduck 10s")
+	assert.Contains(t, out, "ready :9191")
+	assert.Contains(t, out, "prometheus :9292")
+	assert.Contains(t, out, "errors {")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_EnabledDefaultsTrue verifies
+// that when spec.corefile.health exists but spec.corefile.health.enabled is
+// nil, the copied config defaults to Enabled=true (matching the kubebuilder
+// default). Without this behavior a user setting only health.port would
+// silently disable the plugin.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_EnabledDefaultsTrue(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Port: int32Ptr(9090),
+					// Enabled unset — must default to true
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Port: int32Ptr(9191),
+				},
+				Errors: &nextdnsv1alpha1.CoreDNSErrorsConfig{},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Health)
+	assert.True(t, cfg.Health.Enabled, "Health.Enabled should default to true when unset")
+	require.NotNil(t, cfg.Ready)
+	assert.True(t, cfg.Ready.Enabled, "Ready.Enabled should default to true when unset")
+	require.NotNil(t, cfg.Errors)
+	assert.True(t, cfg.Errors.Enabled, "Errors.Enabled should default to true when unset")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_PortCollision verifies
+// that buildCorefileConfig returns an error when configured plugin ports
+// collide. The error must come from ValidatePluginConfig.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_PortCollision(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9090),
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9090), // same port as health
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	_, err := r.buildCorefileConfig(coreDNS, profile)
+	require.Error(t, err, "colliding ports should return an error")
+	assert.Contains(t, err.Error(), "health and ready")
 }
 
 func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {

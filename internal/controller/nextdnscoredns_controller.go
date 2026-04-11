@@ -592,7 +592,60 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		cfg.Hosts = hosts
 	}
 
+	// Copy health/ready/errors plugin config and metrics.port. The API
+	// types default Enabled=true via kubebuilder; we mirror that here so
+	// a user setting only Port does not silently disable the plugin.
+	if cf != nil && cf.Health != nil {
+		hpc := &coredns.HealthPluginConfig{
+			Enabled:  boolWithDefault(cf.Health.Enabled, true),
+			Lameduck: cf.Health.Lameduck,
+		}
+		if cf.Health.Port != nil {
+			hpc.Port = *cf.Health.Port
+		}
+		cfg.Health = hpc
+	}
+	if cf != nil && cf.Ready != nil {
+		rpc := &coredns.ReadyPluginConfig{
+			Enabled: boolWithDefault(cf.Ready.Enabled, true),
+		}
+		if cf.Ready.Port != nil {
+			rpc.Port = *cf.Ready.Port
+		}
+		cfg.Ready = rpc
+	}
+	if cf != nil && cf.Errors != nil {
+		epc := &coredns.ErrorsPluginConfig{
+			Enabled: boolWithDefault(cf.Errors.Enabled, true),
+		}
+		for _, c := range cf.Errors.Consolidate {
+			epc.Consolidate = append(epc.Consolidate, coredns.ConsolidateRuleConfig{
+				Interval: c.Interval,
+				Pattern:  c.Pattern,
+			})
+		}
+		cfg.Errors = epc
+	}
+	if cf != nil && cf.Metrics != nil && cf.Metrics.Port != nil {
+		cfg.MetricsPort = *cf.Metrics.Port
+	}
+
+	// Validate plugin config (port ranges, collisions, duration parsing).
+	if err := coredns.ValidatePluginConfig(cfg.Health, cfg.Ready, cfg.Errors, cfg.MetricsPort); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// boolWithDefault returns *p if p is non-nil, otherwise def. Used to
+// mirror kubebuilder `default=true` semantics for pointer-to-bool API
+// fields that control plugin enablement.
+func boolWithDefault(p *bool, def bool) bool {
+	if p == nil {
+		return def
+	}
+	return *p
 }
 
 // reconcileWorkload dispatches to Deployment or DaemonSet reconciliation based on mode
