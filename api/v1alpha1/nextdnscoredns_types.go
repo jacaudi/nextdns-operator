@@ -286,6 +286,38 @@ type GatewayParametersReference struct {
 	Name string `json:"name"`
 }
 
+// RewriteRule defines a single CoreDNS rewrite plugin rule.
+// Maps to the CoreDNS rewrite plugin: https://coredns.io/plugins/rewrite/
+type RewriteRule struct {
+	// Type is the rewrite type. Maps to the first argument of the
+	// CoreDNS rewrite directive. The most common value is "name", which
+	// rewrites query names. Other values like "class", "type", "ttl",
+	// and "edns0" are also supported by CoreDNS.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=name;class;type;ttl;edns0
+	Type string `json:"type"`
+
+	// Match is the input pattern (or attribute) the rule matches against.
+	// For type=name this is the query name pattern (interpreted according
+	// to the optional matcher: exact, prefix, suffix, substring, regex).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Match string `json:"match"`
+
+	// Replacement is the value the matched query is rewritten to.
+	// For type=name this is the replacement query name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Replacement string `json:"replacement"`
+
+	// Matcher is an optional sub-type for type=name rewrites.
+	// One of: exact, prefix, suffix, substring, regex.
+	// When omitted, CoreDNS uses its default (exact match).
+	// +optional
+	// +kubebuilder:validation:Enum=exact;prefix;suffix;substring;regex
+	Matcher string `json:"matcher,omitempty"`
+}
+
 // CorefileSpec groups CoreDNS plugin-level configuration.
 // This is the configuration that ends up in the generated Corefile,
 // separate from Kubernetes-level deployment concerns (Deployment, Service,
@@ -312,6 +344,12 @@ type CorefileSpec struct {
 	// instead of NextDNS.
 	// +optional
 	DomainOverrides []DomainOverride `json:"domainOverrides,omitempty"`
+
+	// Rewrite configures the CoreDNS rewrite plugin for query rewriting
+	// (CNAME flattening, domain remapping, etc.). Rules are emitted in
+	// order and fire before the forward directive.
+	// +optional
+	Rewrite []RewriteRule `json:"rewrite,omitempty"`
 }
 
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS

@@ -123,6 +123,60 @@ spec:
                         description: Enabled enables the metrics endpoint on CoreDNS
                         type: boolean
                     type: object
+                  rewrite:
+                    description: |-
+                      Rewrite configures the CoreDNS rewrite plugin for query rewriting
+                      (CNAME flattening, domain remapping, etc.). Rules are emitted in
+                      order and fire before the forward directive.
+                    items:
+                      description: |-
+                        RewriteRule defines a single CoreDNS rewrite plugin rule.
+                        Maps to the CoreDNS rewrite plugin: https://coredns.io/plugins/rewrite/
+                      properties:
+                        match:
+                          description: |-
+                            Match is the input pattern (or attribute) the rule matches against.
+                            For type=name this is the query name pattern (interpreted according
+                            to the optional matcher: exact, prefix, suffix, substring, regex).
+                          minLength: 1
+                          type: string
+                        matcher:
+                          description: |-
+                            Matcher is an optional sub-type for type=name rewrites.
+                            One of: exact, prefix, suffix, substring, regex.
+                            When omitted, CoreDNS uses its default (exact match).
+                          enum:
+                          - exact
+                          - prefix
+                          - suffix
+                          - substring
+                          - regex
+                          type: string
+                        replacement:
+                          description: |-
+                            Replacement is the value the matched query is rewritten to.
+                            For type=name this is the replacement query name.
+                          minLength: 1
+                          type: string
+                        type:
+                          description: |-
+                            Type is the rewrite type. Maps to the first argument of the
+                            CoreDNS rewrite directive. The most common value is "name", which
+                            rewrites query names. Other values like "class", "type", "ttl",
+                            and "edns0" are also supported by CoreDNS.
+                          enum:
+                          - name
+                          - class
+                          - type
+                          - ttl
+                          - edns0
+                          type: string
+                      required:
+                      - match
+                      - replacement
+                      - type
+                      type: object
+                    type: array
                   upstream:
                     description: Upstream configures the upstream DNS connection to
                       NextDNS
