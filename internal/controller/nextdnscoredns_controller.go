@@ -487,6 +487,19 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	if cf != nil && cf.Upstream != nil {
 		cfg.PrimaryProtocol = string(cf.Upstream.Primary)
 		cfg.DeviceName = cf.Upstream.DeviceName
+
+		if cf.Upstream.Forward != nil {
+			cfg.ForwardTuning = &coredns.ForwardTuningConfig{
+				Policy:        string(cf.Upstream.Forward.Policy),
+				HealthCheck:   cf.Upstream.Forward.HealthCheck,
+				Expire:        cf.Upstream.Forward.Expire,
+				MaxConcurrent: cf.Upstream.Forward.MaxConcurrent,
+				MaxFails:      cf.Upstream.Forward.MaxFails,
+			}
+			if err := coredns.ValidateForwardTuning(cfg.ForwardTuning); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Override cache settings if specified
