@@ -235,7 +235,7 @@ kubectl get nextdnscoredns home-dns
 
 ### Upstream Protocols
 
-The `upstream.primary` field controls how CoreDNS connects to NextDNS. Three protocols are supported:
+The `corefile.upstream.primary` field controls how CoreDNS connects to NextDNS. Three protocols are supported:
 
 | Protocol | Port | Encrypted | Recommended |
 |----------|------|-----------|-------------|
@@ -548,7 +548,7 @@ The CoreDNS pods will have interfaces on both the cluster network and the VLAN, 
 
 ### Device Identification
 
-Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional `upstream.deviceName` field. When set, the device name is embedded in the upstream DNS endpoint so NextDNS can attribute queries to a specific deployment.
+Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional `corefile.upstream.deviceName` field. When set, the device name is embedded in the upstream DNS endpoint so NextDNS can attribute queries to a specific deployment.
 
 > **Note:** Device identification only works with DoT (via SNI) and DoH (via URL path). When using plain DNS protocol, `deviceName` is ignored and a `DeviceNameIgnored` warning condition is set on the CR.
 
