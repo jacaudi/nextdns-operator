@@ -373,6 +373,45 @@ type RewriteRule struct {
 	Matcher string `json:"matcher,omitempty"`
 }
 
+// HostsEntry is a single static IP-to-hostname mapping for the
+// CoreDNS hosts plugin. One entry can map a single IP to multiple
+// hostnames (matching the /etc/hosts file format).
+type HostsEntry struct {
+	// IP is the IP address (IPv4 or IPv6) to return for the listed hostnames.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	IP string `json:"ip"`
+
+	// Hostnames is the list of hostnames that should resolve to IP.
+	// At least one hostname is required.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Hostnames []string `json:"hostnames"`
+}
+
+// HostsConfig configures the CoreDNS hosts plugin for inline static
+// hostname-to-IP overrides. Maps to https://coredns.io/plugins/hosts/.
+type HostsConfig struct {
+	// Entries is the list of static IP-to-hostname mappings. Emitted
+	// inside the hosts plugin block in the generated Corefile.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Entries []HostsEntry `json:"entries"`
+
+	// Fallthrough controls whether queries that do not match a hosts
+	// entry are passed to the next plugin in the chain (forward to
+	// NextDNS). Defaults to true so unmatched names continue to resolve.
+	// +kubebuilder:default=true
+	// +optional
+	Fallthrough *bool `json:"fallthrough,omitempty"`
+
+	// TTL is the TTL (in seconds) returned for static entries.
+	// CoreDNS default is 3600 if unset.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	TTL *int32 `json:"ttl,omitempty"`
+}
+
 // CorefileSpec groups CoreDNS plugin-level configuration.
 // This is the configuration that ends up in the generated Corefile,
 // separate from Kubernetes-level deployment concerns (Deployment, Service,
@@ -405,6 +444,12 @@ type CorefileSpec struct {
 	// order and fire before the forward directive.
 	// +optional
 	Rewrite []RewriteRule `json:"rewrite,omitempty"`
+
+	// Hosts configures the CoreDNS hosts plugin for inline static
+	// hostname-to-IP overrides without running a separate upstream
+	// DNS server.
+	// +optional
+	Hosts *HostsConfig `json:"hosts,omitempty"`
 }
 
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
