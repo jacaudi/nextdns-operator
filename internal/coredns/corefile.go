@@ -4,6 +4,7 @@ package coredns
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -68,6 +69,44 @@ func ValidateForwardTuning(t *ForwardTuningConfig) error {
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("forward tuning validation failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// HostsEntryConfig is a single IP-to-hostnames mapping for the hosts plugin.
+type HostsEntryConfig struct {
+	IP        string
+	Hostnames []string
+}
+
+// HostsPluginConfig configures the CoreDNS hosts plugin block.
+type HostsPluginConfig struct {
+	Entries     []HostsEntryConfig
+	Fallthrough bool  // emit fallthrough directive
+	TTL         int32 // 0 means omit (use CoreDNS default)
+}
+
+// ValidateHostsEntries checks that each entry has a parseable IP and at
+// least one hostname. Returns an error describing all validation failures.
+func ValidateHostsEntries(entries []HostsEntryConfig) error {
+	var errs []string
+	for i, e := range entries {
+		if e.IP == "" {
+			errs = append(errs, fmt.Sprintf("hosts entry %d: ip is required", i))
+		} else if net.ParseIP(e.IP) == nil {
+			errs = append(errs, fmt.Sprintf("hosts entry %d: invalid ip %q", i, e.IP))
+		}
+		if len(e.Hostnames) == 0 {
+			errs = append(errs, fmt.Sprintf("hosts entry %d: at least one hostname required", i))
+		}
+		for j, h := range e.Hostnames {
+			if h == "" {
+				errs = append(errs, fmt.Sprintf("hosts entry %d hostname %d: empty hostname", i, j))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("hosts validation failed: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }
@@ -150,6 +189,10 @@ type CorefileConfig struct {
 	// ForwardTuning optionally configures forward plugin tuning options.
 	// When nil, CoreDNS defaults apply and forward block shape is unchanged.
 	ForwardTuning *ForwardTuningConfig
+
+	// Hosts configures the CoreDNS hosts plugin for inline static overrides.
+	// When set, a hosts block is emitted before the forward plugin.
+	Hosts *HostsPluginConfig
 }
 
 // ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
@@ -187,8 +230,12 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	// Generate the catch-all block for NextDNS
 	sb.WriteString(". {\n")
 
-	// Rewrite directives fire before forward (CoreDNS plugin order matters)
+	// Rewrite directives fire first so the (possibly rewritten) query is
+	// matched by hosts and then forwarded (CoreDNS plugin order matters).
 	writeRewriteRules(&sb, cfg.RewriteRules)
+
+	// Hosts block (before forward, so static entries resolve without hitting NextDNS)
+	writeHostsBlock(&sb, cfg.Hosts)
 
 	// Generate forward plugin configuration
 	writeForwardPlugin(&sb, cfg)
@@ -253,6 +300,26 @@ func writeDomainOverrideBlock(sb *strings.Builder, override *DomainOverrideConfi
 
 	sb.WriteString("    errors\n")
 	sb.WriteString("}\n\n")
+}
+
+// writeHostsBlock writes a CoreDNS hosts plugin block if hosts is non-nil and
+// has at least one entry. The block is written before the forward plugin so
+// static entries resolve without hitting NextDNS.
+func writeHostsBlock(sb *strings.Builder, hosts *HostsPluginConfig) {
+	if hosts == nil || len(hosts.Entries) == 0 {
+		return
+	}
+	sb.WriteString("    hosts {\n")
+	for _, e := range hosts.Entries {
+		fmt.Fprintf(sb, "        %s %s\n", e.IP, strings.Join(e.Hostnames, " "))
+	}
+	if hosts.TTL > 0 {
+		fmt.Fprintf(sb, "        ttl %d\n", hosts.TTL)
+	}
+	if hosts.Fallthrough {
+		sb.WriteString("        fallthrough\n")
+	}
+	sb.WriteString("    }\n")
 }
 
 // formatDeviceNameDoT converts a device name for DoT SNI (spaces become --)

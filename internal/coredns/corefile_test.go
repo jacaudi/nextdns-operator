@@ -654,6 +654,72 @@ func TestValidateForwardTuning(t *testing.T) {
 	}
 }
 
+func TestGenerateCorefile_WithHostsBlock(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		Hosts: &HostsPluginConfig{
+			Entries: []HostsEntryConfig{
+				{IP: "192.168.1.100", Hostnames: []string{"grafana.internal", "grafana.example.com"}},
+				{IP: "192.168.1.101", Hostnames: []string{"prometheus.internal"}},
+			},
+			Fallthrough: true,
+			TTL:         3600,
+		},
+	}
+
+	out := GenerateCorefile(cfg)
+
+	// Hosts block must exist and contain entries
+	if !strings.Contains(out, "hosts {") {
+		t.Errorf("expected hosts block; got:\n%s", out)
+	}
+	if !strings.Contains(out, "192.168.1.100 grafana.internal grafana.example.com") {
+		t.Errorf("expected first hosts entry; got:\n%s", out)
+	}
+	if !strings.Contains(out, "192.168.1.101 prometheus.internal") {
+		t.Errorf("expected second hosts entry; got:\n%s", out)
+	}
+	if !strings.Contains(out, "fallthrough") {
+		t.Errorf("expected fallthrough directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "ttl 3600") {
+		t.Errorf("expected ttl directive; got:\n%s", out)
+	}
+
+	// Hosts block must precede forward
+	hostsIdx := strings.Index(out, "hosts {")
+	forwardIdx := strings.Index(out, "forward .")
+	if hostsIdx == -1 || forwardIdx == -1 || hostsIdx > forwardIdx {
+		t.Errorf("hosts block must precede forward; hostsIdx=%d forwardIdx=%d", hostsIdx, forwardIdx)
+	}
+}
+
+func TestValidateHostsEntries(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []HostsEntryConfig
+		wantErr bool
+	}{
+		{"valid", []HostsEntryConfig{{IP: "192.168.1.1", Hostnames: []string{"a.local"}}}, false},
+		{"valid IPv6", []HostsEntryConfig{{IP: "fe80::1", Hostnames: []string{"a.local"}}}, false},
+		{"missing IP", []HostsEntryConfig{{Hostnames: []string{"a.local"}}}, true},
+		{"invalid IP", []HostsEntryConfig{{IP: "not-an-ip", Hostnames: []string{"a.local"}}}, true},
+		{"no hostnames", []HostsEntryConfig{{IP: "192.168.1.1"}}, true},
+		{"empty hostname", []HostsEntryConfig{{IP: "192.168.1.1", Hostnames: []string{""}}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHostsEntries(tt.entries)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("got err=%v, wantErr=%v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string
