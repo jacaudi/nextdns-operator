@@ -6,9 +6,6 @@ metadata:
 spec:
   profileRef:
     name: my-profile
-  upstream:
-    primary: DoT
-    deviceName: Home DNS
   deployment:
     replicas: 2
   gateway:
@@ -33,7 +30,11 @@ spec:
       #   group: gateway.envoyproxy.io
       #   kind: EnvoyProxy
       #   name: custom-proxy-config
-  cache:
-    enabled: true
-  metrics:
-    enabled: true
+  corefile:
+    upstream:
+      primary: DoT
+      deviceName: Home DNS
+    cache:
+      enabled: true
+    metrics:
+      enabled: true
