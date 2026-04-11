@@ -640,6 +640,9 @@ func TestValidateForwardTuning(t *testing.T) {
 		{"invalid policy", &ForwardTuningConfig{Policy: "bogus"}, true},
 		{"bad healthCheck", &ForwardTuningConfig{HealthCheck: "5xs"}, true},
 		{"bad expire", &ForwardTuningConfig{Expire: "thirty"}, true},
+		{"maxConcurrent zero", &ForwardTuningConfig{MaxConcurrent: func() *int32 { v := int32(0); return &v }()}, true},
+		{"maxFails negative", &ForwardTuningConfig{MaxFails: func() *int32 { v := int32(-1); return &v }()}, true},
+		{"maxFails zero ok", &ForwardTuningConfig{MaxFails: func() *int32 { v := int32(0); return &v }()}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
