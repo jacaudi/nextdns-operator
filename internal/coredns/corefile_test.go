@@ -515,6 +515,142 @@ func TestValidateRewriteRules(t *testing.T) {
 	}
 }
 
+func TestGenerateCorefile_WithForwardTuning(t *testing.T) {
+	maxConcurrent := int32(1000)
+	maxFails := int32(2)
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		ForwardTuning: &ForwardTuningConfig{
+			Policy:        "round_robin",
+			MaxConcurrent: &maxConcurrent,
+			HealthCheck:   "5s",
+			Expire:        "30s",
+			MaxFails:      &maxFails,
+		},
+	}
+
+	out := GenerateCorefile(cfg)
+
+	// Each tuning directive must appear inside the forward block
+	if !strings.Contains(out, "policy round_robin") {
+		t.Errorf("expected policy directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "max_concurrent 1000") {
+		t.Errorf("expected max_concurrent directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "health_check 5s") {
+		t.Errorf("expected health_check directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "expire 30s") {
+		t.Errorf("expected expire directive; got:\n%s", out)
+	}
+	if !strings.Contains(out, "max_fails 2") {
+		t.Errorf("expected max_fails directive; got:\n%s", out)
+	}
+}
+
+func TestGenerateCorefile_WithoutForwardTuning_Unchanged(t *testing.T) {
+	// Sanity check: the existing forward block must not change when
+	// ForwardTuning is nil. This is a regression test against the refactor.
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+	}
+	out := GenerateCorefile(cfg)
+	for _, forbidden := range []string{"policy ", "max_concurrent", "health_check", "expire", "max_fails"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("unexpected %q in default forward block:\n%s", forbidden, out)
+		}
+	}
+}
+
+func TestGenerateCorefile_WithForwardTuning_DoH(t *testing.T) {
+	maxConcurrent := int32(500)
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoH,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		ForwardTuning: &ForwardTuningConfig{
+			Policy:        "sequential",
+			MaxConcurrent: &maxConcurrent,
+			HealthCheck:   "10s",
+		},
+	}
+
+	out := GenerateCorefile(cfg)
+
+	if !strings.Contains(out, "policy sequential") {
+		t.Errorf("expected policy directive for DoH; got:\n%s", out)
+	}
+	if !strings.Contains(out, "max_concurrent 500") {
+		t.Errorf("expected max_concurrent directive for DoH; got:\n%s", out)
+	}
+	if !strings.Contains(out, "health_check 10s") {
+		t.Errorf("expected health_check directive for DoH; got:\n%s", out)
+	}
+	// Must still have the DoH upstream URL
+	if !strings.Contains(out, "https://dns.nextdns.io/abc123") {
+		t.Errorf("expected DoH upstream URL; got:\n%s", out)
+	}
+}
+
+func TestGenerateCorefile_WithForwardTuning_DNS(t *testing.T) {
+	maxFails := int32(3)
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDNS,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		ForwardTuning: &ForwardTuningConfig{
+			MaxFails: &maxFails,
+			Expire:   "60s",
+		},
+	}
+
+	out := GenerateCorefile(cfg)
+
+	if !strings.Contains(out, "max_fails 3") {
+		t.Errorf("expected max_fails directive for DNS; got:\n%s", out)
+	}
+	if !strings.Contains(out, "expire 60s") {
+		t.Errorf("expected expire directive for DNS; got:\n%s", out)
+	}
+	// Must still have the plain DNS IPs
+	if !strings.Contains(out, "45.90.28.0") {
+		t.Errorf("expected anycast IP for DNS; got:\n%s", out)
+	}
+}
+
+func TestValidateForwardTuning(t *testing.T) {
+	mc := int32(1000)
+	tests := []struct {
+		name    string
+		t       *ForwardTuningConfig
+		wantErr bool
+	}{
+		{"nil", nil, false},
+		{"empty", &ForwardTuningConfig{}, false},
+		{"valid", &ForwardTuningConfig{Policy: "round_robin", HealthCheck: "5s", Expire: "30s", MaxConcurrent: &mc}, false},
+		{"invalid policy", &ForwardTuningConfig{Policy: "bogus"}, true},
+		{"bad healthCheck", &ForwardTuningConfig{HealthCheck: "5xs"}, true},
+		{"bad expire", &ForwardTuningConfig{Expire: "thirty"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateForwardTuning(tt.t)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("got err=%v, wantErr=%v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string
