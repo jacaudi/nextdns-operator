@@ -2158,6 +2158,131 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_PortCollision(t *testing.T
 	assert.Contains(t, err.Error(), "health and ready")
 }
 
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Default verifies
+// that when no health/ready config is set, liveness probe uses 8080 and
+// readiness probe uses 8181 (pre-feature defaults).
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Default(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe, "Liveness probe should be present by default")
+	require.NotNil(t, c.LivenessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(8080), c.LivenessProbe.HTTPGet.Port, "Liveness probe should use default health port 8080")
+
+	require.NotNil(t, c.ReadinessProbe, "Readiness probe should be present by default")
+	require.NotNil(t, c.ReadinessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(8181), c.ReadinessProbe.HTTPGet.Port, "Readiness probe should use default ready port 8181")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Configured verifies
+// that spec.corefile.health.port and spec.corefile.ready.port propagate
+// into the liveness/readiness probes. This is the only protection
+// against shipping a probe-misalignment bug.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Configured(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Port: int32Ptr(9090),
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Port: int32Ptr(9191),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe)
+	require.NotNil(t, c.LivenessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(9090), c.LivenessProbe.HTTPGet.Port,
+		"Liveness probe port MUST match configured health.port")
+
+	require.NotNil(t, c.ReadinessProbe)
+	require.NotNil(t, c.ReadinessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(9191), c.ReadinessProbe.HTTPGet.Port,
+		"Readiness probe port MUST match configured ready.port")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_HealthDisabled verifies
+// that spec.corefile.health.enabled=false removes the liveness probe entirely.
+// A pod with a probe pointing at a disabled health endpoint would fail
+// liveness checks immediately and crash-loop.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_HealthDisabled(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled: boolPtr(false),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	assert.Nil(t, c.LivenessProbe, "Liveness probe must be omitted when health.enabled=false")
+	require.NotNil(t, c.ReadinessProbe, "Readiness probe should still be present (ready not disabled)")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_ReadyDisabled verifies
+// that spec.corefile.ready.enabled=false removes the readiness probe entirely.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_ReadyDisabled(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(false),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe, "Liveness probe should still be present")
+	assert.Nil(t, c.ReadinessProbe, "Readiness probe must be omitted when ready.enabled=false")
+}
+
 func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()
