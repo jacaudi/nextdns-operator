@@ -107,6 +107,69 @@ spec:
                       - upstreams
                       type: object
                     type: array
+                  errors:
+                    description: Errors configures the CoreDNS errors plugin (error
+                      logging).
+                    properties:
+                      consolidate:
+                        description: |-
+                          Consolidate optionally reduces log spam by consolidating
+                          repeated error messages matching a pattern within an interval.
+                        items:
+                          description: |-
+                            ConsolidateRule defines a single CoreDNS errors plugin consolidate
+                            directive used to reduce log spam from repeated errors.
+                          properties:
+                            interval:
+                              description: |-
+                                Interval is the consolidation window (Go duration string,
+                                e.g., "5m").
+                              pattern: ^[0-9]+(ns|us|µs|ms|s|m|h)$
+                              type: string
+                            pattern:
+                              description: Pattern is the regular expression matched
+                                against error log lines.
+                              minLength: 1
+                              type: string
+                          required:
+                          - interval
+                          - pattern
+                          type: object
+                        type: array
+                      enabled:
+                        default: true
+                        description: Enabled enables the errors plugin. Defaults to
+                          true.
+                        type: boolean
+                    type: object
+                  health:
+                    description: Health configures the CoreDNS health plugin (liveness
+                      endpoint).
+                    properties:
+                      enabled:
+                        default: true
+                        description: |-
+                          Enabled enables the health plugin. Defaults to true.
+                          Disabling this also removes the deployment's liveness probe.
+                        type: boolean
+                      lameduck:
+                        description: |-
+                          Lameduck delays health endpoint failure during shutdown so load
+                          balancers can drain traffic cleanly. Must be a Go duration string
+                          (e.g., "10s"). When unset, the lameduck directive is omitted.
+                        pattern: ^[0-9]+(ns|us|µs|ms|s|m|h)$
+                        type: string
+                      port:
+                        default: 8080
+                        description: |-
+                          Port is the TCP port the health plugin listens on.
+                          Must match the deployment's liveness probe port (the operator
+                          keeps these in sync automatically).
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    type: object
                   hosts:
                     description: |-
                       Hosts configures the CoreDNS hosts plugin for inline static
@@ -174,6 +237,35 @@ spec:
                         default: true
                         description: Enabled enables the metrics endpoint on CoreDNS
                         type: boolean
+                      port:
+                        default: 9153
+                        description: Port is the TCP port the prometheus plugin listens
+                          on.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    type: object
+                  ready:
+                    description: Ready configures the CoreDNS ready plugin (readiness
+                      endpoint).
+                    properties:
+                      enabled:
+                        default: true
+                        description: |-
+                          Enabled enables the ready plugin. Defaults to true.
+                          Disabling this also removes the deployment's readiness probe.
+                        type: boolean
+                      port:
+                        default: 8181
+                        description: |-
+                          Port is the TCP port the ready plugin listens on.
+                          Must match the deployment's readiness probe port (the operator
+                          keeps these in sync automatically).
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
                     type: object
                   rewrite:
                     description: |-

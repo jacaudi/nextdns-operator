@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
+	"github.com/jacaudi/nextdns-operator/internal/coredns"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -2010,6 +2011,276 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_InvalidForwardTuning(t *te
 	_, err := r.buildCorefileConfig(coreDNS, profile)
 	require.Error(t, err, "buildCorefileConfig should return error for invalid forward tuning")
 	assert.Contains(t, err.Error(), "forward tuning validation failed")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithPluginConfig verifies
+// that spec.corefile.{health,ready,errors,metrics.port} are copied into the
+// internal coredns.CorefileConfig and that ValidatePluginConfig is called.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithPluginConfig(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled:  boolPtr(true),
+					Port:     int32Ptr(9090),
+					Lameduck: "10s",
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9191),
+				},
+				Errors: &nextdnsv1alpha1.CoreDNSErrorsConfig{
+					Enabled: boolPtr(true),
+					Consolidate: []nextdnsv1alpha1.ConsolidateRule{
+						{Interval: "5m", Pattern: "^[a-z]+error"},
+					},
+				},
+				Metrics: &nextdnsv1alpha1.CoreDNSMetricsConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9292),
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+
+	require.NotNil(t, cfg.Health, "Health plugin config should be copied")
+	assert.True(t, cfg.Health.Enabled)
+	assert.Equal(t, int32(9090), cfg.Health.Port)
+	assert.Equal(t, "10s", cfg.Health.Lameduck)
+
+	require.NotNil(t, cfg.Ready, "Ready plugin config should be copied")
+	assert.True(t, cfg.Ready.Enabled)
+	assert.Equal(t, int32(9191), cfg.Ready.Port)
+
+	require.NotNil(t, cfg.Errors, "Errors plugin config should be copied")
+	assert.True(t, cfg.Errors.Enabled)
+	require.Len(t, cfg.Errors.Consolidate, 1)
+	assert.Equal(t, "5m", cfg.Errors.Consolidate[0].Interval)
+	assert.Equal(t, "^[a-z]+error", cfg.Errors.Consolidate[0].Pattern)
+
+	assert.Equal(t, int32(9292), cfg.MetricsPort, "MetricsPort should be copied")
+
+	// Verify the resulting config is actually used by the generator.
+	out := coredns.GenerateCorefile(cfg)
+	assert.Contains(t, out, "health :9090 {")
+	assert.Contains(t, out, "lameduck 10s")
+	assert.Contains(t, out, "ready :9191")
+	assert.Contains(t, out, "prometheus :9292")
+	assert.Contains(t, out, "errors {")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_EnabledDefaultsTrue verifies
+// that when spec.corefile.health exists but spec.corefile.health.enabled is
+// nil, the copied config defaults to Enabled=true (matching the kubebuilder
+// default). Without this behavior a user setting only health.port would
+// silently disable the plugin.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_EnabledDefaultsTrue(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Port: int32Ptr(9090),
+					// Enabled unset — must default to true
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Port: int32Ptr(9191),
+				},
+				Errors: &nextdnsv1alpha1.CoreDNSErrorsConfig{},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Health)
+	assert.True(t, cfg.Health.Enabled, "Health.Enabled should default to true when unset")
+	require.NotNil(t, cfg.Ready)
+	assert.True(t, cfg.Ready.Enabled, "Ready.Enabled should default to true when unset")
+	require.NotNil(t, cfg.Errors)
+	assert.True(t, cfg.Errors.Enabled, "Errors.Enabled should default to true when unset")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildCorefileConfig_PortCollision verifies
+// that buildCorefileConfig returns an error when configured plugin ports
+// collide. The error must come from ValidatePluginConfig.
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_PortCollision(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9090),
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(true),
+					Port:    int32Ptr(9090), // same port as health
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{ProfileID: "abc123"},
+	}
+
+	_, err := r.buildCorefileConfig(coreDNS, profile)
+	require.Error(t, err, "colliding ports should return an error")
+	assert.Contains(t, err.Error(), "health and ready")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Default verifies
+// that when no health/ready config is set, liveness probe uses 8080 and
+// readiness probe uses 8181 (pre-feature defaults).
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Default(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe, "Liveness probe should be present by default")
+	require.NotNil(t, c.LivenessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(8080), c.LivenessProbe.HTTPGet.Port, "Liveness probe should use default health port 8080")
+
+	require.NotNil(t, c.ReadinessProbe, "Readiness probe should be present by default")
+	require.NotNil(t, c.ReadinessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(8181), c.ReadinessProbe.HTTPGet.Port, "Readiness probe should use default ready port 8181")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Configured verifies
+// that spec.corefile.health.port and spec.corefile.ready.port propagate
+// into the liveness/readiness probes. This is the only protection
+// against shipping a probe-misalignment bug.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_Configured(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	int32Ptr := func(i int32) *int32 { return &i }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Port: int32Ptr(9090),
+				},
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Port: int32Ptr(9191),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe)
+	require.NotNil(t, c.LivenessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(9090), c.LivenessProbe.HTTPGet.Port,
+		"Liveness probe port MUST match configured health.port")
+
+	require.NotNil(t, c.ReadinessProbe)
+	require.NotNil(t, c.ReadinessProbe.HTTPGet)
+	assert.Equal(t, intstr.FromInt(9191), c.ReadinessProbe.HTTPGet.Port,
+		"Readiness probe port MUST match configured ready.port")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_HealthDisabled verifies
+// that spec.corefile.health.enabled=false removes the liveness probe entirely.
+// A pod with a probe pointing at a disabled health endpoint would fail
+// liveness checks immediately and crash-loop.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_HealthDisabled(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Health: &nextdnsv1alpha1.CoreDNSHealthConfig{
+					Enabled: boolPtr(false),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	assert.Nil(t, c.LivenessProbe, "Liveness probe must be omitted when health.enabled=false")
+	require.NotNil(t, c.ReadinessProbe, "Readiness probe should still be present (ready not disabled)")
+}
+
+// TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_ReadyDisabled verifies
+// that spec.corefile.ready.enabled=false removes the readiness probe entirely.
+func TestNextDNSCoreDNSReconciler_BuildPodSpec_ProbePorts_ReadyDisabled(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Ready: &nextdnsv1alpha1.CoreDNSReadyConfig{
+					Enabled: boolPtr(false),
+				},
+			},
+		},
+	}
+
+	podSpec := r.buildPodSpec(coreDNS, "test-cm")
+	require.Len(t, podSpec.Containers, 1)
+	c := podSpec.Containers[0]
+
+	require.NotNil(t, c.LivenessProbe, "Liveness probe should still be present")
+	assert.Nil(t, c.ReadinessProbe, "Readiness probe must be omitted when ready.enabled=false")
 }
 
 func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {

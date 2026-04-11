@@ -592,7 +592,107 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		cfg.Hosts = hosts
 	}
 
+	// Copy health/ready/errors plugin config and metrics.port. The API
+	// types default Enabled=true via kubebuilder; we mirror that here so
+	// a user setting only Port does not silently disable the plugin.
+	if cf != nil && cf.Health != nil {
+		hpc := &coredns.HealthPluginConfig{
+			Enabled:  boolWithDefault(cf.Health.Enabled, true),
+			Lameduck: cf.Health.Lameduck,
+		}
+		if cf.Health.Port != nil {
+			hpc.Port = *cf.Health.Port
+		}
+		cfg.Health = hpc
+	}
+	if cf != nil && cf.Ready != nil {
+		rpc := &coredns.ReadyPluginConfig{
+			Enabled: boolWithDefault(cf.Ready.Enabled, true),
+		}
+		if cf.Ready.Port != nil {
+			rpc.Port = *cf.Ready.Port
+		}
+		cfg.Ready = rpc
+	}
+	if cf != nil && cf.Errors != nil {
+		epc := &coredns.ErrorsPluginConfig{
+			Enabled: boolWithDefault(cf.Errors.Enabled, true),
+		}
+		for _, c := range cf.Errors.Consolidate {
+			epc.Consolidate = append(epc.Consolidate, coredns.ConsolidateRuleConfig{
+				Interval: c.Interval,
+				Pattern:  c.Pattern,
+			})
+		}
+		cfg.Errors = epc
+	}
+	if cf != nil && cf.Metrics != nil && cf.Metrics.Port != nil {
+		cfg.MetricsPort = *cf.Metrics.Port
+	}
+
+	// Validate plugin config (port ranges, collisions, duration parsing).
+	if err := coredns.ValidatePluginConfig(cfg.Health, cfg.Ready, cfg.Errors, cfg.MetricsPort); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// boolWithDefault returns *p if p is non-nil, otherwise def. Used to
+// mirror kubebuilder `default=true` semantics for pointer-to-bool API
+// fields that control plugin enablement.
+func boolWithDefault(p *bool, def bool) bool {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
+// defaultLivenessProbePort and defaultReadinessProbePort mirror the
+// defaults on the corresponding CoreDNS plugin API types and the
+// pre-feature hardcoded probe ports.
+const (
+	defaultLivenessProbePort  int32 = 8080
+	defaultReadinessProbePort int32 = 8181
+)
+
+// healthPluginEnabled reports whether the health plugin is enabled for
+// the given CoreDNS CR. Returns true by default (matching the kubebuilder
+// default on CoreDNSHealthConfig.Enabled).
+func healthPluginEnabled(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) bool {
+	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Health != nil {
+		return boolWithDefault(cf.Health.Enabled, true)
+	}
+	return true
+}
+
+// readyPluginEnabled reports whether the ready plugin is enabled for
+// the given CoreDNS CR. Returns true by default.
+func readyPluginEnabled(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) bool {
+	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Ready != nil {
+		return boolWithDefault(cf.Ready.Enabled, true)
+	}
+	return true
+}
+
+// livenessProbePort returns the TCP port the deployment's liveness probe
+// should target. This must match the health plugin port (see
+// spec.corefile.health.port) or the default 8080.
+func livenessProbePort(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) int32 {
+	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Health != nil && cf.Health.Port != nil {
+		return *cf.Health.Port
+	}
+	return defaultLivenessProbePort
+}
+
+// readinessProbePort returns the TCP port the deployment's readiness
+// probe should target. This must match the ready plugin port (see
+// spec.corefile.ready.port) or the default 8181.
+func readinessProbePort(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) int32 {
+	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Ready != nil && cf.Ready.Port != nil {
+		return *cf.Ready.Port
+	}
+	return defaultReadinessProbePort
 }
 
 // reconcileWorkload dispatches to Deployment or DaemonSet reconciliation based on mode
@@ -859,34 +959,6 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 						Drop: []corev1.Capability{"ALL"},
 					},
 				},
-				LivenessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Path:   "/health",
-							Port:   intstr.FromInt(8080),
-							Scheme: corev1.URISchemeHTTP,
-						},
-					},
-					InitialDelaySeconds: 5,
-					PeriodSeconds:       10,
-					TimeoutSeconds:      5,
-					SuccessThreshold:    1,
-					FailureThreshold:    3,
-				},
-				ReadinessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Path:   "/ready",
-							Port:   intstr.FromInt(8181),
-							Scheme: corev1.URISchemeHTTP,
-						},
-					},
-					InitialDelaySeconds: 5,
-					PeriodSeconds:       10,
-					TimeoutSeconds:      5,
-					SuccessThreshold:    1,
-					FailureThreshold:    3,
-				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      "config-volume",
@@ -918,6 +990,45 @@ func (r *NextDNSCoreDNSReconciler) buildPodSpec(coreDNS *nextdnsv1alpha1.NextDNS
 			RunAsNonRoot: &runAsNonRoot,
 			RunAsUser:    &runAsUser,
 		},
+	}
+
+	// Attach liveness / readiness probes conditionally. When the
+	// corresponding CoreDNS plugin is disabled via spec.corefile the
+	// probe is omitted entirely — a probe pointing at a disabled
+	// endpoint would crash-loop the pod. When the plugin is enabled
+	// the probe port MUST match the configured health.port / ready.port
+	// (see livenessProbePort / readinessProbePort).
+	if healthPluginEnabled(coreDNS) {
+		podSpec.Containers[0].LivenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/health",
+					Port:   intstr.FromInt(int(livenessProbePort(coreDNS))),
+					Scheme: corev1.URISchemeHTTP,
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+			TimeoutSeconds:      5,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
+		}
+	}
+	if readyPluginEnabled(coreDNS) {
+		podSpec.Containers[0].ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/ready",
+					Port:   intstr.FromInt(int(readinessProbePort(coreDNS))),
+					Scheme: corev1.URISchemeHTTP,
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+			TimeoutSeconds:      5,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
+		}
 	}
 
 	// Apply deployment-specific settings

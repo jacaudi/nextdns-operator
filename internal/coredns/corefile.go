@@ -28,6 +28,14 @@ const (
 	nextDNSAnycastIP2 = "45.90.30.0"
 )
 
+// Default plugin listen ports. These preserve the pre-feature hardcoded
+// behavior when the corresponding config pointer is nil or Port is 0.
+const (
+	defaultHealthPort  int32 = 8080
+	defaultReadyPort   int32 = 8181
+	defaultMetricsPort int32 = 9153
+)
+
 // ForwardTuningConfig holds per-deployment forward plugin tuning options.
 // All fields optional; zero values mean "use CoreDNS default".
 type ForwardTuningConfig struct {
@@ -155,6 +163,34 @@ func ValidateRewriteRules(rules []RewriteRuleConfig) error {
 	return nil
 }
 
+// HealthPluginConfig configures the CoreDNS health plugin.
+// A nil *HealthPluginConfig means "use defaults (enabled on port 8080, no lameduck)".
+type HealthPluginConfig struct {
+	Enabled  bool
+	Port     int32  // 0 means use default 8080
+	Lameduck string // empty means omit the lameduck directive
+}
+
+// ReadyPluginConfig configures the CoreDNS ready plugin.
+// A nil *ReadyPluginConfig means "use defaults (enabled on port 8181)".
+type ReadyPluginConfig struct {
+	Enabled bool
+	Port    int32 // 0 means use default 8181
+}
+
+// ConsolidateRuleConfig is a single consolidate directive for the errors plugin.
+type ConsolidateRuleConfig struct {
+	Interval string
+	Pattern  string
+}
+
+// ErrorsPluginConfig configures the CoreDNS errors plugin.
+// A nil *ErrorsPluginConfig means "use defaults (enabled, no consolidate rules)".
+type ErrorsPluginConfig struct {
+	Enabled     bool
+	Consolidate []ConsolidateRuleConfig
+}
+
 // CorefileConfig holds the configuration for generating a CoreDNS Corefile.
 type CorefileConfig struct {
 	// ProfileID is the NextDNS profile ID to use for DNS resolution.
@@ -193,6 +229,23 @@ type CorefileConfig struct {
 	// Hosts configures the CoreDNS hosts plugin for inline static overrides.
 	// When set, a hosts block is emitted before the forward plugin.
 	Hosts *HostsPluginConfig
+
+	// Health configures the CoreDNS health plugin. nil means "use defaults
+	// (enabled on port 8080, no lameduck)" so the generated output is
+	// byte-identical to the pre-feature behavior.
+	Health *HealthPluginConfig
+
+	// Ready configures the CoreDNS ready plugin. nil means "use defaults
+	// (enabled on port 8181)".
+	Ready *ReadyPluginConfig
+
+	// Errors configures the CoreDNS errors plugin. nil means "use defaults
+	// (enabled, no consolidate rules)".
+	Errors *ErrorsPluginConfig
+
+	// MetricsPort overrides the prometheus plugin port. 0 means default 9153.
+	// Only honored when MetricsEnabled is true.
+	MetricsPort int32
 }
 
 // ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
@@ -243,15 +296,19 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	// Cache plugin
 	fmt.Fprintf(&sb, "    cache %d\n", cfg.CacheTTL)
 
-	// Health plugin for liveness probes
-	sb.WriteString("    health :8080\n")
+	// Health plugin for liveness probes (configurable port + optional lameduck)
+	writeHealthBlock(&sb, cfg.Health)
 
-	// Ready plugin for readiness probes
-	sb.WriteString("    ready :8181\n")
+	// Ready plugin for readiness probes (configurable port, can be disabled)
+	writeReadyBlock(&sb, cfg.Ready)
 
-	// Prometheus plugin for metrics (conditional)
+	// Prometheus plugin for metrics (conditional, configurable port)
 	if cfg.MetricsEnabled {
-		sb.WriteString("    prometheus :9153\n")
+		mPort := cfg.MetricsPort
+		if mPort == 0 {
+			mPort = defaultMetricsPort
+		}
+		fmt.Fprintf(&sb, "    prometheus :%d\n", mPort)
 	}
 
 	// Log plugin (conditional)
@@ -259,8 +316,8 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 		sb.WriteString("    log\n")
 	}
 
-	// Errors plugin (always enabled)
-	sb.WriteString("    errors\n")
+	// Errors plugin (configurable, may include consolidate rules)
+	writeErrorsBlock(&sb, cfg.Errors)
 
 	sb.WriteString("}")
 
@@ -320,6 +377,155 @@ func writeHostsBlock(sb *strings.Builder, hosts *HostsPluginConfig) {
 		sb.WriteString("        fallthrough\n")
 	}
 	sb.WriteString("    }\n")
+}
+
+// writeHealthBlock writes the health plugin directive. A nil config or
+// Enabled=false omits the directive entirely. The lameduck directive is
+// emitted inside a block when set; otherwise the directive is a single line.
+//
+// Backward compatibility: cfg.Health == nil produces "    health :8080\n"
+// which exactly matches the pre-feature output.
+func writeHealthBlock(sb *strings.Builder, h *HealthPluginConfig) {
+	enabled := true
+	port := defaultHealthPort
+	lameduck := ""
+	if h != nil {
+		enabled = h.Enabled
+		if h.Port != 0 {
+			port = h.Port
+		}
+		lameduck = h.Lameduck
+	}
+	if !enabled {
+		return
+	}
+	if lameduck != "" {
+		fmt.Fprintf(sb, "    health :%d {\n", port)
+		fmt.Fprintf(sb, "        lameduck %s\n", lameduck)
+		sb.WriteString("    }\n")
+		return
+	}
+	fmt.Fprintf(sb, "    health :%d\n", port)
+}
+
+// writeReadyBlock writes the ready plugin directive. A nil config or
+// Enabled=false omits the directive. nil produces "    ready :8181\n" —
+// the pre-feature default.
+func writeReadyBlock(sb *strings.Builder, r *ReadyPluginConfig) {
+	enabled := true
+	port := defaultReadyPort
+	if r != nil {
+		enabled = r.Enabled
+		if r.Port != 0 {
+			port = r.Port
+		}
+	}
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(sb, "    ready :%d\n", port)
+}
+
+// writeErrorsBlock writes the errors plugin directive. A nil config produces
+// a bare "    errors\n" line (pre-feature default). Enabled=false omits the
+// directive entirely. When consolidate rules are present, the directive is
+// emitted as a block with one consolidate line per rule.
+func writeErrorsBlock(sb *strings.Builder, e *ErrorsPluginConfig) {
+	enabled := true
+	var consolidate []ConsolidateRuleConfig
+	if e != nil {
+		enabled = e.Enabled
+		consolidate = e.Consolidate
+	}
+	if !enabled {
+		return
+	}
+	if len(consolidate) == 0 {
+		sb.WriteString("    errors\n")
+		return
+	}
+	sb.WriteString("    errors {\n")
+	for _, c := range consolidate {
+		fmt.Fprintf(sb, "        consolidate %s %q\n", c.Interval, c.Pattern)
+	}
+	sb.WriteString("    }\n")
+}
+
+// ValidatePluginConfig checks that configured plugin ports are distinct,
+// within the 1-65535 TCP range, and that durations parse cleanly. Pass
+// metricsPort=0 to mean "use the 9153 default".
+//
+// Collision checks only apply to plugins that are actually enabled — a
+// disabled plugin with a colliding port is allowed (the directive is
+// never emitted).
+func ValidatePluginConfig(health *HealthPluginConfig, ready *ReadyPluginConfig, errors *ErrorsPluginConfig, metricsPort int32) error {
+	var errs []string
+
+	healthPort := defaultHealthPort
+	if health != nil && health.Port != 0 {
+		healthPort = health.Port
+	}
+	readyPort := defaultReadyPort
+	if ready != nil && ready.Port != 0 {
+		readyPort = ready.Port
+	}
+	mPort := defaultMetricsPort
+	if metricsPort != 0 {
+		mPort = metricsPort
+	}
+
+	// Range checks (kubebuilder enforces at the API boundary; this is
+	// defensive for internal callers that bypass the API).
+	// Iterate in a stable order so error messages are deterministic.
+	portLabels := []struct {
+		label string
+		port  int32
+	}{
+		{"health", healthPort},
+		{"ready", readyPort},
+		{"metrics", mPort},
+	}
+	for _, pl := range portLabels {
+		if pl.port < 1 || pl.port > 65535 {
+			errs = append(errs, fmt.Sprintf("%s port %d out of range 1-65535", pl.label, pl.port))
+		}
+	}
+
+	// Collision checks (only meaningful for enabled plugins).
+	healthOn := health == nil || health.Enabled
+	readyOn := ready == nil || ready.Enabled
+	if healthOn && readyOn && healthPort == readyPort {
+		errs = append(errs, fmt.Sprintf("health and ready ports must differ (both %d)", healthPort))
+	}
+	if healthOn && healthPort == mPort {
+		errs = append(errs, fmt.Sprintf("health and metrics ports must differ (both %d)", healthPort))
+	}
+	if readyOn && readyPort == mPort {
+		errs = append(errs, fmt.Sprintf("ready and metrics ports must differ (both %d)", readyPort))
+	}
+
+	// Duration parsing.
+	if health != nil && health.Lameduck != "" {
+		if _, err := time.ParseDuration(health.Lameduck); err != nil {
+			errs = append(errs, fmt.Sprintf("invalid health.lameduck duration %q: %v", health.Lameduck, err))
+		}
+	}
+	if errors != nil {
+		for i, c := range errors.Consolidate {
+			if c.Interval == "" || c.Pattern == "" {
+				errs = append(errs, fmt.Sprintf("errors.consolidate[%d]: interval and pattern are both required", i))
+				continue
+			}
+			if _, err := time.ParseDuration(c.Interval); err != nil {
+				errs = append(errs, fmt.Sprintf("errors.consolidate[%d]: invalid interval %q: %v", i, c.Interval, err))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("plugin config validation failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // formatDeviceNameDoT converts a device name for DoT SNI (spaces become --)
