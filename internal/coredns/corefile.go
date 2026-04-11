@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // DefaultCoreDNSImage is the default CoreDNS container image to use.
@@ -25,6 +26,51 @@ const (
 	nextDNSAnycastIP1 = "45.90.28.0"
 	nextDNSAnycastIP2 = "45.90.30.0"
 )
+
+// ForwardTuningConfig holds per-deployment forward plugin tuning options.
+// All fields optional; zero values mean "use CoreDNS default".
+type ForwardTuningConfig struct {
+	Policy        string // random, round_robin, sequential
+	MaxConcurrent *int32
+	HealthCheck   string // duration string (e.g. "5s")
+	Expire        string // duration string
+	MaxFails      *int32
+}
+
+// ValidateForwardTuning checks that policy is one of the supported
+// values and durations parse cleanly. Empty / nil fields are skipped.
+func ValidateForwardTuning(t *ForwardTuningConfig) error {
+	if t == nil {
+		return nil
+	}
+	var errs []string
+	validPolicies := map[string]bool{
+		"random": true, "round_robin": true, "sequential": true,
+	}
+	if t.Policy != "" && !validPolicies[t.Policy] {
+		errs = append(errs, fmt.Sprintf("invalid forward policy %q", t.Policy))
+	}
+	if t.HealthCheck != "" {
+		if _, err := time.ParseDuration(t.HealthCheck); err != nil {
+			errs = append(errs, fmt.Sprintf("invalid healthCheck duration %q: %v", t.HealthCheck, err))
+		}
+	}
+	if t.Expire != "" {
+		if _, err := time.ParseDuration(t.Expire); err != nil {
+			errs = append(errs, fmt.Sprintf("invalid expire duration %q: %v", t.Expire, err))
+		}
+	}
+	if t.MaxConcurrent != nil && *t.MaxConcurrent < 1 {
+		errs = append(errs, fmt.Sprintf("maxConcurrent must be >= 1, got %d", *t.MaxConcurrent))
+	}
+	if t.MaxFails != nil && *t.MaxFails < 0 {
+		errs = append(errs, fmt.Sprintf("maxFails must be >= 0, got %d", *t.MaxFails))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("forward tuning validation failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
 
 // DomainOverrideConfig represents a domain-specific upstream configuration
 type DomainOverrideConfig struct {
@@ -100,6 +146,10 @@ type CorefileConfig struct {
 	// RewriteRules specifies CoreDNS rewrite plugin rules to emit before the
 	// forward directive in the catch-all server block.
 	RewriteRules []RewriteRuleConfig
+
+	// ForwardTuning optionally configures forward plugin tuning options.
+	// When nil, CoreDNS defaults apply and forward block shape is unchanged.
+	ForwardTuning *ForwardTuningConfig
 }
 
 // ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
@@ -226,6 +276,29 @@ func buildDoHPath(profileID, deviceName string) string {
 	return profileID
 }
 
+// writeForwardTuning writes forward plugin tuning directives inside a forward block.
+// It is a no-op when t is nil.
+func writeForwardTuning(sb *strings.Builder, t *ForwardTuningConfig) {
+	if t == nil {
+		return
+	}
+	if t.Policy != "" {
+		fmt.Fprintf(sb, "        policy %s\n", t.Policy)
+	}
+	if t.MaxConcurrent != nil {
+		fmt.Fprintf(sb, "        max_concurrent %d\n", *t.MaxConcurrent)
+	}
+	if t.HealthCheck != "" {
+		fmt.Fprintf(sb, "        health_check %s\n", t.HealthCheck)
+	}
+	if t.Expire != "" {
+		fmt.Fprintf(sb, "        expire %s\n", t.Expire)
+	}
+	if t.MaxFails != nil {
+		fmt.Fprintf(sb, "        max_fails %d\n", *t.MaxFails)
+	}
+}
+
 // writeForwardPlugin writes the forward plugin configuration to the string builder.
 // Note: Cross-protocol fallback (e.g., DoT→DoH) is not supported because CoreDNS's
 // forward plugin cannot mix tls:// and https:// upstreams with a single tls_servername.
@@ -238,16 +311,29 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 		// The profile ID is embedded in the SNI hostname for NextDNS routing
 		fmt.Fprintf(sb, "    forward . tls://%s tls://%s {\n", ip1, ip2)
 		fmt.Fprintf(sb, "        tls_servername %s.%s\n", buildDoTSNIHost(cfg.ProfileID, cfg.DeviceName), nextDNSDoTServer)
+		writeForwardTuning(sb, cfg.ForwardTuning)
 		sb.WriteString("    }\n")
 
 	case ProtocolDoH:
 		// DoH uses https:// URL directly
 		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, buildDoHPath(cfg.ProfileID, cfg.DeviceName))
-		fmt.Fprintf(sb, "    forward . %s\n", upstream)
+		if cfg.ForwardTuning != nil {
+			fmt.Fprintf(sb, "    forward . %s {\n", upstream)
+			writeForwardTuning(sb, cfg.ForwardTuning)
+			sb.WriteString("    }\n")
+		} else {
+			fmt.Fprintf(sb, "    forward . %s\n", upstream)
+		}
 
 	case ProtocolDNS:
 		// Plain DNS uses upstream IPs
-		fmt.Fprintf(sb, "    forward . %s %s\n", ip1, ip2)
+		if cfg.ForwardTuning != nil {
+			fmt.Fprintf(sb, "    forward . %s %s {\n", ip1, ip2)
+			writeForwardTuning(sb, cfg.ForwardTuning)
+			sb.WriteString("    }\n")
+		} else {
+			fmt.Fprintf(sb, "    forward . %s %s\n", ip1, ip2)
+		}
 	}
 }
 

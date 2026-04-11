@@ -46,6 +46,55 @@ const (
 	ServiceTypeLoadBalancer CoreDNSServiceType = "LoadBalancer"
 )
 
+// ForwardPolicy controls the failover policy for upstream selection
+// in the CoreDNS forward plugin.
+// +kubebuilder:validation:Enum=random;round_robin;sequential
+type ForwardPolicy string
+
+const (
+	// ForwardPolicyRandom selects upstreams at random (CoreDNS default).
+	ForwardPolicyRandom ForwardPolicy = "random"
+	// ForwardPolicyRoundRobin distributes queries across upstreams in order.
+	ForwardPolicyRoundRobin ForwardPolicy = "round_robin"
+	// ForwardPolicySequential always tries upstreams in declared order,
+	// only failing over on error.
+	ForwardPolicySequential ForwardPolicy = "sequential"
+)
+
+// ForwardTuningConfig exposes performance and reliability knobs for the
+// CoreDNS forward plugin used to send queries upstream to NextDNS.
+// Maps to https://coredns.io/plugins/forward/.
+type ForwardTuningConfig struct {
+	// Policy controls failover between upstream addresses.
+	// One of: random (default), round_robin, sequential.
+	// +optional
+	Policy ForwardPolicy `json:"policy,omitempty"`
+
+	// MaxConcurrent caps the number of concurrent queries forwarded
+	// upstream. CoreDNS default is unlimited.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+
+	// HealthCheck is the interval between upstream health checks
+	// (e.g., "5s", "500ms"). Must be a Go duration string.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(ns|us|µs|ms|s|m|h)$`
+	HealthCheck string `json:"healthCheck,omitempty"`
+
+	// Expire is how long to keep idle upstream connections before
+	// closing them (e.g., "30s"). Must be a Go duration string.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(ns|us|µs|ms|s|m|h)$`
+	Expire string `json:"expire,omitempty"`
+
+	// MaxFails is the number of failed health checks before an
+	// upstream is marked down. CoreDNS default is 2.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxFails *int32 `json:"maxFails,omitempty"`
+}
+
 // UpstreamConfig specifies how to connect to NextDNS upstream servers
 type UpstreamConfig struct {
 	// Primary specifies the primary protocol for DNS queries
@@ -63,6 +112,12 @@ type UpstreamConfig struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[-a-zA-Z0-9 ]+$`
 	DeviceName string `json:"deviceName,omitempty"`
+
+	// Forward exposes tuning options for the CoreDNS forward plugin
+	// used to send queries upstream to NextDNS. All fields optional;
+	// CoreDNS defaults are used when omitted.
+	// +optional
+	Forward *ForwardTuningConfig `json:"forward,omitempty"`
 }
 
 // CoreDNSDeploymentConfig configures the CoreDNS deployment

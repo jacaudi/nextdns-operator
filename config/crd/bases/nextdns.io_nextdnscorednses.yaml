@@ -192,6 +192,48 @@ spec:
                         maxLength: 63
                         pattern: ^[-a-zA-Z0-9 ]+$
                         type: string
+                      forward:
+                        description: |-
+                          Forward exposes tuning options for the CoreDNS forward plugin
+                          used to send queries upstream to NextDNS. All fields optional;
+                          CoreDNS defaults are used when omitted.
+                        properties:
+                          expire:
+                            description: |-
+                              Expire is how long to keep idle upstream connections before
+                              closing them (e.g., "30s"). Must be a Go duration string.
+                            pattern: ^[0-9]+(ns|us|µs|ms|s|m|h)$
+                            type: string
+                          healthCheck:
+                            description: |-
+                              HealthCheck is the interval between upstream health checks
+                              (e.g., "5s", "500ms"). Must be a Go duration string.
+                            pattern: ^[0-9]+(ns|us|µs|ms|s|m|h)$
+                            type: string
+                          maxConcurrent:
+                            description: |-
+                              MaxConcurrent caps the number of concurrent queries forwarded
+                              upstream. CoreDNS default is unlimited.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          maxFails:
+                            description: |-
+                              MaxFails is the number of failed health checks before an
+                              upstream is marked down. CoreDNS default is 2.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          policy:
+                            description: |-
+                              Policy controls failover between upstream addresses.
+                              One of: random (default), round_robin, sequential.
+                            enum:
+                            - random
+                            - round_robin
+                            - sequential
+                            type: string
+                        type: object
                       primary:
                         default: DoT
                         description: Primary specifies the primary protocol for DNS

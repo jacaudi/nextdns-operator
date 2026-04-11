@@ -1918,6 +1918,100 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithoutDeviceName(t *testi
 	assert.Equal(t, "", cfg.DeviceName)
 }
 
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithForwardTuning(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	maxConcurrent := int32(1000)
+	maxFails := int32(3)
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+					Forward: &nextdnsv1alpha1.ForwardTuningConfig{
+						Policy:        nextdnsv1alpha1.ForwardPolicyRoundRobin,
+						MaxConcurrent: &maxConcurrent,
+						HealthCheck:   "5s",
+						Expire:        "30s",
+						MaxFails:      &maxFails,
+					},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.ForwardTuning, "ForwardTuning should be set")
+	assert.Equal(t, "round_robin", cfg.ForwardTuning.Policy)
+	assert.Equal(t, int32(1000), *cfg.ForwardTuning.MaxConcurrent)
+	assert.Equal(t, "5s", cfg.ForwardTuning.HealthCheck)
+	assert.Equal(t, "30s", cfg.ForwardTuning.Expire)
+	assert.Equal(t, int32(3), *cfg.ForwardTuning.MaxFails)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_ForwardTuningNilWhenAbsent(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+					// No Forward field
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	cfg, err := r.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.ForwardTuning, "ForwardTuning should be nil when not configured")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_InvalidForwardTuning(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	r := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Upstream: &nextdnsv1alpha1.UpstreamConfig{
+					Primary: nextdnsv1alpha1.DNSProtocolDoT,
+					Forward: &nextdnsv1alpha1.ForwardTuningConfig{
+						Policy: "bogus_policy",
+					},
+				},
+			},
+		},
+	}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	_, err := r.buildCorefileConfig(coreDNS, profile)
+	require.Error(t, err, "buildCorefileConfig should return error for invalid forward tuning")
+	assert.Contains(t, err.Error(), "forward tuning validation failed")
+}
+
 func TestNextDNSCoreDNSReconciler_Reconcile_WithDomainOverrides(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	ctx := context.Background()
