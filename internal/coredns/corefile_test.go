@@ -463,6 +463,58 @@ func TestGetUpstreamEndpoint_ProfileSpecificIPs(t *testing.T) {
 	assert.NotContains(t, result, "45.90.28.0")
 }
 
+func TestGenerateCorefile_WithRewriteRules(t *testing.T) {
+	cfg := &CorefileConfig{
+		ProfileID:       "abc123",
+		PrimaryProtocol: ProtocolDoT,
+		CacheTTL:        3600,
+		MetricsEnabled:  true,
+		RewriteRules: []RewriteRuleConfig{
+			{Type: "name", Match: "service.example.com", Replacement: "ingress.cluster.local"},
+			{Type: "name", Match: "old.example.com", Replacement: "new.example.com", Matcher: "suffix"},
+		},
+	}
+
+	out := GenerateCorefile(cfg)
+
+	if !strings.Contains(out, "rewrite name service.example.com ingress.cluster.local") {
+		t.Errorf("expected rewrite directive for service.example.com; got:\n%s", out)
+	}
+	if !strings.Contains(out, "rewrite name suffix old.example.com new.example.com") {
+		t.Errorf("expected suffix rewrite directive; got:\n%s", out)
+	}
+
+	// Rewrite must precede forward in the catch-all block
+	rewriteIdx := strings.Index(out, "rewrite name")
+	forwardIdx := strings.Index(out, "forward .")
+	if rewriteIdx == -1 || forwardIdx == -1 || rewriteIdx > forwardIdx {
+		t.Errorf("rewrite must appear before forward; rewriteIdx=%d forwardIdx=%d", rewriteIdx, forwardIdx)
+	}
+}
+
+func TestValidateRewriteRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		rules   []RewriteRuleConfig
+		wantErr bool
+	}{
+		{"valid name rule", []RewriteRuleConfig{{Type: "name", Match: "a.com", Replacement: "b.com"}}, false},
+		{"valid name rule with matcher", []RewriteRuleConfig{{Type: "name", Matcher: "suffix", Match: ".old", Replacement: ".new"}}, false},
+		{"missing type", []RewriteRuleConfig{{Match: "a.com", Replacement: "b.com"}}, true},
+		{"missing match", []RewriteRuleConfig{{Type: "name", Replacement: "b.com"}}, true},
+		{"missing replacement", []RewriteRuleConfig{{Type: "name", Match: "a.com"}}, true},
+		{"invalid matcher", []RewriteRuleConfig{{Type: "name", Matcher: "bogus", Match: "a.com", Replacement: "b.com"}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRewriteRules(tt.rules)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("got err=%v, wantErr=%v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 	tests := []struct {
 		name string

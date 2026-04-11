@@ -21,6 +21,7 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
   - [Multus CNI Integration](#multus-cni-integration)
   - [Device Identification](#device-identification)
   - [Domain Overrides](#domain-overrides)
+  - [Query Rewriting](#query-rewriting)
 - [Drift Detection](#drift-detection)
 - [CRD Reference](#crd-reference)
   - [NextDNSProfile](#nextdnsprofile)
@@ -643,6 +644,56 @@ internal.local {
 
 ---
 
+### Query Rewriting
+
+Use `spec.corefile.rewrite` to rewrite DNS query names before they are forwarded to NextDNS. This uses the CoreDNS [`rewrite` plugin](https://coredns.io/plugins/rewrite/) and is useful for CNAME flattening, domain remapping, and subdomain canonicalization.
+
+**When to use rewrite vs domainOverrides:**
+- Use `domainOverrides` to forward a domain to a *different upstream server* (e.g., an internal DNS server).
+- Use `rewrite` to change the *query name itself* before forwarding to the same upstream (NextDNS). For example, rewriting `service.example.com` to `ingress.cluster.local` so NextDNS resolves the canonical name.
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+spec:
+  profileRef:
+    name: my-profile
+  corefile:
+    rewrite:
+      # Exact match: rewrite a specific name to a different name
+      - type: name
+        match: service.example.com
+        replacement: ingress.cluster.local
+      # Suffix match: rewrite all names ending in .old.example.com
+      - type: name
+        matcher: suffix
+        match: .old.example.com
+        replacement: .new.example.com
+```
+
+This generates the following directives in the catch-all server block, **before** the `forward` directive (CoreDNS plugin evaluation order requires rewrites to fire first):
+
+```
+. {
+    rewrite name service.example.com ingress.cluster.local
+    rewrite name suffix .old.example.com .new.example.com
+    forward . tls://45.90.28.0 tls://45.90.30.0 {
+        tls_servername profileid.dns.nextdns.io
+    }
+    ...
+}
+```
+
+**Supported `type` values:** `name`, `class`, `type`, `ttl`, `edns0`
+
+**Supported `matcher` values (for `type: name`):** `exact` (default), `prefix`, `suffix`, `substring`, `regex`
+
+See the [CoreDNS rewrite plugin documentation](https://coredns.io/plugins/rewrite/) for the full rule syntax.
+
+---
+
 ## Drift Detection
 
 The operator periodically reconciles all resources to detect and correct drift from manual changes made outside Kubernetes.
@@ -899,6 +950,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `corefile.metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
 | `corefile.logging.enabled` | *bool | No | `false` | Enable DNS query logging |
 | `corefile.domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
+| `corefile.rewrite` | RewriteRule[] | No | | Query rewrite rules (rewrite plugin) |
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
 | `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
@@ -918,6 +970,15 @@ Each `DomainOverride` has:
 | `domain` | string | Yes | | DNS domain to override (e.g., `corp.example.com`) |
 | `upstreams` | string[] | Yes (min 1) | | Upstream DNS server IPs (IPv4 or IPv4:port) |
 | `cacheTTL` | *int32 | No | | Cache TTL for this domain (seconds) |
+
+Each `RewriteRule` has:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | string | Yes | | Rewrite type: `name`, `class`, `type`, `ttl`, `edns0` |
+| `match` | string | Yes | | Pattern to match (query name, class, etc.) |
+| `replacement` | string | Yes | | Value to rewrite to |
+| `matcher` | string | No | `exact` | Sub-type for `name` rewrites: `exact`, `prefix`, `suffix`, `substring`, `regex` |
 
 #### Status Fields
 

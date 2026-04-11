@@ -33,6 +33,43 @@ type DomainOverrideConfig struct {
 	CacheTTL  int32 // 0 means use default (30 seconds)
 }
 
+// RewriteRuleConfig represents a single CoreDNS rewrite plugin rule.
+type RewriteRuleConfig struct {
+	Type        string // name, class, type, ttl, edns0
+	Match       string
+	Replacement string
+	Matcher     string // optional: exact, prefix, suffix, substring, regex (only for type=name)
+}
+
+// ValidateRewriteRules checks that name rewrites have non-empty match
+// and replacement, and that the matcher (if set) is one of the supported
+// values.
+func ValidateRewriteRules(rules []RewriteRuleConfig) error {
+	var errs []string
+	validMatchers := map[string]bool{
+		"exact": true, "prefix": true, "suffix": true, "substring": true, "regex": true,
+	}
+	for i, r := range rules {
+		if r.Type == "" {
+			errs = append(errs, fmt.Sprintf("rewrite rule %d: type is required", i))
+			continue
+		}
+		if r.Match == "" {
+			errs = append(errs, fmt.Sprintf("rewrite rule %d: match is required", i))
+		}
+		if r.Replacement == "" {
+			errs = append(errs, fmt.Sprintf("rewrite rule %d: replacement is required", i))
+		}
+		if r.Matcher != "" && !validMatchers[r.Matcher] {
+			errs = append(errs, fmt.Sprintf("rewrite rule %d: invalid matcher %q", i, r.Matcher))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("rewrite rule validation failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 // CorefileConfig holds the configuration for generating a CoreDNS Corefile.
 type CorefileConfig struct {
 	// ProfileID is the NextDNS profile ID to use for DNS resolution.
@@ -59,6 +96,10 @@ type CorefileConfig struct {
 	// UpstreamIPv4 contains profile-specific IPv4 addresses for DoT/DNS forwarding.
 	// Falls back to anycast IPs (45.90.28.0, 45.90.30.0) if empty.
 	UpstreamIPv4 []string
+
+	// RewriteRules specifies CoreDNS rewrite plugin rules to emit before the
+	// forward directive in the catch-all server block.
+	RewriteRules []RewriteRuleConfig
 }
 
 // ValidateDomainOverrides checks for duplicate domains and invalid upstream values.
@@ -96,6 +137,9 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	// Generate the catch-all block for NextDNS
 	sb.WriteString(". {\n")
 
+	// Rewrite directives fire before forward (CoreDNS plugin order matters)
+	writeRewriteRules(&sb, cfg.RewriteRules)
+
 	// Generate forward plugin configuration
 	writeForwardPlugin(&sb, cfg)
 
@@ -124,6 +168,18 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	sb.WriteString("}")
 
 	return sb.String()
+}
+
+// writeRewriteRules writes rewrite directives to the string builder.
+// Rules are emitted in order; those with a matcher use the four-argument form.
+func writeRewriteRules(sb *strings.Builder, rules []RewriteRuleConfig) {
+	for _, r := range rules {
+		if r.Matcher != "" {
+			fmt.Fprintf(sb, "    rewrite %s %s %s %s\n", r.Type, r.Matcher, r.Match, r.Replacement)
+		} else {
+			fmt.Fprintf(sb, "    rewrite %s %s %s\n", r.Type, r.Match, r.Replacement)
+		}
+	}
 }
 
 // writeDomainOverrideBlock writes a domain-specific server block.
