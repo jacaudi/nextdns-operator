@@ -566,6 +566,32 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		}
 	}
 
+	// Add hosts plugin if specified
+	if cf != nil && cf.Hosts != nil && len(cf.Hosts.Entries) > 0 {
+		hosts := &coredns.HostsPluginConfig{
+			Entries: make([]coredns.HostsEntryConfig, len(cf.Hosts.Entries)),
+		}
+		for i, e := range cf.Hosts.Entries {
+			hosts.Entries[i] = coredns.HostsEntryConfig{
+				IP:        e.IP,
+				Hostnames: e.Hostnames,
+			}
+		}
+		// Default Fallthrough to true (matches kubebuilder default on the API type)
+		if cf.Hosts.Fallthrough != nil {
+			hosts.Fallthrough = *cf.Hosts.Fallthrough
+		} else {
+			hosts.Fallthrough = true
+		}
+		if cf.Hosts.TTL != nil {
+			hosts.TTL = *cf.Hosts.TTL
+		}
+		if err := coredns.ValidateHostsEntries(hosts.Entries); err != nil {
+			return nil, err
+		}
+		cfg.Hosts = hosts
+	}
+
 	return cfg, nil
 }
 

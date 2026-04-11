@@ -3210,3 +3210,99 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithInvalidRewriteRule(t *
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rewrite rule validation failed")
 }
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithHosts(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	trueVal := true
+	ttl := int32(60)
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Hosts: &nextdnsv1alpha1.HostsConfig{
+					Entries: []nextdnsv1alpha1.HostsEntry{
+						{IP: "192.168.1.100", Hostnames: []string{"grafana.internal", "grafana.example.com"}},
+						{IP: "192.168.1.101", Hostnames: []string{"prometheus.internal"}},
+					},
+					Fallthrough: &trueVal,
+					TTL:         &ttl,
+				},
+			},
+		},
+	}
+
+	cfg, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Hosts, "Hosts should be populated in CorefileConfig")
+	assert.Equal(t, 2, len(cfg.Hosts.Entries))
+	assert.Equal(t, "192.168.1.100", cfg.Hosts.Entries[0].IP)
+	assert.Equal(t, []string{"grafana.internal", "grafana.example.com"}, cfg.Hosts.Entries[0].Hostnames)
+	assert.Equal(t, "192.168.1.101", cfg.Hosts.Entries[1].IP)
+	assert.Equal(t, []string{"prometheus.internal"}, cfg.Hosts.Entries[1].Hostnames)
+	assert.True(t, cfg.Hosts.Fallthrough)
+	assert.Equal(t, int32(60), cfg.Hosts.TTL)
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithHosts_DefaultFallthrough(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Hosts: &nextdnsv1alpha1.HostsConfig{
+					Entries: []nextdnsv1alpha1.HostsEntry{
+						{IP: "10.0.0.1", Hostnames: []string{"myapp.internal"}},
+					},
+					// Fallthrough nil → should default to true
+				},
+			},
+		},
+	}
+
+	cfg, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Hosts)
+	assert.True(t, cfg.Hosts.Fallthrough, "nil Fallthrough should default to true")
+}
+
+func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithHosts_InvalidIP(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	reconciler := &NextDNSCoreDNSReconciler{Scheme: scheme}
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID: "abc123",
+		},
+	}
+
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Corefile: &nextdnsv1alpha1.CorefileSpec{
+				Hosts: &nextdnsv1alpha1.HostsConfig{
+					Entries: []nextdnsv1alpha1.HostsEntry{
+						{IP: "not-an-ip", Hostnames: []string{"myapp.internal"}},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := reconciler.buildCorefileConfig(coreDNS, profile)
+	require.Error(t, err, "invalid IP should cause buildCorefileConfig to return error")
+	assert.Contains(t, err.Error(), "invalid ip")
+}

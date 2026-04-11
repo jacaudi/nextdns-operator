@@ -107,6 +107,58 @@ spec:
                       - upstreams
                       type: object
                     type: array
+                  hosts:
+                    description: |-
+                      Hosts configures the CoreDNS hosts plugin for inline static
+                      hostname-to-IP overrides without running a separate upstream
+                      DNS server.
+                    properties:
+                      entries:
+                        description: |-
+                          Entries is the list of static IP-to-hostname mappings. Emitted
+                          inside the hosts plugin block in the generated Corefile.
+                        items:
+                          description: |-
+                            HostsEntry is a single static IP-to-hostname mapping for the
+                            CoreDNS hosts plugin. One entry can map a single IP to multiple
+                            hostnames (matching the /etc/hosts file format).
+                          properties:
+                            hostnames:
+                              description: |-
+                                Hostnames is the list of hostnames that should resolve to IP.
+                                At least one hostname is required.
+                              items:
+                                type: string
+                              minItems: 1
+                              type: array
+                            ip:
+                              description: IP is the IP address (IPv4 or IPv6) to
+                                return for the listed hostnames.
+                              minLength: 1
+                              type: string
+                          required:
+                          - hostnames
+                          - ip
+                          type: object
+                        minItems: 1
+                        type: array
+                      fallthrough:
+                        default: true
+                        description: |-
+                          Fallthrough controls whether queries that do not match a hosts
+                          entry are passed to the next plugin in the chain (forward to
+                          NextDNS). Defaults to true so unmatched names continue to resolve.
+                        type: boolean
+                      ttl:
+                        description: |-
+                          TTL is the TTL (in seconds) returned for static entries.
+                          CoreDNS default is 3600 if unset.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    required:
+                    - entries
+                    type: object
                   logging:
                     description: Logging configures DNS query logging
                     properties:
