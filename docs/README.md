@@ -22,6 +22,7 @@ Comprehensive documentation for the NextDNS Kubernetes Operator. For a quick ove
   - [Device Identification](#device-identification)
   - [Domain Overrides](#domain-overrides)
   - [Query Rewriting](#query-rewriting)
+  - [Static Hosts](#static-hosts)
 - [Drift Detection](#drift-detection)
 - [CRD Reference](#crd-reference)
   - [NextDNSProfile](#nextdnsprofile)
@@ -672,6 +673,38 @@ internal.local {
 - Split-horizon DNS for private zones
 - Override resolution for specific domains without affecting NextDNS upstream
 
+### Static Hosts
+
+Use `spec.corefile.hosts` to express inline static hostname-to-IP overrides without running a separate upstream DNS server. This maps to the CoreDNS [hosts plugin](https://coredns.io/plugins/hosts/).
+
+**When to use hosts vs domainOverrides:**
+- Use `hosts` for individual FQDNs that should always resolve to a specific IP (e.g., an internal service with a stable IP).
+- Use `domainOverrides` when an entire DNS zone should be forwarded to a different resolver (e.g., `corp.example.com` → internal DNS server).
+
+```yaml
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: home-dns
+spec:
+  profileRef:
+    name: my-profile
+  corefile:
+    hosts:
+      entries:
+        - ip: 192.168.1.100
+          hostnames:
+            - grafana.internal
+            - grafana.example.com
+        - ip: 192.168.1.101
+          hostnames:
+            - prometheus.internal
+      fallthrough: true   # default — unmatched names resolve via NextDNS
+      ttl: 3600           # optional, CoreDNS default if omitted
+```
+
+**Plugin ordering:** The `hosts` block fires before `forward` in the generated Corefile. When `fallthrough: true` (the default), any hostname not found in the static entries is passed to the next plugin (forward → NextDNS). Set `fallthrough: false` to return NXDOMAIN for unmatched names.
+
 ---
 
 ### Query Rewriting
@@ -986,6 +1019,9 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `corefile.logging.enabled` | *bool | No | `false` | Enable DNS query logging |
 | `corefile.domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
 | `corefile.rewrite` | RewriteRule[] | No | | Query rewrite rules (rewrite plugin) |
+| `corefile.hosts.entries` | HostsEntry[] | Yes (if `hosts` set) | | Static IP-to-hostname mappings |
+| `corefile.hosts.fallthrough` | *bool | No | `true` | Pass unmatched names to next plugin |
+| `corefile.hosts.ttl` | *int32 | No | `3600` (CoreDNS default) | TTL for static entries (seconds) |
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
 | `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
