@@ -286,15 +286,39 @@ type GatewayParametersReference struct {
 	Name string `json:"name"`
 }
 
+// CorefileSpec groups CoreDNS plugin-level configuration.
+// This is the configuration that ends up in the generated Corefile,
+// separate from Kubernetes-level deployment concerns (Deployment, Service,
+// Multus, Gateway).
+type CorefileSpec struct {
+	// Upstream configures the upstream DNS connection to NextDNS
+	// +optional
+	Upstream *UpstreamConfig `json:"upstream,omitempty"`
+
+	// Cache configures DNS response caching
+	// +optional
+	Cache *CoreDNSCacheConfig `json:"cache,omitempty"`
+
+	// Metrics configures metrics and monitoring
+	// +optional
+	Metrics *CoreDNSMetricsConfig `json:"metrics,omitempty"`
+
+	// Logging configures DNS query logging
+	// +optional
+	Logging *CoreDNSLoggingConfig `json:"logging,omitempty"`
+
+	// DomainOverrides configures domain-specific DNS upstream servers.
+	// Queries for these domains will be forwarded to the specified upstreams
+	// instead of NextDNS.
+	// +optional
+	DomainOverrides []DomainOverride `json:"domainOverrides,omitempty"`
+}
+
 // NextDNSCoreDNSSpec defines the desired state of NextDNSCoreDNS
 type NextDNSCoreDNSSpec struct {
 	// ProfileRef references the NextDNSProfile to use for DNS resolution
 	// +kubebuilder:validation:Required
 	ProfileRef ResourceReference `json:"profileRef"`
-
-	// Upstream configures the upstream DNS connection to NextDNS
-	// +optional
-	Upstream *UpstreamConfig `json:"upstream,omitempty"`
 
 	// Deployment configures the CoreDNS deployment
 	// +optional
@@ -303,24 +327,6 @@ type NextDNSCoreDNSSpec struct {
 	// Service configures the Kubernetes Service
 	// +optional
 	Service *CoreDNSServiceConfig `json:"service,omitempty"`
-
-	// Metrics configures metrics and monitoring
-	// +optional
-	Metrics *CoreDNSMetricsConfig `json:"metrics,omitempty"`
-
-	// Cache configures DNS response caching
-	// +optional
-	Cache *CoreDNSCacheConfig `json:"cache,omitempty"`
-
-	// Logging configures DNS query logging
-	// +optional
-	Logging *CoreDNSLoggingConfig `json:"logging,omitempty"`
-
-	// DomainOverrides configures domain-specific DNS upstream servers
-	// Queries for these domains will be forwarded to the specified upstreams
-	// instead of NextDNS
-	// +optional
-	DomainOverrides []DomainOverride `json:"domainOverrides,omitempty"`
 
 	// Multus configures a secondary network interface via Multus CNI
 	// +optional
@@ -333,6 +339,11 @@ type NextDNSCoreDNSSpec struct {
 	// Mutually exclusive with Service.Type=LoadBalancer.
 	// +optional
 	Gateway *GatewayConfig `json:"gateway,omitempty"`
+
+	// Corefile groups CoreDNS plugin-level configuration (upstream, cache,
+	// metrics, logging, domain overrides).
+	// +optional
+	Corefile *CorefileSpec `json:"corefile,omitempty"`
 }
 
 // DNSEndpoint represents a DNS endpoint exposed by the service

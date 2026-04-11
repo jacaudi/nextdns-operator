@@ -7,21 +7,6 @@ spec:
   profileRef:
     name: my-profile
 
-  upstream:
-    primary: DoT
-    deviceName: home-router
-
-  # Domain-specific DNS overrides for split-horizon DNS
-  domainOverrides:
-    - domain: corp.example.com
-      upstreams:
-        - 10.0.0.1
-        - 10.0.0.2
-      cacheTTL: 60
-    - domain: internal.local
-      upstreams:
-        - 192.168.1.1
-
   # Secondary network interface via Multus CNI
   multus:
     networkAttachmentDefinition: vlan30-macvlan
@@ -36,9 +21,25 @@ spec:
   service:
     type: LoadBalancer
 
-  cache:
-    enabled: true
-    successTTL: 3600
+  corefile:
+    upstream:
+      primary: DoT
+      deviceName: home-router
 
-  metrics:
-    enabled: true
+    cache:
+      enabled: true
+      successTTL: 3600
+
+    metrics:
+      enabled: true
+
+    # Domain-specific DNS overrides for split-horizon DNS
+    domainOverrides:
+      - domain: corp.example.com
+        upstreams:
+          - 10.0.0.1
+          - 10.0.0.2
+        cacheTTL: 60
+      - domain: internal.local
+        upstreams:
+          - 192.168.1.1

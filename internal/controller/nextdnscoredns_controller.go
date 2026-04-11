@@ -201,9 +201,10 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Warn if deviceName is used with plain DNS protocol (device identification not possible)
-	if coreDNS.Spec.Upstream != nil &&
-		coreDNS.Spec.Upstream.Primary == nextdnsv1alpha1.DNSProtocolDNS &&
-		coreDNS.Spec.Upstream.DeviceName != "" {
+	if coreDNS.Spec.Corefile != nil &&
+		coreDNS.Spec.Corefile.Upstream != nil &&
+		coreDNS.Spec.Corefile.Upstream.Primary == nextdnsv1alpha1.DNSProtocolDNS &&
+		coreDNS.Spec.Corefile.Upstream.DeviceName != "" {
 		logger.Info("WARNING: deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
 		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionTrue, "ProtocolLimitation",
 			"deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
@@ -480,29 +481,31 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 		MetricsEnabled:  true,
 	}
 
+	cf := coreDNS.Spec.Corefile
+
 	// Override primary protocol if specified
-	if coreDNS.Spec.Upstream != nil {
-		cfg.PrimaryProtocol = string(coreDNS.Spec.Upstream.Primary)
-		cfg.DeviceName = coreDNS.Spec.Upstream.DeviceName
+	if cf != nil && cf.Upstream != nil {
+		cfg.PrimaryProtocol = string(cf.Upstream.Primary)
+		cfg.DeviceName = cf.Upstream.DeviceName
 	}
 
 	// Override cache settings if specified
-	if coreDNS.Spec.Cache != nil {
-		if coreDNS.Spec.Cache.Enabled != nil && !*coreDNS.Spec.Cache.Enabled {
+	if cf != nil && cf.Cache != nil {
+		if cf.Cache.Enabled != nil && !*cf.Cache.Enabled {
 			cfg.CacheTTL = 0
-		} else if coreDNS.Spec.Cache.SuccessTTL != nil {
-			cfg.CacheTTL = *coreDNS.Spec.Cache.SuccessTTL
+		} else if cf.Cache.SuccessTTL != nil {
+			cfg.CacheTTL = *cf.Cache.SuccessTTL
 		}
 	}
 
 	// Override logging settings if specified
-	if coreDNS.Spec.Logging != nil && coreDNS.Spec.Logging.Enabled != nil {
-		cfg.LoggingEnabled = *coreDNS.Spec.Logging.Enabled
+	if cf != nil && cf.Logging != nil && cf.Logging.Enabled != nil {
+		cfg.LoggingEnabled = *cf.Logging.Enabled
 	}
 
 	// Override metrics settings if specified
-	if coreDNS.Spec.Metrics != nil && coreDNS.Spec.Metrics.Enabled != nil {
-		cfg.MetricsEnabled = *coreDNS.Spec.Metrics.Enabled
+	if cf != nil && cf.Metrics != nil && cf.Metrics.Enabled != nil {
+		cfg.MetricsEnabled = *cf.Metrics.Enabled
 	}
 
 	// Use profile-specific upstream IPs if available
@@ -516,9 +519,9 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	}
 
 	// Add domain overrides if specified
-	if len(coreDNS.Spec.DomainOverrides) > 0 {
-		cfg.DomainOverrides = make([]coredns.DomainOverrideConfig, len(coreDNS.Spec.DomainOverrides))
-		for i, override := range coreDNS.Spec.DomainOverrides {
+	if cf != nil && len(cf.DomainOverrides) > 0 {
+		cfg.DomainOverrides = make([]coredns.DomainOverrideConfig, len(cf.DomainOverrides))
+		for i, override := range cf.DomainOverrides {
 			cfg.DomainOverrides[i] = coredns.DomainOverrideConfig{
 				Domain:    override.Domain,
 				Upstreams: override.Upstreams,
@@ -1111,9 +1114,9 @@ func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *ne
 	// Get upstream endpoint URL
 	primaryProtocol := coredns.ProtocolDoT
 	deviceName := ""
-	if coreDNS.Spec.Upstream != nil {
-		primaryProtocol = string(coreDNS.Spec.Upstream.Primary)
-		deviceName = coreDNS.Spec.Upstream.DeviceName
+	if coreDNS.Spec.Corefile != nil && coreDNS.Spec.Corefile.Upstream != nil {
+		primaryProtocol = string(coreDNS.Spec.Corefile.Upstream.Primary)
+		deviceName = coreDNS.Spec.Corefile.Upstream.DeviceName
 	}
 	var upstreamIPs []string
 	if profile.Status.Setup != nil {
