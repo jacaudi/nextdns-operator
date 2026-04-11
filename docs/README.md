@@ -165,6 +165,39 @@ spec:
 
 Deploy a dedicated CoreDNS instance that forwards DNS queries to NextDNS using the `NextDNSCoreDNS` custom resource. This is useful for providing DNS services to devices on your network (home routers, IoT devices, etc.) that can't use DoH/DoT directly.
 
+> **Breaking change in v0.18.0:** Plugin-level fields (`upstream`, `cache`, `metrics`, `logging`, `domainOverrides`) are now grouped under `spec.corefile`. Manifests using the old top-level form will be rejected by CRD validation. See [#122](https://github.com/jacaudi/nextdns-operator/issues/122) for the migration.
+>
+> <details>
+> <summary>Before / after example</summary>
+>
+> **Before (v0.17.x):**
+>
+> ```yaml
+> spec:
+>   profileRef:
+>     name: my-profile
+>   upstream:
+>     primary: DoT
+>   cache:
+>     enabled: true
+> ```
+>
+> **After (v0.18.0+):**
+>
+> ```yaml
+> spec:
+>   profileRef:
+>     name: my-profile
+>   corefile:
+>     upstream:
+>       primary: DoT
+>     cache:
+>       enabled: true
+> ```
+>
+> Kubernetes-level fields (`profileRef`, `deployment`, `service`, `multus`, `gateway`) stay at the top level.
+> </details>
+
 ### Basic Setup
 
 ```yaml
@@ -176,9 +209,6 @@ spec:
   profileRef:
     name: my-profile  # References an existing NextDNSProfile
 
-  upstream:
-    primary: DoT      # DNS over TLS (recommended)
-
   deployment:
     mode: Deployment
     replicas: 2
@@ -187,9 +217,12 @@ spec:
     type: LoadBalancer
     loadBalancerIP: "192.168.1.53"  # Optional static IP
 
-  cache:
-    enabled: true
-    successTTL: 3600  # Cache TTL in seconds
+  corefile:
+    upstream:
+      primary: DoT      # DNS over TLS (recommended)
+    cache:
+      enabled: true
+      successTTL: 3600  # Cache TTL in seconds
 ```
 
 **Check deployment status:**
@@ -219,8 +252,9 @@ The `upstream.primary` field controls how CoreDNS connects to NextDNS. Three pro
 > **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Your DNS queries and the profile ID are visible to anyone observing network traffic. Use DoT or DoH for privacy in untrusted networks.
 
 ```yaml
-upstream:
-  primary: DoT  # DoT, DoH, or DNS
+corefile:
+  upstream:
+    primary: DoT  # DoT, DoH, or DNS
 ```
 
 ### Deployment Modes
@@ -358,16 +392,18 @@ spec:
 CoreDNS caching is enabled by default with a 3600-second (1 hour) TTL for successful responses. The cache respects upstream TTL values -- if the upstream response has a lower TTL, that value is used instead.
 
 ```yaml
-cache:
-  enabled: true       # default: true
-  successTTL: 3600    # default: 3600 (seconds)
+corefile:
+  cache:
+    enabled: true       # default: true
+    successTTL: 3600    # default: 3600 (seconds)
 ```
 
 To disable caching:
 
 ```yaml
-cache:
-  enabled: false
+corefile:
+  cache:
+    enabled: false
 ```
 
 Setting `successTTL: 0` keeps the cache enabled but uses only upstream TTL values without overriding.
@@ -377,8 +413,9 @@ Setting `successTTL: 0` keeps the cache enabled but uses only upstream TTL value
 CoreDNS exposes a Prometheus metrics endpoint on port 9153 by default.
 
 ```yaml
-metrics:
-  enabled: true  # default: true
+corefile:
+  metrics:
+    enabled: true  # default: true
 ```
 
 > **Note:** ServiceMonitor for Prometheus Operator is configured via Helm values, not the CRD. See the Helm chart `values.yaml` for ServiceMonitor configuration.
@@ -388,8 +425,9 @@ metrics:
 Enable CoreDNS query logging for debugging DNS resolution issues. Disabled by default to reduce log volume.
 
 ```yaml
-logging:
-  enabled: true  # default: false
+corefile:
+  logging:
+    enabled: true  # default: false
 ```
 
 When enabled, CoreDNS logs all incoming DNS queries to stdout. This is useful for debugging but can generate significant log volume in production.
@@ -471,9 +509,6 @@ spec:
   profileRef:
     name: my-profile
 
-  upstream:
-    primary: DoT
-
   multus:
     networkAttachmentDefinition: dns-vlan
     ips:
@@ -486,6 +521,10 @@ spec:
 
   service:
     type: ClusterIP  # Internal only; clients use Multus IPs directly
+
+  corefile:
+    upstream:
+      primary: DoT
 ```
 
 The operator automatically:
@@ -514,9 +553,10 @@ Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional 
 > **Note:** Device identification only works with DoT (via SNI) and DoH (via URL path). When using plain DNS protocol, `deviceName` is ignored and a `DeviceNameIgnored` warning condition is set on the CR.
 
 ```yaml
-upstream:
-  primary: DoT
-  deviceName: home-router
+corefile:
+  upstream:
+    primary: DoT
+    deviceName: home-router
 ```
 
 **How it works per protocol:**
@@ -536,9 +576,10 @@ upstream:
 **Example with spaces:**
 
 ```yaml
-upstream:
-  primary: DoT
-  deviceName: Home Router
+corefile:
+  upstream:
+    primary: DoT
+    deviceName: Home Router
 ```
 
 This produces a DoT endpoint like `Home--Router-abc123.dns.nextdns.io` and a DoH endpoint like `https://dns.nextdns.io/abc123/Home%20Router`.
@@ -555,17 +596,18 @@ metadata:
 spec:
   profileRef:
     name: my-profile
-  upstream:
-    primary: DoT
-  domainOverrides:
-    - domain: corp.example.com
-      upstreams:
-        - 10.0.0.1
-        - 10.0.0.2
-      cacheTTL: 60
-    - domain: internal.local
-      upstreams:
-        - 192.168.1.1
+  corefile:
+    upstream:
+      primary: DoT
+    domainOverrides:
+      - domain: corp.example.com
+        upstreams:
+          - 10.0.0.1
+          - 10.0.0.2
+        cacheTTL: 60
+      - domain: internal.local
+        upstreams:
+          - 192.168.1.1
 ```
 
 This generates a Corefile with domain-specific server blocks:
@@ -834,8 +876,8 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 |-------|------|----------|---------|-------------|
 | `profileRef.name` | string | Yes | | Name of the NextDNSProfile to use |
 | `profileRef.namespace` | string | No | | Namespace (defaults to same namespace) |
-| `upstream.primary` | DNSProtocol | No | `DoT` | Upstream protocol: `DoT`, `DoH`, or `DNS` |
-| `upstream.deviceName` | string | No | | Device name for NextDNS Analytics (max 63 chars, alphanumeric/hyphens/spaces) |
+| `corefile.upstream.primary` | DNSProtocol | No | `DoT` | Upstream protocol: `DoT`, `DoH`, or `DNS` |
+| `corefile.upstream.deviceName` | string | No | | Device name for NextDNS Analytics (max 63 chars, alphanumeric/hyphens/spaces) |
 | `deployment.mode` | DeploymentMode | No | `Deployment` | `Deployment` or `DaemonSet` |
 | `deployment.replicas` | *int32 | No | `2` | Replicas (Deployment mode only, min: 1) |
 | `deployment.image` | string | No | `mirror.gcr.io/coredns/coredns:1.13.1` | CoreDNS container image |
@@ -848,13 +890,13 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `service.loadBalancerIP` | string | No | | Static IP for LoadBalancer (valid IPv4) |
 | `service.annotations` | map[string]string | No | | Additional service annotations |
 | `service.nameOverride` | string | No | | Custom service name |
-| `metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
+| `corefile.metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
 | `deployment.podDisruptionBudget.minAvailable` | IntOrString | No | | Min pods available (mutually exclusive with maxUnavailable) |
 | `deployment.podDisruptionBudget.maxUnavailable` | IntOrString | No | `1` (when set) | Max pods unavailable (mutually exclusive with minAvailable) |
-| `cache.enabled` | *bool | No | `true` | Enable DNS response caching |
-| `cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
-| `logging.enabled` | *bool | No | `false` | Enable DNS query logging |
-| `domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
+| `corefile.cache.enabled` | *bool | No | `true` | Enable DNS response caching |
+| `corefile.cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
+| `corefile.logging.enabled` | *bool | No | `false` | Enable DNS query logging |
+| `corefile.domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
 | `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
