@@ -414,15 +414,63 @@ Setting `successTTL: 0` keeps the cache enabled but uses only upstream TTL value
 
 ### Metrics & Monitoring
 
-CoreDNS exposes a Prometheus metrics endpoint on port 9153 by default.
+CoreDNS exposes a Prometheus metrics endpoint on port 9153 by default. The listen port is configurable if you need to avoid a conflict with a sidecar or another container.
 
 ```yaml
 corefile:
   metrics:
     enabled: true  # default: true
+    port: 9153     # default: 9153
 ```
 
+The configured port applies to the CoreDNS `prometheus` plugin listener. If you change it, remember to update any ServiceMonitor / scrape config that targets CoreDNS so it talks to the new port.
+
 > **Note:** ServiceMonitor for Prometheus Operator is configured via Helm values, not the CRD. See the Helm chart `values.yaml` for ServiceMonitor configuration.
+
+### Health Plugin (Liveness)
+
+The CoreDNS [`health`](https://coredns.io/plugins/health/) plugin serves the HTTP endpoint used for the pod's Kubernetes liveness probe. The operator keeps the deployment's liveness probe in sync with this configuration automatically — if you change `corefile.health.port`, the probe port is updated to match.
+
+```yaml
+corefile:
+  health:
+    enabled: true    # default: true
+    port: 8080       # default: 8080
+    lameduck: 10s    # optional, omit to skip the directive
+```
+
+- `enabled: false` removes both the `health` plugin directive from the Corefile AND the deployment's `livenessProbe`. Use this only in niche scenarios where you have an alternative liveness strategy.
+- `lameduck` delays health endpoint failure during shutdown so load balancers (including upstream Gateway implementations) can drain traffic cleanly. Must be a Go duration string such as `10s`, `500ms`, or `2m`.
+- `port` must differ from `corefile.ready.port` and `corefile.metrics.port`. The operator rejects colliding configurations at reconcile time.
+
+### Ready Plugin (Readiness)
+
+The CoreDNS [`ready`](https://coredns.io/plugins/ready/) plugin serves the HTTP endpoint used for the pod's Kubernetes readiness probe. As with `health`, the deployment's readiness probe tracks this configuration automatically.
+
+```yaml
+corefile:
+  ready:
+    enabled: true   # default: true
+    port: 8181      # default: 8181
+```
+
+- `enabled: false` removes both the `ready` plugin directive and the deployment's `readinessProbe`. This is almost never what you want in production.
+- `port` must differ from `corefile.health.port` and `corefile.metrics.port`.
+
+### Errors Plugin
+
+The CoreDNS [`errors`](https://coredns.io/plugins/errors/) plugin logs DNS resolution errors to stderr. It is enabled by default. The optional `consolidate` directive reduces log spam by collapsing repeated error messages matching a pattern within a time window.
+
+```yaml
+corefile:
+  errors:
+    enabled: true  # default: true
+    consolidate:
+      - interval: 5m
+        pattern: "^[a-z]+error"
+```
+
+Each consolidate rule needs both `interval` (a Go duration string) and `pattern` (a regular expression matched against log lines). When `consolidate` is empty, the plugin emits a bare `errors` directive — the pre-feature default.
 
 ### Query Logging
 
@@ -1016,12 +1064,20 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `corefile.cache.enabled` | *bool | No | `true` | Enable DNS response caching |
 | `corefile.cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
 | `corefile.metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
+| `corefile.metrics.port` | *int32 | No | `9153` | Prometheus plugin listen port |
 | `corefile.logging.enabled` | *bool | No | `false` | Enable DNS query logging |
 | `corefile.domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
 | `corefile.rewrite` | RewriteRule[] | No | | Query rewrite rules (rewrite plugin) |
 | `corefile.hosts.entries` | HostsEntry[] | Yes (if `hosts` set) | | Static IP-to-hostname mappings |
 | `corefile.hosts.fallthrough` | *bool | No | `true` | Pass unmatched names to next plugin |
 | `corefile.hosts.ttl` | *int32 | No | `3600` (CoreDNS default) | TTL for static entries (seconds) |
+| `corefile.health.enabled` | *bool | No | `true` | Enable health plugin and the deployment's liveness probe |
+| `corefile.health.port` | *int32 | No | `8080` | Health plugin listen port (also used for the liveness probe) |
+| `corefile.health.lameduck` | string | No | | Delay shutdown to drain load-balancer traffic (Go duration string) |
+| `corefile.ready.enabled` | *bool | No | `true` | Enable ready plugin and the deployment's readiness probe |
+| `corefile.ready.port` | *int32 | No | `8181` | Ready plugin listen port (also used for the readiness probe) |
+| `corefile.errors.enabled` | *bool | No | `true` | Enable the errors plugin |
+| `corefile.errors.consolidate` | ConsolidateRule[] | No | | Log-spam consolidation rules (see below) |
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
 | `multus.namespace` | string | No | CR namespace | Namespace of the NetworkAttachmentDefinition |
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
@@ -1050,6 +1106,13 @@ Each `RewriteRule` has:
 | `match` | string | Yes | | Pattern to match (query name, class, etc.) |
 | `replacement` | string | Yes | | Value to rewrite to |
 | `matcher` | string | No | `exact` | Sub-type for `name` rewrites: `exact`, `prefix`, `suffix`, `substring`, `regex` |
+
+Each `ConsolidateRule` (used in `corefile.errors.consolidate`) has:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `interval` | string | Yes | | Consolidation window (Go duration string, e.g., `5m`) |
+| `pattern` | string | Yes | | Regular expression matched against error log lines |
 
 #### Status Fields
 
