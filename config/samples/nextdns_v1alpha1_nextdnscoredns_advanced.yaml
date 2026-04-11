@@ -1,0 +1,145 @@
+# Advanced NextDNSCoreDNS example showcasing every knob exposed by
+# spec.corefile. Each sub-block is optional — omit anything you don't
+# need and the operator applies sensible defaults (DoT upstream, cache
+# enabled, metrics enabled, health/ready plugins on standard ports,
+# logging off, errors plugin enabled without consolidation).
+#
+# For a typical production deployment, start with the simpler
+# nextdns_v1alpha1_nextdnscoredns.yaml instead. This file exists as a
+# reference for users who want to see the full range of options in
+# one place.
+apiVersion: nextdns.io/v1alpha1
+kind: NextDNSCoreDNS
+metadata:
+  name: advanced-dns
+  namespace: default
+spec:
+  profileRef:
+    name: my-profile
+
+  deployment:
+    mode: Deployment
+    replicas: 3
+
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "192.168.1.53"
+
+  corefile:
+    # --- Upstream with forward plugin tuning (see #125) ---
+    #
+    # All five tuning fields are optional; omit any and CoreDNS defaults
+    # apply. The tuning directives are emitted inside the forward { }
+    # block alongside the existing tls_servername (for DoT) or
+    # protocol-specific lines.
+    upstream:
+      primary: DoT
+      deviceName: advanced-dns-example
+      forward:
+        policy: round_robin    # random (default) | round_robin | sequential
+        maxConcurrent: 1000    # cap on concurrent upstream queries
+        healthCheck: 5s        # interval between upstream health checks
+        expire: 30s            # close idle upstream connections after this
+        maxFails: 2            # failed health checks before marking upstream down
+
+    # --- Cache (explicit tuning; these are also the defaults) ---
+    cache:
+      enabled: true
+      successTTL: 3600
+
+    # --- Rewrite plugin (see #123) ---
+    #
+    # Query rewriting fires BEFORE hosts lookups and BEFORE forwarding,
+    # so the (possibly rewritten) query name is what hosts matches against
+    # and what NextDNS ultimately resolves. Common uses: CNAME flattening,
+    # domain remapping, canonicalization.
+    rewrite:
+      # Exact name rewrite (no matcher = exact match).
+      - type: name
+        match: service.example.com
+        replacement: ingress.cluster.local
+      # Suffix rewrite: every *.old.example.com query is rewritten to
+      # *.new.example.com before resolution.
+      - type: name
+        matcher: suffix
+        match: .old.example.com
+        replacement: .new.example.com
+
+    # --- Hosts plugin (see #124) ---
+    #
+    # Static inline hostname-to-IP overrides. Emitted inside a hosts { }
+    # block BEFORE the forward plugin, so matching queries are answered
+    # locally without hitting NextDNS. Use for single FQDNs; use
+    # domainOverrides below when you need a whole zone.
+    hosts:
+      entries:
+        - ip: 192.168.1.100
+          hostnames:
+            - grafana.internal
+            - grafana.example.com
+        - ip: 192.168.1.101
+          hostnames:
+            - prometheus.internal
+      fallthrough: true   # default: unmatched names fall through to forward
+      ttl: 3600           # TTL for static entries (seconds)
+
+    # --- Domain-specific upstream overrides (split-horizon DNS) ---
+    #
+    # Queries matching a listed domain are forwarded to the configured
+    # upstreams instead of NextDNS. Complementary to hosts: use hosts for
+    # individual FQDNs, domainOverrides for whole zones with an internal
+    # DNS server.
+    domainOverrides:
+      - domain: corp.example.com
+        upstreams:
+          - 10.0.0.1
+          - 10.0.0.2
+        cacheTTL: 60
+      - domain: internal.local
+        upstreams:
+          - 192.168.1.1
+
+    # --- Health plugin (see #126) ---
+    #
+    # Configurable port and optional lameduck delay for graceful
+    # shutdown. The operator keeps the deployment's liveness probe in
+    # sync with health.port automatically — if you set a custom port
+    # here, the probe uses the same one.
+    health:
+      enabled: true     # default: true — disabling also removes the liveness probe
+      port: 8080        # default: 8080
+      lameduck: 10s     # default: unset — delays shutdown so LB traffic drains cleanly
+
+    # --- Ready plugin (see #126) ---
+    #
+    # Configurable port. Like health, the readiness probe tracks this
+    # port automatically.
+    ready:
+      enabled: true     # default: true — disabling also removes the readiness probe
+      port: 8181        # default: 8181
+
+    # --- Errors plugin (see #126) ---
+    #
+    # Optional consolidate rules reduce log spam from repeated errors
+    # matching a pattern. CoreDNS merges matching lines within the
+    # configured interval into a single log entry.
+    errors:
+      enabled: true
+      consolidate:
+        - interval: 5m
+          pattern: "^[a-z]+error"
+
+    # --- Metrics / prometheus plugin ---
+    #
+    # Configurable port. Defaults to 9153 when omitted.
+    metrics:
+      enabled: true
+      port: 9153
+
+    # --- Query logging ---
+    #
+    # Disabled by default because DNS query volume generates a lot of
+    # log lines. Enable for debugging resolution issues; consider
+    # pairing with errors.consolidate above to keep noise manageable.
+    logging:
+      enabled: false
