@@ -587,6 +587,36 @@ corefile:
 
 This produces a DoT endpoint like `Home--Router-abc123.dns.nextdns.io` and a DoH endpoint like `https://dns.nextdns.io/abc123/Home%20Router`.
 
+### Forward Plugin Tuning
+
+The CoreDNS [`forward` plugin](https://coredns.io/plugins/forward/) forwards DNS queries to NextDNS. By default it uses CoreDNS built-in defaults for failover policy, concurrency, health-check interval, and connection expiration. Use `spec.corefile.upstream.forward` to override these when you need tighter control over upstream behavior.
+
+The entire `forward` block is optional — omitting it leaves CoreDNS defaults in effect and the forward directive shape is unchanged.
+
+```yaml
+corefile:
+  upstream:
+    primary: DoT
+    forward:
+      policy: round_robin     # random | round_robin | sequential
+      maxConcurrent: 1000     # cap concurrent upstream queries (min 1)
+      healthCheck: 5s         # upstream health check interval (Go duration)
+      expire: 30s             # close idle upstream connections after (Go duration)
+      maxFails: 2             # failed health checks before marking upstream down
+```
+
+**Tunable options:**
+
+| Field | Default (CoreDNS) | Description |
+|-------|------------------|-------------|
+| `policy` | `random` | Failover policy when multiple upstreams are configured. `random` spreads load randomly; `round_robin` distributes in order; `sequential` always tries upstreams in declared order. |
+| `maxConcurrent` | unlimited | Maximum number of concurrent queries forwarded upstream. Use to prevent thundering-herd on busy resolvers. Minimum 1. |
+| `healthCheck` | `500ms` | Interval between upstream health checks. Shorter intervals detect failures faster at the cost of more health-check traffic. Must be a Go duration string (e.g. `5s`, `500ms`). |
+| `expire` | `10s` | How long idle upstream connections are kept open before being closed. Must be a Go duration string. |
+| `maxFails` | `2` | Number of consecutive failed health checks before an upstream is marked down. Set to `0` to disable marking upstreams down. |
+
+> **Note:** When `forward.policy`, `healthCheck`, or `expire` contain invalid values (unknown policy name or unparseable duration), the controller rejects the configuration and surfaces an error condition on the CR — no Corefile is generated until the issue is resolved.
+
 ### Domain Overrides
 
 Configure domain-specific DNS upstream servers for split-horizon DNS:
@@ -931,6 +961,11 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `profileRef.namespace` | string | No | | Namespace (defaults to same namespace) |
 | `corefile.upstream.primary` | DNSProtocol | No | `DoT` | Upstream protocol: `DoT`, `DoH`, or `DNS` |
 | `corefile.upstream.deviceName` | string | No | | Device name for NextDNS Analytics (max 63 chars, alphanumeric/hyphens/spaces) |
+| `corefile.upstream.forward.policy` | ForwardPolicy | No | `random` (CoreDNS default) | Failover policy: `random`, `round_robin`, or `sequential` |
+| `corefile.upstream.forward.maxConcurrent` | *int32 | No | unlimited | Cap on concurrent upstream queries (min 1) |
+| `corefile.upstream.forward.healthCheck` | string | No | `500ms` (CoreDNS default) | Interval between upstream health checks (Go duration) |
+| `corefile.upstream.forward.expire` | string | No | `10s` (CoreDNS default) | Idle upstream connection expiration (Go duration) |
+| `corefile.upstream.forward.maxFails` | *int32 | No | `2` (CoreDNS default) | Failed health checks before marking upstream down |
 | `deployment.mode` | DeploymentMode | No | `Deployment` | `Deployment` or `DaemonSet` |
 | `deployment.replicas` | *int32 | No | `2` | Replicas (Deployment mode only, min: 1) |
 | `deployment.image` | string | No | `mirror.gcr.io/coredns/coredns:1.13.1` | CoreDNS container image |
