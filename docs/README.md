@@ -225,6 +225,8 @@ spec:
       successTTL: 3600  # Cache TTL in seconds
 ```
 
+`spec.corefile` is fully optional — omit the block entirely and the operator applies sensible defaults (DoT upstream, cache enabled with 3600s TTL, metrics enabled, logging disabled). A minimal manifest needs only `profileRef` plus whatever Kubernetes-level exposure (`service` or `gateway`) you want.
+
 **Check deployment status:**
 
 ```bash
@@ -890,11 +892,11 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `service.loadBalancerIP` | string | No | | Static IP for LoadBalancer (valid IPv4) |
 | `service.annotations` | map[string]string | No | | Additional service annotations |
 | `service.nameOverride` | string | No | | Custom service name |
-| `corefile.metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
 | `deployment.podDisruptionBudget.minAvailable` | IntOrString | No | | Min pods available (mutually exclusive with maxUnavailable) |
 | `deployment.podDisruptionBudget.maxUnavailable` | IntOrString | No | `1` (when set) | Max pods unavailable (mutually exclusive with minAvailable) |
 | `corefile.cache.enabled` | *bool | No | `true` | Enable DNS response caching |
 | `corefile.cache.successTTL` | *int32 | No | `3600` | Cache TTL for successful responses (seconds) |
+| `corefile.metrics.enabled` | *bool | No | `true` | Enable Prometheus metrics endpoint |
 | `corefile.logging.enabled` | *bool | No | `false` | Enable DNS query logging |
 | `corefile.domainOverrides` | DomainOverride[] | No | | Domain-specific upstream overrides |
 | `multus.networkAttachmentDefinition` | string | Yes (if `multus` set) | | Name of the NetworkAttachmentDefinition CR |
