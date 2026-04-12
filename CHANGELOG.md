@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.18.0](https://github.com/jacaudi/nextdns-operator/compare/v0.17.2...v0.18.0) (2026-04-12)
+
+* refactor(api)!: group CoreDNS plugin config under spec.corefile ([#128](https://github.com/jacaudi/nextdns-operator/issues/128)) ([e6f663e](https://github.com/jacaudi/nextdns-operator/commit/e6f663e0a9956ae4cbf64dc35e93b6db753183eb)), closes [#122](https://github.com/jacaudi/nextdns-operator/issues/122)
+
+
+### Features
+
+* **coredns:** expose forward plugin tuning options ([#131](https://github.com/jacaudi/nextdns-operator/issues/131)) ([659bd47](https://github.com/jacaudi/nextdns-operator/commit/659bd47756bbad7ab1a5adbf708d52acb634534f)), closes [#125](https://github.com/jacaudi/nextdns-operator/issues/125)
+* **coredns:** expose hosts plugin for inline static overrides ([#130](https://github.com/jacaudi/nextdns-operator/issues/130)) ([61dfd08](https://github.com/jacaudi/nextdns-operator/commit/61dfd089e23cf452686e6c021ca04ddec95cceca)), closes [#124](https://github.com/jacaudi/nextdns-operator/issues/124)
+* **coredns:** expose rewrite plugin for query rewriting ([#129](https://github.com/jacaudi/nextdns-operator/issues/129)) ([c082184](https://github.com/jacaudi/nextdns-operator/commit/c08218474065324f9f6622ec605c5cc4e120b496)), closes [#123](https://github.com/jacaudi/nextdns-operator/issues/123)
+* **coredns:** make health/ready/errors/metrics plugins configurable ([#132](https://github.com/jacaudi/nextdns-operator/issues/132)) ([56aaac1](https://github.com/jacaudi/nextdns-operator/commit/56aaac1a61a49017772499d71394015be0e30ace)), closes [#126](https://github.com/jacaudi/nextdns-operator/issues/126)
+
+
+### BREAKING CHANGES
+
+* NextDNSCoreDNS manifests must move upstream, cache,
+metrics, logging, and domainOverrides fields under spec.corefile. The
+old top-level fields will be rejected by CRD validation. Kubernetes-level
+fields (profileRef, deployment, service, multus, gateway) are unchanged.
+See docs/README.md for a before/after migration example.
+
 ## [0.17.2](https://github.com/jacaudi/nextdns-operator/compare/v0.17.1...v0.17.2) (2026-04-09)
 
 ### Bug Fixes
