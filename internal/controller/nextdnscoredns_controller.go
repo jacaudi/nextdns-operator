@@ -88,6 +88,8 @@ type NextDNSCoreDNSReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyproxies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -342,7 +344,20 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if coreDNS.Spec.Gateway != nil && r.GatewayAPIAvailable {
 		serviceName := r.getServiceName(coreDNS, profile)
 
-		if err := r.reconcileGateway(ctx, coreDNS, nil); err != nil {
+		// Reconcile proxy replicas if configured
+		var proxyParametersRef *nextdnsv1alpha1.GatewayParametersReference
+		if coreDNS.Spec.Gateway.Replicas != nil {
+			ref, proxyErr := r.reconcileProxyReplicas(ctx, coreDNS)
+			if proxyErr != nil {
+				logger.Error(proxyErr, "Failed to reconcile proxy replicas")
+				r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "ProxyReplicasFailed", proxyErr.Error())
+				// Continue — don't block gateway reconciliation for proxy replica errors
+			} else {
+				proxyParametersRef = ref
+			}
+		}
+
+		if err := r.reconcileGateway(ctx, coreDNS, proxyParametersRef); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
 			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "GatewayFailed", err.Error())
 			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "GatewayFailed", err.Error())
@@ -416,6 +431,39 @@ func (r *NextDNSCoreDNSReconciler) handleDeletion(ctx context.Context, coreDNS *
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// reconcileProxyReplicas looks up the GatewayClass controllerName, finds
+// the matching proxy strategy, and reconciles the implementation-specific
+// CR. Returns the parametersRef to wire into the Gateway, or nil if the
+// implementation is unsupported.
+func (r *NextDNSCoreDNSReconciler) reconcileProxyReplicas(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) (*nextdnsv1alpha1.GatewayParametersReference, error) {
+	logger := log.FromContext(ctx)
+
+	// Resolve GatewayClass name
+	className := r.GatewayClassName
+	if coreDNS.Spec.Gateway.GatewayClassName != nil {
+		className = *coreDNS.Spec.Gateway.GatewayClassName
+	}
+
+	// Look up GatewayClass to get controllerName
+	gatewayClass := &gatewayv1.GatewayClass{}
+	if err := r.Get(ctx, types.NamespacedName{Name: className}, gatewayClass); err != nil {
+		return nil, fmt.Errorf("failed to get GatewayClass %q: %w", className, err)
+	}
+
+	controllerName := string(gatewayClass.Spec.ControllerName)
+	strategy := findProxyStrategy(controllerName)
+	if strategy == nil {
+		logger.Info("Gateway controller does not support proxy replicas",
+			"controllerName", controllerName,
+			"gatewayClassName", className)
+		r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionTrue, "GatewayReplicasUnsupported",
+			fmt.Sprintf("spec.gateway.replicas is not supported for GatewayClass controller %q; create the implementation-specific configuration manually via spec.gateway.infrastructure.parametersRef", controllerName))
+		return nil, nil
+	}
+
+	return strategy.ReconcileProxyReplicas(ctx, r.Client, r.Scheme, coreDNS, *coreDNS.Spec.Gateway.Replicas)
 }
 
 // resolveProfile fetches the referenced NextDNSProfile
