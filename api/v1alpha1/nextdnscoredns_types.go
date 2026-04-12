@@ -366,6 +366,16 @@ type GatewayConfig struct {
 	// +kubebuilder:validation:MinItems=1
 	Addresses []GatewayAddress `json:"addresses"`
 
+	// Replicas sets the desired replica count for the gateway proxy pods.
+	// How this is applied depends on the gateway implementation. For Envoy
+	// Gateway, the operator generates an EnvoyProxy CR and wires it via
+	// infrastructure.parametersRef automatically. For unsupported
+	// implementations, this field is ignored with a warning condition.
+	// Mutually exclusive with infrastructure.parametersRef.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// Annotations specifies additional annotations for the Gateway resource
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
