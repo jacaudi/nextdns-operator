@@ -2,6 +2,14 @@
 
 ## [0.19.1](https://github.com/jacaudi/nextdns-operator/compare/v0.19.0...v0.19.1) (2026-04-12)
 
+### Dependencies
+
+* **deps:** update jacaudi/github-actions action to v0.20.1 ([#121](https://github.com/jacaudi/nextdns-operator/issues/121)) ([93d6f65](https://github.com/jacaudi/nextdns-operator/commit/93d6f65))
+
+### Documentation
+
+* restructure documentation into feature-specific files ([#135](https://github.com/jacaudi/nextdns-operator/issues/135)) ([e253b99](https://github.com/jacaudi/nextdns-operator/commit/e253b996f1817692ca3bfb0342a0f7fe6a2c1dfa))
+
 ## [0.19.0](https://github.com/jacaudi/nextdns-operator/compare/v0.18.0...v0.19.0) (2026-04-12)
 
 ### Features
