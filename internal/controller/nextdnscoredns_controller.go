@@ -230,6 +230,22 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 
+		// Check mutual exclusivity: replicas vs parametersRef
+		if coreDNS.Spec.Gateway.Replicas != nil &&
+			coreDNS.Spec.Gateway.Infrastructure != nil &&
+			coreDNS.Spec.Gateway.Infrastructure.ParametersRef != nil {
+			logger.Info("Invalid configuration: gateway.replicas and gateway.infrastructure.parametersRef are mutually exclusive")
+			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "InvalidConfiguration",
+				"spec.gateway.replicas and spec.gateway.infrastructure.parametersRef are mutually exclusive; use one or the other")
+			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "InvalidConfiguration",
+				"Gateway replicas and parametersRef are mutually exclusive")
+			coreDNS.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+				logger.Error(updateErr, "Failed to update status")
+			}
+			return ctrl.Result{}, nil
+		}
+
 		// Check if Gateway API CRDs are available
 		if !r.GatewayAPIAvailable {
 			logger.Info("Gateway API CRDs not available but spec.gateway is set")

@@ -3577,3 +3577,82 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithHosts_InvalidIP(t *tes
 	require.Error(t, err, "invalid IP should cause buildCorefileConfig to return error")
 	assert.Contains(t, err.Error(), "invalid ip")
 }
+
+func TestNextDNSCoreDNSReconciler_Reconcile_ReplicasAndParametersRefConflict(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	replicas := int32(2)
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				GatewayClassName: stringPtr("envoy-gateway"),
+				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
+				Replicas:         &replicas,
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					ParametersRef: &nextdnsv1alpha1.GatewayParametersReference{
+						Group: "gateway.envoyproxy.io",
+						Kind:  "EnvoyProxy",
+						Name:  "my-custom-proxy",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: true,
+		GatewayClassName:    "envoy-gateway",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err) // reconcile returns nil but sets condition
+
+	// Re-fetch to check conditions
+	updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updated)
+	require.NoError(t, err)
+
+	// Should have a GatewayReady=False condition with InvalidConfiguration
+	cond := meta.FindStatusCondition(updated.Status.Conditions, ConditionTypeGatewayReady)
+	require.NotNil(t, cond, "expected GatewayReady condition to be set")
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "InvalidConfiguration", cond.Reason)
+	assert.Contains(t, cond.Message, "mutually exclusive")
+}
+
+// stringPtr is a helper to get a pointer to a string literal.
+func stringPtr(s string) *string {
+	return &s
+}
