@@ -11,7 +11,8 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - Automatic drift detection
 - ConfigMap export for app integration
 - Observe mode for safe profile adoption
-- Gateway API support (TCPRoute/UDPRoute) for DNS traffic exposure
+- CoreDNS plugin extensibility (rewrite, hosts, forward tuning, health/ready/errors/metrics config via `spec.corefile`)
+- Gateway API support (TCPRoute/UDPRoute) for DNS traffic exposure, including proxy replica control (`spec.gateway.replicas`)
 
 ## Custom Resources
 
@@ -28,21 +29,10 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 ### Helm (Recommended)
 
 ```bash
-# Install from OCI registry
+# Install from OCI registry (installs latest release)
 helm install nextdns-operator oci://ghcr.io/jacaudi/charts/nextdns-operator \
-  --version 0.1.0 \
   --namespace nextdns-operator-system \
   --create-namespace
-```
-
-### Kubectl
-
-```bash
-# Install CRDs
-kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/download/install.yaml
-
-# Deploy operator
-kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/download/operator.yaml
 ```
 
 ### Local Development
@@ -51,8 +41,8 @@ kubectl apply -f https://github.com/jacaudi/nextdns-operator/releases/latest/dow
 # Install CRDs
 task install
 
-# Run locally
-task run
+# Deploy operator
+task deploy
 ```
 
 ## Quick Start
@@ -107,17 +97,26 @@ kubectl get nextdnsprofile my-profile -o yaml
 See the [config/samples](config/samples/) directory for complete examples:
 
 - [NextDNSProfile](config/samples/nextdns_v1alpha1_nextdnsprofile.yaml) - Full profile with security, privacy, and settings
+- [NextDNSProfile (observe mode)](config/samples/nextdns_v1alpha1_nextdnsprofile_observe.yaml) - Profile in observe-only mode for safe adoption
 - [NextDNSAllowlist](config/samples/nextdns_v1alpha1_nextdnsallowlist.yaml) - Shared allowlist for business services
 - [NextDNSDenylist](config/samples/nextdns_v1alpha1_nextdnsdenylist.yaml) - Shared denylist for malicious domains
 - [NextDNSTLDList](config/samples/nextdns_v1alpha1_nextdnstldlist.yaml) - Shared list of high-risk TLDs
 - [NextDNSCoreDNS](config/samples/nextdns_v1alpha1_nextdnscoredns.yaml) - CoreDNS deployment with NextDNS upstream
+- [NextDNSCoreDNS (advanced)](config/samples/nextdns_v1alpha1_nextdnscoredns_advanced.yaml) - Advanced CoreDNS sample showcasing all plugin configuration
 - [NextDNSCoreDNS with Gateway](config/samples/nextdns_v1alpha1_nextdnscoredns_gateway.yaml) - CoreDNS with Gateway API exposure
 
 ## Documentation
 
 For detailed configuration guides, CRD reference, troubleshooting, and architecture documentation, see the **[full documentation](docs/README.md)**.
 
-Covers: ConfigMap export, observe mode, CoreDNS deployment (upstream protocols, Multus CNI, domain overrides), drift detection, complete CRD field reference, status conditions, and troubleshooting.
+| Page | Covers |
+|------|--------|
+| [docs/README.md](docs/README.md) | Documentation index, breaking change callout (v0.18.0), drift detection, troubleshooting, architecture and reconciliation flow |
+| [docs/profile-configuration.md](docs/profile-configuration.md) | ConfigMap export, observe mode, transitioning from observe to managed |
+| [docs/coredns.md](docs/coredns.md) | CoreDNS deployment modes, upstream protocols, `spec.corefile` grouping, cache, metrics, health, ready, errors, query logging, forward tuning, domain overrides, static hosts, query rewriting |
+| [docs/multus.md](docs/multus.md) | Multus CNI integration, NAD setup, static IPs, status reporting |
+| [docs/gateway.md](docs/gateway.md) | Gateway API setup, infrastructure field, proxy replica control (`spec.gateway.replicas`) |
+| [docs/reference.md](docs/reference.md) | Complete CRD field reference for all 5 CRDs, status fields, and conditions |
 
 ## Development
 
