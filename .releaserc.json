@@ -19,7 +19,7 @@
           "types": [
             { "type": "feat", "section": "Features" },
             { "type": "fix", "section": "Bug Fixes" },
-            { "type": "refactor", "section": "Code Refactoring" },
+            { "type": "refactor", "section": "Refactors" },
             { "type": "chore", "scope": "deps", "section": "Dependencies" }
           ]
         },
