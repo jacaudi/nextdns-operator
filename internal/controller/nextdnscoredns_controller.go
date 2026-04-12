@@ -342,7 +342,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if coreDNS.Spec.Gateway != nil && r.GatewayAPIAvailable {
 		serviceName := r.getServiceName(coreDNS, profile)
 
-		if err := r.reconcileGateway(ctx, coreDNS); err != nil {
+		if err := r.reconcileGateway(ctx, coreDNS, nil); err != nil {
 			logger.Error(err, "Failed to reconcile Gateway")
 			r.setCondition(coreDNS, ConditionTypeGatewayReady, metav1.ConditionFalse, "GatewayFailed", err.Error())
 			r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "GatewayFailed", err.Error())

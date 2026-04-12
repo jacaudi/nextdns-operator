@@ -68,7 +68,7 @@ func TestReconcileGateway(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	// Fetch the created Gateway
@@ -165,7 +165,7 @@ func TestReconcileGateway_CRLevelClassName(t *testing.T) {
 		GatewayClassName: "envoy-gateway", // operator default should be overridden
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -208,7 +208,7 @@ func TestReconcileGateway_NoClassName(t *testing.T) {
 		GatewayClassName: "", // no operator default
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no gatewayClassName")
 }
@@ -250,7 +250,7 @@ func TestReconcileGateway_InfrastructureAnnotations(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -300,7 +300,7 @@ func TestReconcileGateway_InfrastructureLabels(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -352,7 +352,7 @@ func TestReconcileGateway_InfrastructureParametersRef(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -413,7 +413,7 @@ func TestReconcileGateway_InfrastructureAllFields(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -467,7 +467,7 @@ func TestReconcileGateway_InfrastructureNil(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -510,7 +510,7 @@ func TestReconcileGateway_InfrastructureEmpty(t *testing.T) {
 		GatewayClassName: "envoy-gateway",
 	}
 
-	err := reconciler.reconcileGateway(ctx, coreDNS)
+	err := reconciler.reconcileGateway(ctx, coreDNS, nil)
 	require.NoError(t, err)
 
 	gw := &gatewayv1.Gateway{}
@@ -519,6 +519,55 @@ func TestReconcileGateway_InfrastructureEmpty(t *testing.T) {
 
 	// Empty infrastructure should not set spec.infrastructure
 	assert.Nil(t, gw.Spec.Infrastructure)
+}
+
+func TestReconcileGateway_ProxyParametersRefOverride(t *testing.T) {
+	scheme := newGatewayTestScheme()
+	ctx := context.Background()
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-coredns",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				GatewayClassName: func() *string { s := "envoy-gateway"; return &s }(),
+				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
+				// No infrastructure.parametersRef on the spec
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(coreDNS).Build()
+
+	r := &NextDNSCoreDNSReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		GatewayClassName: "envoy-gateway",
+	}
+
+	// Pass an auto-generated parametersRef override
+	override := &nextdnsv1alpha1.GatewayParametersReference{
+		Group: "gateway.envoyproxy.io",
+		Kind:  "EnvoyProxy",
+		Name:  "test-coredns-envoyproxy",
+	}
+
+	err := r.reconcileGateway(ctx, coreDNS, override)
+	require.NoError(t, err)
+
+	// Verify the Gateway has the override parametersRef
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+	require.NotNil(t, gw.Spec.Infrastructure)
+	require.NotNil(t, gw.Spec.Infrastructure.ParametersRef)
+	assert.Equal(t, gatewayv1.Group("gateway.envoyproxy.io"), gw.Spec.Infrastructure.ParametersRef.Group)
+	assert.Equal(t, gatewayv1.Kind("EnvoyProxy"), gw.Spec.Infrastructure.ParametersRef.Kind)
+	assert.Equal(t, "test-coredns-envoyproxy", gw.Spec.Infrastructure.ParametersRef.Name)
 }
 
 func TestReconcileTCPRoute(t *testing.T) {
