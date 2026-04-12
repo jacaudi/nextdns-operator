@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.0](https://github.com/jacaudi/nextdns-operator/compare/v0.18.0...v0.19.0) (2026-04-12)
+
+### Features
+
+* **gateway:** expose proxy pod replica count via spec.gateway.replicas ([#134](https://github.com/jacaudi/nextdns-operator/issues/134)) ([0ac603e](https://github.com/jacaudi/nextdns-operator/commit/0ac603ee2e9af471006e88cbf2247acd369044aa)), closes [#127](https://github.com/jacaudi/nextdns-operator/issues/127)
+
 ## [0.18.0](https://github.com/jacaudi/nextdns-operator/compare/v0.17.2...v0.18.0) (2026-04-12)
 
 * refactor(api)!: group CoreDNS plugin config under spec.corefile ([#128](https://github.com/jacaudi/nextdns-operator/issues/128)) ([e6f663e](https://github.com/jacaudi/nextdns-operator/commit/e6f663e0a9956ae4cbf64dc35e93b6db753183eb)), closes [#122](https://github.com/jacaudi/nextdns-operator/issues/122)
