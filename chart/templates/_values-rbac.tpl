@@ -66,6 +66,26 @@ rbac:
             - update
             - watch
         - apiGroups:
+            - gateway.envoyproxy.io
+          resources:
+            - envoyproxies
+          verbs:
+            - create
+            - delete
+            - get
+            - list
+            - patch
+            - update
+            - watch
+        - apiGroups:
+            - gateway.networking.k8s.io
+          resources:
+            - gatewayclasses
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
             - gateway.networking.k8s.io
           resources:
             - gateways
