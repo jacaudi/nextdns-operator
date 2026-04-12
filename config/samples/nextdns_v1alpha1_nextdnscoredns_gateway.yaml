@@ -15,6 +15,10 @@ spec:
     gatewayClassName: envoy-gateway
     addresses:
       - value: "192.168.1.53"
+    # replicas sets the desired replica count for gateway proxy pods (Envoy Gateway only).
+    # The operator auto-generates an EnvoyProxy CR and wires it via infrastructure.parametersRef.
+    # Mutually exclusive with infrastructure.parametersRef.
+    replicas: 2
     annotations:
       external-dns.alpha.kubernetes.io/hostname: dns.example.com
     # infrastructure propagates metadata to resources created by the gateway

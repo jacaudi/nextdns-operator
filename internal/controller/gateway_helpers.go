@@ -16,7 +16,9 @@ import (
 )
 
 // reconcileGateway creates or updates the Gateway resource for DNS traffic exposure.
-func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) error {
+// proxyParametersRef, when non-nil, overrides spec.gateway.infrastructure.parametersRef
+// with an auto-generated reference from the proxy strategy.
+func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, proxyParametersRef *nextdnsv1alpha1.GatewayParametersReference) error {
 	logger := log.FromContext(ctx)
 
 	// Resolve GatewayClass name: CR-level override > operator default
@@ -89,35 +91,45 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 			Addresses: addresses,
 		}
 
-		// Build infrastructure from spec if any sub-fields are populated
-		if coreDNS.Spec.Gateway.Infrastructure != nil {
+		// Build infrastructure from spec and/or proxyParametersRef override.
+		// proxyParametersRef takes precedence over spec.infrastructure.parametersRef
+		// (mutual exclusivity is validated before reconcileGateway is called).
+		needsInfra := coreDNS.Spec.Gateway.Infrastructure != nil || proxyParametersRef != nil
+		if needsInfra {
 			infra := &gatewayv1.GatewayInfrastructure{}
 			hasContent := false
 
-			if len(coreDNS.Spec.Gateway.Infrastructure.Annotations) > 0 {
-				annotations := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue)
-				for k, v := range coreDNS.Spec.Gateway.Infrastructure.Annotations {
-					annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
+			if coreDNS.Spec.Gateway.Infrastructure != nil {
+				if len(coreDNS.Spec.Gateway.Infrastructure.Annotations) > 0 {
+					annotations := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue)
+					for k, v := range coreDNS.Spec.Gateway.Infrastructure.Annotations {
+						annotations[gatewayv1.AnnotationKey(k)] = gatewayv1.AnnotationValue(v)
+					}
+					infra.Annotations = annotations
+					hasContent = true
 				}
-				infra.Annotations = annotations
-				hasContent = true
+
+				if len(coreDNS.Spec.Gateway.Infrastructure.Labels) > 0 {
+					labels := make(map[gatewayv1.LabelKey]gatewayv1.LabelValue)
+					for k, v := range coreDNS.Spec.Gateway.Infrastructure.Labels {
+						labels[gatewayv1.LabelKey(k)] = gatewayv1.LabelValue(v)
+					}
+					infra.Labels = labels
+					hasContent = true
+				}
 			}
 
-			if len(coreDNS.Spec.Gateway.Infrastructure.Labels) > 0 {
-				labels := make(map[gatewayv1.LabelKey]gatewayv1.LabelValue)
-				for k, v := range coreDNS.Spec.Gateway.Infrastructure.Labels {
-					labels[gatewayv1.LabelKey(k)] = gatewayv1.LabelValue(v)
-				}
-				infra.Labels = labels
-				hasContent = true
+			// Determine effective parametersRef: auto-generated proxy ref takes
+			// precedence (mutual exclusivity is validated earlier).
+			effectiveRef := proxyParametersRef
+			if effectiveRef == nil && coreDNS.Spec.Gateway.Infrastructure != nil {
+				effectiveRef = coreDNS.Spec.Gateway.Infrastructure.ParametersRef
 			}
-
-			if coreDNS.Spec.Gateway.Infrastructure.ParametersRef != nil {
-				ref := coreDNS.Spec.Gateway.Infrastructure.ParametersRef
+			if effectiveRef != nil {
 				infra.ParametersRef = &gatewayv1.LocalParametersReference{
-					Group: gatewayv1.Group(ref.Group),
-					Kind:  gatewayv1.Kind(ref.Kind),
-					Name:  ref.Name,
+					Group: gatewayv1.Group(effectiveRef.Group),
+					Kind:  gatewayv1.Kind(effectiveRef.Kind),
+					Name:  effectiveRef.Name,
 				}
 				hasContent = true
 			}

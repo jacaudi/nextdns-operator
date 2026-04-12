@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -3576,4 +3577,172 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithHosts_InvalidIP(t *tes
 	_, err := reconciler.buildCorefileConfig(coreDNS, profile)
 	require.Error(t, err, "invalid IP should cause buildCorefileConfig to return error")
 	assert.Contains(t, err.Error(), "invalid ip")
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_ReplicasAndParametersRefConflict(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := context.Background()
+
+	replicas := int32(2)
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				GatewayClassName: stringPtr("envoy-gateway"),
+				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
+				Replicas:         &replicas,
+				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
+					ParametersRef: &nextdnsv1alpha1.GatewayParametersReference{
+						Group: "gateway.envoyproxy.io",
+						Kind:  "EnvoyProxy",
+						Name:  "my-custom-proxy",
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: true,
+		GatewayClassName:    "envoy-gateway",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err) // reconcile returns nil but sets condition
+
+	// Re-fetch to check conditions
+	updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+	err = fakeClient.Get(ctx, req.NamespacedName, updated)
+	require.NoError(t, err)
+
+	// Should have a GatewayReady=False condition with InvalidConfiguration
+	cond := meta.FindStatusCondition(updated.Status.Conditions, ConditionTypeGatewayReady)
+	require.NotNil(t, cond, "expected GatewayReady condition to be set")
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "InvalidConfiguration", cond.Reason)
+	assert.Contains(t, cond.Message, "mutually exclusive")
+}
+
+// stringPtr is a helper to get a pointer to a string literal.
+func stringPtr(s string) *string {
+	return &s
+}
+
+func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(gatewayv1alpha2.Install(scheme))
+	ctx := context.Background()
+
+	profile := &nextdnsv1alpha1.NextDNSProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-profile",
+			Namespace: "default",
+		},
+		Spec: nextdnsv1alpha1.NextDNSProfileSpec{Name: "Test"},
+		Status: nextdnsv1alpha1.NextDNSProfileStatus{
+			ProfileID:   "abc123",
+			Fingerprint: "abc123.dns.nextdns.io",
+			Conditions: []metav1.Condition{
+				{Type: ConditionTypeReady, Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+
+	// GatewayClass with Envoy Gateway controllerName
+	gatewayClass := &gatewayv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "envoy-gateway",
+		},
+		Spec: gatewayv1.GatewayClassSpec{
+			ControllerName: "gateway.envoyproxy.io/gatewayclass-controller",
+		},
+	}
+
+	replicas := int32(3)
+	ipType := "IPAddress"
+	coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-coredns",
+			Namespace:  "default",
+			Finalizers: []string{CoreDNSFinalizerName},
+		},
+		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
+			Gateway: &nextdnsv1alpha1.GatewayConfig{
+				GatewayClassName: stringPtr("envoy-gateway"),
+				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
+				Replicas:         &replicas,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(profile, coreDNS, gatewayClass).
+		WithStatusSubresource(profile, coreDNS).
+		Build()
+
+	reconciler := &NextDNSCoreDNSReconciler{
+		Client:              fakeClient,
+		Scheme:              scheme,
+		GatewayAPIAvailable: true,
+		GatewayClassName:    "envoy-gateway",
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-coredns", Namespace: "default"}}
+	_, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Verify EnvoyProxy CR was created with correct replicas
+	envoyProxy := &unstructuredv1.Unstructured{}
+	envoyProxy.SetGroupVersionKind(envoyProxyGVK())
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-envoyproxy", Namespace: "default"}, envoyProxy)
+	require.NoError(t, err, "EnvoyProxy CR should have been created")
+
+	spec, _ := envoyProxy.Object["spec"].(map[string]interface{})
+	provider, _ := spec["provider"].(map[string]interface{})
+	k8s, _ := provider["kubernetes"].(map[string]interface{})
+	deployment, _ := k8s["envoyDeployment"].(map[string]interface{})
+	assert.Equal(t, int64(3), deployment["replicas"])
+
+	// Verify Gateway has parametersRef pointing at the EnvoyProxy
+	gw := &gatewayv1.Gateway{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, gw)
+	require.NoError(t, err)
+	require.NotNil(t, gw.Spec.Infrastructure, "Gateway should have infrastructure set")
+	require.NotNil(t, gw.Spec.Infrastructure.ParametersRef, "Gateway should have parametersRef set")
+	assert.Equal(t, gatewayv1.Group("gateway.envoyproxy.io"), gw.Spec.Infrastructure.ParametersRef.Group)
+	assert.Equal(t, gatewayv1.Kind("EnvoyProxy"), gw.Spec.Infrastructure.ParametersRef.Kind)
+	assert.Equal(t, "test-coredns-envoyproxy", gw.Spec.Infrastructure.ParametersRef.Name)
 }
