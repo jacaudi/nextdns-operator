@@ -377,6 +377,41 @@ spec:
         name: custom-proxy-config
 ```
 
+#### Proxy Replicas
+
+`deployment.replicas` and `gateway.replicas` control two separate tiers:
+
+- `deployment.replicas` — CoreDNS pod count (the DNS server itself)
+- `gateway.replicas` — gateway proxy pod count (e.g., Envoy pods managed by Envoy Gateway)
+
+Use `gateway.replicas` to horizontally scale the proxy tier without manually creating implementation-specific CRs. For Envoy Gateway, the operator auto-generates an `EnvoyProxy` CR and wires it via `infrastructure.parametersRef`:
+
+```yaml
+spec:
+  deployment:
+    replicas: 2              # CoreDNS pods
+  gateway:
+    gatewayClassName: envoy-gateway
+    addresses:
+      - value: "192.168.1.53"
+    replicas: 2              # Envoy proxy pods (NEW)
+    infrastructure:
+      annotations:
+        lbipam.cilium.io/ips: "192.168.1.53"
+```
+
+When `gateway.replicas` is set with an Envoy Gateway GatewayClass, the operator:
+1. Looks up the `GatewayClass` to detect the controller implementation
+2. Creates or updates an `EnvoyProxy` CR named `{cr-name}-envoyproxy` in the same namespace
+3. Automatically sets `infrastructure.parametersRef` on the Gateway to reference it
+
+**`gateway.replicas` and `infrastructure.parametersRef` are mutually exclusive.** If both are set, the operator sets `GatewayReady=False` with reason `InvalidConfiguration` and does not create any resources. Use one or the other.
+
+**Unsupported implementations:** If the GatewayClass `controllerName` is not recognized, the operator sets a warning condition (`GatewayReplicasUnsupported`) and skips the `replicas` field. Create the implementation-specific configuration manually and reference it via `infrastructure.parametersRef`.
+
+Currently supported for `gateway.replicas`:
+- Envoy Gateway (`gateway.envoyproxy.io/gatewayclass-controller`)
+
 **Supported gateway controllers:**
 
 | Controller | GatewayClass Name | Notes |
@@ -1083,6 +1118,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `multus.ips` | string[] | No | | Static IPs to request from IPAM (one per pod) |
 | `gateway.gatewayClassName` | *string | No | Operator default | GatewayClass to reference (e.g., `envoy-gateway`, `cilium`) |
 | `gateway.addresses` | GatewayAddress[] | Yes (if `gateway` set) | | IP addresses requested from the gateway implementation |
+| `gateway.replicas` | *int32 | No | | Replica count for gateway proxy pods (Envoy Gateway only, min 1). Mutually exclusive with `gateway.infrastructure.parametersRef`. |
 | `gateway.annotations` | map[string]string | No | | Additional annotations for the Gateway resource |
 | `gateway.infrastructure.annotations` | map[string]string | No | | Annotations propagated to gateway-generated resources (e.g., LB Service) |
 | `gateway.infrastructure.labels` | map[string]string | No | | Labels propagated to gateway-generated resources |
