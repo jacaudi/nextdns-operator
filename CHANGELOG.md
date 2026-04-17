@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.2](https://github.com/jacaudi/nextdns-operator/compare/v0.19.1...v0.19.2) (2026-04-17)
+
+### Bug Fixes
+
+* update Renovate config and backfill v0.19.1 changelog ([bed25a2](https://github.com/jacaudi/nextdns-operator/commit/bed25a2292c0f548bda452a3e28d1bba875438d2)), closes [#121](https://github.com/jacaudi/nextdns-operator/issues/121) [#89](https://github.com/jacaudi/nextdns-operator/issues/89)
+
 ## [0.19.1](https://github.com/jacaudi/nextdns-operator/compare/v0.19.0...v0.19.1) (2026-04-12)
 
 ### Dependencies
