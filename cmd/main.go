@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -31,6 +32,20 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+// version, commit, date are injected via -ldflags at build time
+// (-X main.version=... etc.); the defaults apply for `go run` / plain
+// `go build`.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+// versionString is the single formatter for --version and the startup log.
+func versionString() string {
+	return fmt.Sprintf("nextdns-operator %s (commit %s, built %s)", version, commit, date)
+}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -75,12 +90,22 @@ func main() {
 	flag.StringVar(&logFormat, "log-format", lookupEnvOrString("LOG_FORMAT", "json"),
 		"Log format (json, text). Can also be set via LOG_FORMAT environment variable.")
 
+	var showVersion bool
+	flag.BoolVar(&showVersion, "version", false, "Print build version and exit.")
+
 	flag.Parse()
+
+	// --version short-circuits before any setup so it works unconditionally.
+	if showVersion {
+		fmt.Println(versionString())
+		os.Exit(0)
+	}
 
 	slogLogger := setupLogger(logLevel, logFormat)
 	slog.SetDefault(slogLogger)
 	ctrl.SetLogger(logr.FromSlogHandler(slogLogger.Handler()))
 	klog.SetSlogLogger(slogLogger)
+	setupLog.Info("starting nextdns-operator", "version", version, "commit", commit, "date", date)
 
 	// Parse sync period
 	syncDuration, err := time.ParseDuration(syncPeriod)

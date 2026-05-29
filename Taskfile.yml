@@ -6,6 +6,16 @@ vars:
   LOCALBIN: '{{.ROOT_DIR}}/bin'
   CONTROLLER_TOOLS_VERSION: v0.21.0
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
+  # Version stamping — injected into the binary via -ldflags so `manager
+  # --version` reports real values. CI mirrors these via the Dockerfile
+  # build-args (VERSION/COMMIT/DATE).
+  version:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  commit:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  date:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  ldflags: '-s -w -X main.version={{.version}} -X main.commit={{.commit}} -X main.date={{.date}}'
 
 tasks:
   default:
@@ -74,7 +84,7 @@ tasks:
     desc: Build the operator binary
     deps: [manifests, generate, fmt, vet]
     cmds:
-      - go build -o bin/manager cmd/main.go
+      - go build -ldflags '{{.ldflags}}' -o bin/manager cmd/main.go
 
   run:
     desc: Run the controller locally
