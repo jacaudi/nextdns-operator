@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/jacaudi/nextdns-operator/compare/v0.19.2...v0.20.0) (2026-05-29)
+
+### Bug Fixes
+
+* adapt to nextdns-go v0.14 API changes ([3c5b3df](https://github.com/jacaudi/nextdns-operator/commit/3c5b3df39019d83a1410afca83cf485bd1bf6410))
+* **chart:** adapt to bjw-s common v5 ([b1d2696](https://github.com/jacaudi/nextdns-operator/commit/b1d2696f861a056c293e8dba3bad62f812e8f098))
+* **deps:** update kubernetes-client-libraries to v0.35.4 ([#137](https://github.com/jacaudi/nextdns-operator/issues/137)) ([dcfb1d2](https://github.com/jacaudi/nextdns-operator/commit/dcfb1d2de85e1fe5904fa71a193d61718915972d))
+* **deps:** update module k8s.io/apimachinery to v0.35.4 ([#136](https://github.com/jacaudi/nextdns-operator/issues/136)) ([5b3ed9b](https://github.com/jacaudi/nextdns-operator/commit/5b3ed9b5879189462a9a65ddb68c0d563d029936))
+
+
+### Features
+
+* add --version flag with build-time version stamping ([da46430](https://github.com/jacaudi/nextdns-operator/commit/da464304ab7dcffcf4b72f735c597af88a14c8c4))
+
 ## [0.19.2](https://github.com/jacaudi/nextdns-operator/compare/v0.19.1...v0.19.2) (2026-04-17)
 
 ### Bug Fixes
