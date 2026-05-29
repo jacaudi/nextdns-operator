@@ -693,7 +693,3 @@ type NextDNSCoreDNSList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NextDNSCoreDNS `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&NextDNSCoreDNS{}, &NextDNSCoreDNSList{})
-}
