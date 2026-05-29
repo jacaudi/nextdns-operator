@@ -52,7 +52,3 @@ type NextDNSDenylistList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NextDNSDenylist `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&NextDNSDenylist{}, &NextDNSDenylistList{})
-}
