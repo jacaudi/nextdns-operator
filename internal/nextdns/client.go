@@ -17,7 +17,7 @@ type Client struct {
 // NewClient creates a new NextDNS API client
 func NewClient(apiKey string) (*Client, error) {
 	client, err := nextdns.New(
-		nextdns.WithAPIKey(apiKey),
+		nextdns.WithAPIKey(nextdns.Secret(apiKey)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NextDNS client: %w", err)
@@ -517,7 +517,7 @@ func (c *Client) UpdateSettings(ctx context.Context, profileID string, config *S
 	settings := &nextdns.Settings{
 		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
-			Retention: config.LogRetention,
+			Retention: nextdns.LogRetention(config.LogRetention),
 			Location:  config.Location,
 			Drop: &nextdns.SettingsLogsDrop{
 				IP:     !config.LogClientsIPs,
