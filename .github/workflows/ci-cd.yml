@@ -1,6 +1,7 @@
 ---
 # CI/CD Pipeline for NextDNS Operator
-# Runs linting, testing, container builds, and Helm chart publishing
+# Runs linting, testing, container builds, and Helm chart publishing.
+# Releases are produced automatically on every push to main (no manual gate).
 name: CI/CD
 
 "on":
@@ -8,10 +9,12 @@ name: CI/CD
     branches: [main]
   workflow_dispatch:
 
-# Only allow one release at a time - queue subsequent runs
+# Only allow one release at a time. Do not cancel an in-flight release —
+# a half-published release (image without chart, or vice versa) is worse
+# than waiting.
 concurrency:
   group: release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -44,22 +47,24 @@ jobs:
       coverage-threshold: 70
       test-packages: './internal/controller/... ./internal/nextdns/... ./internal/coredns/...'
 
-  # Manual approval gate - pauses after lint/test until a reviewer approves.
-  # Configure the "release" environment in Settings > Environments with
-  # required reviewers.
-  approve:
-    name: Approve Release
-    needs: [lint, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # Build metadata for version stamping (short commit + ISO build date).
+  meta:
+    name: Build Metadata
     runs-on: ubuntu-latest
-    environment: release
+    outputs:
+      commit: ${{ steps.m.outputs.commit }}
+      date: ${{ steps.m.outputs.date }}
     steps:
-      - name: Release approved
-        run: echo "Release approved, proceeding with semantic release..."
+      - id: m
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          echo "commit=${SHA:0:7}" >> "${GITHUB_OUTPUT}"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
 
   # Create semantic version and GitHub release (main branch only)
   release:
-    needs: [approve]
+    needs: [lint, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: jacaudi/github-actions/.github/workflows/component-semantic-release.yml@v0.20.3
     permissions:
@@ -68,14 +73,14 @@ jobs:
       pull-requests: write
     with:
       use-github-app: true
-      extra-plugins: '@semantic-release/changelog @semantic-release/git @semantic-release/exec'
+      extra-plugins: '@semantic-release/changelog @semantic-release/git @semantic-release/exec conventional-changelog-conventionalcommits'
     secrets:
       app-id: ${{ secrets.APP_ID }}
       app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
   # Build multi-arch container images
   container:
-    needs: [release]
+    needs: [release, meta]
     if: needs.release.outputs.new-release-published == 'true'
     uses: jacaudi/github-actions/.github/workflows/component-container-build.yml@v0.20.3
     permissions:
@@ -85,13 +90,19 @@ jobs:
       image-name: ${{ github.repository }}
       platforms: 'linux/amd64,linux/arm64'
       version: ${{ needs.release.outputs.new-release-version }}
+      build-args: |
+        VERSION=${{ needs.release.outputs.new-release-version-v }}
+        COMMIT=${{ needs.meta.outputs.commit }}
+        DATE=${{ needs.meta.outputs.date }}
       tags: |
         ghcr.io/${{ github.repository }}:${{ needs.release.outputs.new-release-version-v }}
         ghcr.io/${{ github.repository }}:latest
 
-  # Publish Helm chart to OCI registry
+  # Publish Helm chart to OCI registry (runs after the container build so the
+  # chart's appVersion always points at an image tag that already exists in
+  # the registry)
   helm:
-    needs: [release]
+    needs: [release, container]
     if: needs.release.outputs.new-release-published == 'true'
     uses: jacaudi/github-actions/.github/workflows/component-helm-publish.yml@v0.20.3
     permissions:
