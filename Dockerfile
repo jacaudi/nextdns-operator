@@ -2,6 +2,12 @@
 FROM golang:1.26.3 AS builder
 ARG TARGETOS
 ARG TARGETARCH
+# Version stamping — mirrors the Taskfile build LDFLAGS so the binary's
+# --version reports real values. Defaults keep plain `docker build`
+# working; CI passes the real values via --build-arg.
+ARG VERSION=dev
+ARG COMMIT=none
+ARG DATE=unknown
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -21,7 +27,9 @@ COPY internal/ internal/
 # having that, during the docker BUILDX://github.com/docker/buildx#--teleportation-and-multi-architecture-images
 # having it can be GOOS is picked up from TARGETOS, GOARCH being the
 # having platforms flags.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath \
+    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+    -o manager cmd/main.go
 
 # Use scratch as minimal base image with CA certificates for HTTPS
 FROM scratch
