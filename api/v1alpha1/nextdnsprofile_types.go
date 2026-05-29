@@ -496,7 +496,3 @@ type NextDNSProfileList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NextDNSProfile `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&NextDNSProfile{}, &NextDNSProfileList{})
-}

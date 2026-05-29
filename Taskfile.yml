@@ -4,7 +4,7 @@ version: '3'
 vars:
   IMG: '{{.IMG | default "nextdns-operator:latest"}}'
   LOCALBIN: '{{.ROOT_DIR}}/bin'
-  CONTROLLER_TOOLS_VERSION: v0.20.1
+  CONTROLLER_TOOLS_VERSION: v0.21.0
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
 
 tasks:
