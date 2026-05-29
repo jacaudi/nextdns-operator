@@ -6,7 +6,7 @@ toolchain go1.26.3
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/jacaudi/nextdns-go v0.13.0
+	github.com/jacaudi/nextdns-go v0.14.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.36.1
@@ -32,7 +32,6 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect

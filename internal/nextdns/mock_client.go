@@ -497,7 +497,7 @@ func (m *MockClient) UpdateSettings(ctx context.Context, profileID string, confi
 	m.Settings[profileID] = &nextdns.Settings{
 		Logs: &nextdns.SettingsLogs{
 			Enabled:   config.LogsEnabled,
-			Retention: config.LogRetention,
+			Retention: nextdns.LogRetention(config.LogRetention),
 			Location:  config.Location,
 			Drop: &nextdns.SettingsLogsDrop{
 				IP:     !config.LogClientsIPs,

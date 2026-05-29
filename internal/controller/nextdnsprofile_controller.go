@@ -993,7 +993,7 @@ func (r *NextDNSProfileReconciler) readFullProfile(ctx context.Context, client n
 	if settings.Logs != nil {
 		observed.Settings.Logs = &nextdnsv1alpha1.ObservedLogs{
 			Enabled:   settings.Logs.Enabled,
-			Retention: settings.Logs.Retention,
+			Retention: int(settings.Logs.Retention),
 			Location:  settings.Logs.Location,
 		}
 		// Invert Drop fields to user-friendly positive semantics:

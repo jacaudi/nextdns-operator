@@ -388,7 +388,7 @@ func TestMockClient_UpdateSettings(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, mock.SettingsLogs["profile-1"].Enabled)
-	assert.Equal(t, 2592000, mock.SettingsLogs["profile-1"].Retention)
+	assert.Equal(t, sdknextdns.LogRetention(2592000), mock.SettingsLogs["profile-1"].Retention)
 	assert.True(t, mock.SettingsBlockPage["profile-1"].Enabled)
 }
 
@@ -974,7 +974,7 @@ func TestUpdateSettings_FullConfig(t *testing.T) {
 	assert.False(t, settings.Performance.CnameFlattening)
 	require.NotNil(t, settings.Logs)
 	assert.True(t, settings.Logs.Enabled)
-	assert.Equal(t, 2592000, settings.Logs.Retention)
+	assert.Equal(t, sdknextdns.LogRetention(2592000), settings.Logs.Retention)
 	// LogClientsIPs=true means Drop.IP=false (inverted logic)
 	require.NotNil(t, settings.Logs.Drop)
 	assert.False(t, settings.Logs.Drop.IP, "LogClientsIPs=true should mean Drop.IP=false")
