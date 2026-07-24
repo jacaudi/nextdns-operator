@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.20.6](https://github.com/jacaudi/nextdns-operator/compare/v0.20.5...v0.20.6) (2026-07-24)
+
 ## [0.20.5](https://github.com/jacaudi/nextdns-operator/compare/v0.20.4...v0.20.5) (2026-07-12)
 
 ## [0.20.4](https://github.com/jacaudi/nextdns-operator/compare/v0.20.3...v0.20.4) (2026-07-10)
