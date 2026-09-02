@@ -4,7 +4,7 @@ version: '3'
 vars:
   IMG: '{{.IMG | default "nextdns-operator:latest"}}'
   LOCALBIN: '{{.ROOT_DIR}}/bin'
-  CONTROLLER_TOOLS_VERSION: v0.21.0
+  CONTROLLER_TOOLS_VERSION: v0.22.0
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
   # Version stamping — injected into the binary via -ldflags so `manager
   # --version` reports real values. CI mirrors these via the Dockerfile
