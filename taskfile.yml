@@ -1,0 +1,183 @@
+# THE CI CONTRACT — `task ci` is what CI runs and what you run locally. Rationale: github-actions-align/templates/README.md#taskfiles
+version: '3'
+
+includes:
+  repo:
+    taskfile: .taskfiles/repo.yml
+  go:
+    taskfile: .taskfiles/go.yml
+
+vars:
+  IMG: '{{.IMG | default "nextdns-operator:latest"}}'
+  LOCALBIN: '{{.ROOT_DIR}}/bin'
+  CONTROLLER_TOOLS_VERSION: v0.21.0
+  CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
+  # Packages held to the coverage floor (carried over from the old CI's
+  # component-test call: threshold 70 over these three).
+  COVERAGE_PACKAGES: ./internal/controller/... ./internal/nextdns/... ./internal/coredns/...
+  COVERAGE_THRESHOLD: 70
+  # Version stamping — injected into the binary via -ldflags so `manager
+  # --version` reports real values. ci-build mirrors these via the Dockerfile
+  # build-args (VERSION/COMMIT/DATE).
+  version:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  commit:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  date:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  ldflags: '-s -w -X main.version={{.version}} -X main.commit={{.commit}} -X main.date={{.date}}'
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list
+
+  ## The contract
+
+  ci:
+    desc: Everything CI runs. Run this before pushing.
+    cmds:
+      - task: repo:ci
+      - task: go:ci
+      - task: coverage
+      - task: verify-generated
+
+  lint:
+    desc: Static checks only
+    cmds:
+      - task: repo:ci
+      - task: go:lint
+
+  test:
+    desc: Tests only
+    cmds:
+      - task: go:test
+
+  build:
+    desc: Build the operator binary into ./bin/manager
+    cmds:
+      - go build -ldflags '{{.ldflags}}' -o bin/manager ./cmd
+
+  # Runs locally: IMAGE=ghcr.io/jacaudi/nextdns-operator:sha-abc1234 task smoke
+  smoke:
+    desc: Assert the image starts and reports its version
+    requires:
+      vars: [IMAGE]
+    # Accepts BOTH `IMAGE=… task smoke` and `task smoke IMAGE=…`.
+    env:
+      IMAGE: '{{.IMAGE}}'
+    cmds:
+      - |
+        set -eu
+        echo "smoke testing ${IMAGE}"
+        out=$(docker run --rm "${IMAGE}" --version)
+        echo "${out}"
+        case "${out}" in nextdns-operator\ *) ;; *) echo "::error::unexpected --version output"; exit 1 ;; esac
+
+  coverage:
+    desc: Fail if coverage of the core packages drops below the floor
+    cmds:
+      - go test {{.COVERAGE_PACKAGES}} -coverprofile=coverage.out
+      - |
+        set -eu
+        total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $3); print $3 }')
+        echo "total coverage: ${total}% (floor {{.COVERAGE_THRESHOLD}}%)"
+        awk -v t="${total}" -v f="{{.COVERAGE_THRESHOLD}}" 'BEGIN { exit !(t >= f) }' \
+          || { echo "::error::coverage ${total}% is below {{.COVERAGE_THRESHOLD}}%"; exit 1; }
+
+  verify-generated:
+    desc: Fail if generated artifacts (deepcopy, CRDs, RBAC, chart copies) are stale
+    cmds:
+      - task: generate
+      - task: manifests
+      - task: generate-helm-rbac
+      - |
+        paths="api/v1alpha1/zz_generated.deepcopy.go config/ chart/crds/ chart/templates/_values-rbac.tpl"
+        # shellcheck disable=SC2086  # deliberate word split over the path list
+        if ! git diff --quiet -- ${paths}; then
+          echo "::error::generated artifacts are stale. Run: task generate manifests generate-helm-rbac" >&2
+          git --no-pager diff --stat -- ${paths} >&2
+          exit 1
+        fi
+        echo "generated artifacts are up to date"
+
+  ## Code generation
+
+  generate:
+    desc: Generate DeepCopy, DeepCopyInto, and DeepCopyObject implementations
+    deps: [controller-gen]
+    cmds:
+      - '{{.CONTROLLER_GEN}} object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+
+  manifests:
+    desc: Generate ClusterRole and CRD manifests, and copy the CRDs into the chart
+    deps: [controller-gen]
+    cmds:
+      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+      - cp config/crd/bases/*.yaml chart/crds/
+
+  generate-helm-rbac:
+    desc: Generate Helm RBAC template from kubebuilder role.yaml
+    deps: [manifests]
+    cmds:
+      - ./hack/generate-helm-rbac.sh
+
+  sync-helm-crds:
+    desc: Sync CRDs to Helm chart (manifests already does this; kept for Renovate's postUpgradeTasks)
+    deps: [manifests]
+
+  ## Local development
+
+  run:
+    desc: Run the controller locally
+    deps: [generate, manifests]
+    cmds:
+      - go run ./cmd
+
+  container-build:
+    desc: Build container image
+    cmds:
+      - docker build -t {{.IMG}} .
+
+  container-push:
+    desc: Push container image
+    cmds:
+      - docker push {{.IMG}}
+
+  ## Deployment
+
+  install:
+    desc: Install CRDs into the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl apply -f config/crd/bases
+
+  uninstall:
+    desc: Uninstall CRDs from the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl delete -f config/crd/bases
+
+  deploy:
+    desc: Deploy controller to the cluster
+    deps: [manifests]
+    cmds:
+      - kubectl apply -f config/manager/
+      - kubectl apply -f config/rbac/
+
+  undeploy:
+    desc: Undeploy controller from the cluster
+    cmds:
+      - kubectl delete -f config/manager/
+      - kubectl delete -f config/rbac/
+
+  ## Tools
+
+  controller-gen:
+    desc: Install controller-gen if not present
+    cmds:
+      - mkdir -p {{.LOCALBIN}}
+      - GOBIN={{.LOCALBIN}} go install sigs.k8s.io/controller-tools/cmd/controller-gen@{{.CONTROLLER_TOOLS_VERSION}}
+    status:
+      - test -s {{.CONTROLLER_GEN}}

@@ -10,7 +10,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^Taskfile\\.yml$/"
+        "/^taskfile\\.yml$/"
       ],
       "matchStrings": [
         "CONTROLLER_TOOLS_VERSION:\\s*(?<currentValue>v[0-9.]+)"

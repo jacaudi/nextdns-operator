@@ -1,0 +1,89 @@
+# Fleet baseline, golangci-lint v2 schema. A floor, not a ceiling. Rationale: github-actions-align/templates/README.md#golangciyml
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  allow-parallel-runners: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - dupl
+    - errcheck
+    - errorlint
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - modernize
+    - nolintlint
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+
+  settings:
+    revive:
+      rules:
+        - name: var-naming
+        - name: package-comments
+        - name: exported
+        - name: error-return
+        - name: error-naming
+        - name: indent-error-flow
+        - name: unexported-return
+        - name: comment-spacings
+        - name: import-shadowing
+    gocyclo:
+      min-complexity: 15
+    errorlint:
+      asserts: true
+      comparison: true
+      errorf: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    gosec:
+      excludes:
+        - G104  # errcheck covers unhandled errors, and better
+
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters: [gocyclo, dupl, gosec, errcheck, unparam, prealloc]
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # MIGRATION RATCHET — uncomment when adopting this baseline on code that
+  # predates it. Reports only issues in code changed since the merge base, so the
+  # standard applies going forward without blocking the migration on existing
+  # debt. Valid in the v2 schema.
+  #
+  # Measure before deciding: a repo with no prior lint config can surface well
+  # over a hundred findings, and `golangci-lint run --fix` resolves NONE of them
+  # (tested). See the full debt any time with:
+  #   golangci-lint run --new-from-merge-base=""
+  # new-from-merge-base: origin/main
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

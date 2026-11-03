@@ -1,18 +1,45 @@
-# Patterns to ignore when building packages.
+# --- managed by github-actions-align: regenerated on apply; add your own BELOW the end marker ---
+# Beside Chart.yaml. NO negation, and unanchored patterns match at ANY DEPTH. Rationale: github-actions-align/templates/README.md#helmignore
+
+# Version control
+/.git/
+/.gitignore
+/.github/
+
+# OS and editor junk (basename matches are intended here)
 .DS_Store
-.git/
-.gitignore
-.bzr/
-.bzrignore
-.hg/
-.hgignore
-.svn/
+Thumbs.db
 *.swp
+*.swo
+*~
+/.idea/
+/.vscode/
+
+# CI and tooling chart consumers never need — all ANCHORED, because a bare
+# `tests/` would also drop templates/tests/ (helm test hooks) and a bare `*.md`
+# would drop README.md. Both fail silently.
+#
+# README.md is deliberately NOT excluded: ArtifactHub and `helm show readme`
+# render it from inside the packaged chart.
+/taskfile.yml
+/.taskfiles/
+/Makefile
+/.golangci.yml
+/.yamllint.yml
+/.hadolint.yaml
+/renovate.json
+/ci/
+/docs/
+# --- end managed ---
+# Repo-specific entries below this line are preserved across regeneration.
+# Carried over from the stock `helm create` .helmignore.
+/.bzr/
+/.bzrignore
+/.hg/
+/.hgignore
+/.svn/
 *.bak
 *.tmp
 *.orig
-*~
-.project
-.idea/
+/.project
 *.tmproj
-.vscode/
