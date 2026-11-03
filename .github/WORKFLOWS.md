@@ -1,191 +1,58 @@
 # CI/CD Workflows
 
-This repository uses reusable workflows from [jacaudi/github-actions](https://github.com/jacaudi/github-actions) for automated testing, building, and releasing.
-
-## Workflows
-
-### Main CI/CD Pipeline (`ci-cd.yml`)
-
-Runs on every push to `main` and on pull requests:
-
-1. **Lint** - Validates YAML, Helm charts, and Go code
-2. **Test** - Runs Go tests with 80% coverage requirement
-3. **Release** - Creates semantic version and GitHub release (main only)
-4. **Docker Build** - Builds multi-arch container images (amd64, arm64)
-5. **Validate Versions** - Verifies chart and container version alignment
-6. **Helm Publish** - Publishes chart to OCI registry at `ghcr.io`
-
-### PR Validation (`pr.yml`)
-
-Fast feedback on pull requests:
-- Linting (YAML, Helm, Go)
-- Testing with coverage
-- Docker build verification (no push)
-
-## Setup Requirements
-
-### GitHub Secrets
-
-The workflows require these secrets:
-
-| Secret | Required For | Description |
-|--------|-------------|-------------|
-| `APP_ID` | Releases | GitHub App ID for triggering workflows |
-| `APP_PRIVATE_KEY` | Releases | GitHub App private key |
-| `GITHUB_TOKEN` | All | Auto-provided by GitHub |
-
-### GitHub App Setup
-
-To enable semantic releases that trigger downstream workflows:
-
-1. Create a GitHub App:
-   - Go to Settings → Developer settings → GitHub Apps → New GitHub App
-   - Name: `[org]-release-bot`
-   - Homepage URL: Your organization URL
-   - Webhook: Disable
-   - Permissions:
-     - Contents: Read & Write
-     - Issues: Read & Write
-     - Pull Requests: Read & Write
-   - Install the app on your repositories
-
-2. Generate a private key:
-   - In your GitHub App settings → Private keys → Generate
-   - Download the `.pem` file
-
-3. Add secrets to your repository:
-   - `APP_ID`: The App ID from your GitHub App
-   - `APP_PRIVATE_KEY`: Contents of the `.pem` file
-
-### Container Registry
-
-Images are published to GitHub Container Registry (ghcr.io):
-- Automatic authentication using `GITHUB_TOKEN`
-- Public or private based on repository visibility
-- Multi-arch support (linux/amd64, linux/arm64)
-
-## Versioning
-
-This project uses [Semantic Versioning](https://semver.org/) based on [Conventional Commits](https://www.conventionalcommits.org/).
-
-### Commit Message Format
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-### Commit Types
-
-| Type | Version Bump | Example |
-|------|--------------|---------|
-| `fix:` | Patch (0.0.x) | `fix: resolve nil pointer in controller` |
-| `feat:` | Minor (0.x.0) | `feat: add allowlist controller` |
-| `feat!:` or `BREAKING CHANGE:` | Minor (0.x.0) during 0.x, Major (x.0.0) after 1.0 | `feat!: change API structure` |
-
-### Examples
-
-**Feature:**
-```
-feat: add support for cross-namespace list references
-
-Allows profiles to reference allow/deny/TLD lists from other namespaces.
-This enables centralized list management.
-```
-
-**Bug Fix:**
-```
-fix: prevent nil pointer when profile missing credentials
-
-Added nil check before accessing credentials secret to prevent
-reconciliation panic.
-```
-
-**Breaking Change:**
-```
-feat!: migrate to jacaudi/nextdns-go v0.2.0
-
-BREAKING CHANGE: Module path changed from github.com/amalucelli/nextdns-go
-to github.com/jacaudi/nextdns-go. Users must update import paths.
-```
-
-## Manual Testing
-
-Run workflows locally using [act](https://github.com/nektos/act):
-
-```bash
-# Test linting
-act pull_request -j lint
-
-# Test with coverage
-act pull_request -j test
-
-# Build containers locally
-docker build -t nextdns-operator:local .
-```
-
-## Troubleshooting
-
-### Coverage Threshold Failures
-
-If tests fail due to coverage below 80%:
-1. Check which files lack coverage: `go tool cover -html=coverage.out`
-2. Add tests for uncovered code
-3. Or adjust threshold in `ci-cd.yml` if justified
-
-### Docker Build Failures
-
-Common issues:
-- Multi-arch builds require `docker buildx`
-- Check Dockerfile syntax and build context
-- Verify all dependencies are available
-
-### Helm Chart Validation
-
-Lint charts locally:
-```bash
-helm lint chart/
-helm template test chart/ --debug
-```
-
-### Release Not Triggering
-
-Checklist:
-- Commit message follows Conventional Commits format
-- Push is to `main` branch
-- GitHub App secrets are configured
-- Previous workflows completed successfully
-
-## Workflow Dependencies
+One orchestrator, [`ci.yaml`](workflows/ci.yaml), calls local reusable stages in this repo. Nothing is called across a repo boundary at runtime. The only required status check is **`ci`**.
 
 ```mermaid
 graph LR
-    A[Push/PR] --> B[Lint]
-    A --> C[Test]
-    B --> D[Release]
-    C --> D
-    D --> E[Docker Build]
-    E --> F[Validate Versions]
-    F --> G[Helm Publish]
+    P[push, any branch] --> T[test: task ci]
+    T --> X{open PR, main,<br/>or dispatch?}
+    X -- yes --> B[build: multi-arch image<br/>ghcr.io/jacaudi/nextdns-operator:sha-*]
+    B --> S[smoke: --version]
+    S -- main --> R[release: release-please]
+    R -- release cut --> RI[release-image: vX.Y.Z, vX.Y, vX, latest]
+    RI --> RS[release-smoke]
+    RS --> RC[release-chart: oci://ghcr.io/jacaudi/charts/nextdns-operator]
 ```
 
-## Local Development
+| Stage | File | What it does |
+|---|---|---|
+| test | `ci-test.yml` | Runs `task ci`: actionlint, yamllint, hadolint, helm lint, golangci-lint, govulncheck, `go test -race`, the 70% coverage floor, and the generated-artifact drift gate |
+| build | `ci-build.yml` | Multi-arch (amd64, arm64) image pushed to GHCR and pinned by digest; stamps `VERSION`/`COMMIT`/`DATE` build args |
+| smoke | `ci-smoke.yml` | `task smoke`: boots the image and checks `--version` |
+| release | `ci-release.yml` | release-please: opens or updates the release PR, and tags when it merges |
+| release-chart | `ci-chart.yml` | Publishes the chart in lockstep with the app (chart version = tag) after checking that `appVersion` matches and the image exists |
+| — | `release-republish.yml` | Manual repair: retag or rebuild a release image |
 
-Before pushing:
+## Test images from a branch
+
+Open a PR (a draft PR is enough). Every push to its branch then builds and smoke-tests `ghcr.io/jacaudi/nextdns-operator:sha-<short>`. Branches without an open PR run `test` only. For a one-off build, run **CI** manually with `workflow_dispatch` on the branch.
+
+## Releases
+
+[release-please](https://github.com/googleapis/release-please) reads Conventional Commits on `main` and keeps a release PR open. Merging that PR tags `vX.Y.Z`, then publishes the image and the chart. The version lives in `.release-please-manifest.json`, and `chart/Chart.yaml` `version`/`appVersion` follow it through `# x-release-please-version` annotations.
+
+| Commit type | Bump | Changelog |
+|---|---|---|
+| `fix:`, `perf:`, `refactor:`, `deps:`, `revert:` | patch | visible |
+| `feat:` | minor | visible |
+| `feat!:` / `BREAKING CHANGE:` | **major**, even while 0.x: the next breaking change cuts `v1.0.0` (`bump-minor-pre-major: false`, the fleet setting) | visible |
+| `docs:`, `chore:`, `style:`, `test:`, `build:`, `ci:` | none | hidden |
+
+Renovate commits use the `deps:` prefix so dependency bumps cut a patch release. To force a version once, add a `Release-As: 1.0.0` footer to a commit. Never set `release-as` in the config: it overrides every later release.
+
+## Secrets
+
+| Secret | Used by | Why |
+|---|---|---|
+| `APP_ID`, `APP_PRIVATE_KEY` | release, build, chart | A GitHub App token. `GITHUB_TOKEN` cannot trigger workflows, so without the App token the release PR never gets a `ci` run and can never merge |
+
+## Local
+
+`task ci` is exactly what CI runs:
+
 ```bash
-# Run tests
-go test ./... -v -cover
-
-# Lint code
-golangci-lint run
-
-# Build locally
-docker build -t nextdns-operator:dev .
-
-# Test Helm chart
-helm lint chart/
-helm template test chart/
+task ci          # everything
+task lint        # static checks only
+task test        # go test -race
+IMAGE=ghcr.io/jacaudi/nextdns-operator:sha-abc1234 task smoke
 ```

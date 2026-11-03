@@ -1,0 +1,141 @@
+# Manual repair of a release image — retag (registry-side copy, preferred) or rebuild. Rationale: github-actions-align/templates/README.md#release-republishyml
+name: release-republish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to repair (e.g. v1.2.3)
+        required: true
+        type: string
+      mode:
+        description: retag the CI-built image (preferred), or rebuild from the tag
+        required: true
+        default: retag
+        type: choice
+        options:
+          - retag
+          - rebuild
+
+concurrency:
+  group: release-republish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  retag:
+    name: retag ${{ inputs.tag }}
+    if: ${{ inputs.mode == 'retag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+    env:
+      APP_ID: ${{ secrets.APP_ID }}
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - name: Resolve the tag to its commit
+        id: commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" --jq '.object.sha')
+          type=$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" --jq '.object.type')
+          if [ "${type}" = "tag" ]; then
+            sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}" --jq '.object.sha')
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "short=sha-${sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "${TAG} -> ${sha} (${sha:0:7})"
+
+      - name: Generate a GitHub App token
+        id: app-token
+        if: ${{ env.APP_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Scoped to what this job does with it (registry retag); zizmor github-app.
+          permission-packages: write
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ steps.app-token.outputs.token && 'x-access-token' || github.actor }}
+          password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Verify the source image was built from the tagged commit
+        env:
+          SRC: ${{ env.IMAGE }}:${{ steps.commit.outputs.short }}
+          WANT: ${{ steps.commit.outputs.sha }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "source image: ${SRC}"
+          docker pull -q "${SRC}"
+          have=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${SRC}")
+          echo "tag commit:     ${WANT}"
+          echo "image revision: ${have}"
+          [ "${WANT}" = "${have}" ] || { echo "::error::${SRC} was built from ${have}, refusing to retag it as ${TAG}"; exit 1; }
+
+      - name: Point the semver tags at that image
+        id: out
+        env:
+          SRC: ${{ env.IMAGE }}:${{ steps.commit.outputs.short }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          # Refuse prereleases: metadata-action never produced :v1 / :v1.2 for
+          # them, so moving those tags here would clobber the last stable release.
+          case "${ver}" in
+            *-*|*+*) echo "::error::${TAG} is a prerelease; ci-build publishes no moving tags for it"; exit 1 ;;
+          esac
+          case "${ver}" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::${TAG} is not vMAJOR.MINOR.PATCH"; exit 1 ;;
+          esac
+          major="${ver%%.*}"
+          minor="${ver%.*}"
+          docker buildx imagetools create \
+            -t "${IMAGE}:v${ver}" \
+            -t "${IMAGE}:v${minor}" \
+            -t "${IMAGE}:v${major}" \
+            "${SRC}"
+          digest=$(docker buildx imagetools inspect "${IMAGE}:v${ver}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image=${IMAGE}@${digest}" >> "$GITHUB_OUTPUT"
+          echo "v${ver}, v${minor}, v${major} -> ${digest}"
+
+  rebuild:
+    name: rebuild ${{ inputs.tag }}
+    if: ${{ inputs.mode == 'rebuild' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci-build.yml
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    with:
+      version: ${{ inputs.tag }}
+      ref: ${{ inputs.tag }}
+
+  smoke:
+    needs: [retag, rebuild]
+    if: ${{ !cancelled() && (needs.retag.result == 'success' || needs.rebuild.result == 'success') }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/ci-smoke.yml
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    with:
+      image: ${{ needs.retag.outputs.image || needs.rebuild.outputs.image }}
