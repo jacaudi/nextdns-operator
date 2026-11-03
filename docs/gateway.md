@@ -10,6 +10,8 @@ As an alternative to LoadBalancer, DNS traffic can be exposed through Gateway AP
 
 Gateway API requires an external gateway controller (e.g., Envoy Gateway, Cilium, Istio) to be installed in the cluster. The operator references a GatewayClass managed by that controller — it does not implement its own gateway data plane.
 
+**Gateway API CRDs v1.6 or newer are required.** The operator manages `gateway.networking.k8s.io/v1` TCPRoute and UDPRoute resources, which graduated to `v1` in Gateway API v1.6. At startup it enables gateway support only if the cluster serves `GatewayClass`, `TCPRoute`, and `UDPRoute` at `v1`. With older CRDs (routes served only at `v1alpha2`) gateway support stays disabled and `GatewayReady` reports `GatewayAPICRDsMissing`. Upgrade the Gateway API CRDs and restart the operator to enable it.
+
 **Gateway and LoadBalancer are mutually exclusive.** When `gateway` is configured, the operator forces the Service type to ClusterIP (used as the route backend).
 
 ```yaml

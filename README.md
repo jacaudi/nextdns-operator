@@ -12,7 +12,7 @@ A Kubernetes operator for managing [NextDNS](https://nextdns.io) profiles declar
 - ConfigMap export for app integration
 - Observe mode for safe profile adoption
 - CoreDNS plugin extensibility (rewrite, hosts, forward tuning, health/ready/errors/metrics config via `spec.corefile`)
-- Gateway API support (TCPRoute/UDPRoute) for DNS traffic exposure, including proxy replica control (`spec.gateway.replicas`)
+- Gateway API support (v1 TCPRoute/UDPRoute, requires Gateway API CRDs v1.6+) for DNS traffic exposure, including proxy replica control (`spec.gateway.replicas`)
 
 ## Custom Resources
 
