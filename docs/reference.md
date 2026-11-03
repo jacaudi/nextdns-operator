@@ -334,6 +334,6 @@ Each `ConsolidateRule` (used in `corefile.errors.consolidate`) has:
 |------|------|-------|
 | **Ready** | All CoreDNS resources deployed and healthy | Workload, service, or configmap has issues |
 | **ProfileResolved** | Referenced NextDNSProfile exists and is Ready | Profile not found or not in Ready state |
-| **GatewayReady** | Gateway is programmed by external controller | Gateway not programmed, CRDs missing, or no class name configured |
+| **GatewayReady** | Gateway is programmed by external controller | Gateway not programmed, Gateway API CRDs missing or older than v1.6, or no class name configured |
 | **TCPRouteReady** | TCPRoute reconciled successfully | TCPRoute creation/update failed |
 | **UDPRouteReady** | UDPRoute reconciled successfully | UDPRoute creation/update failed |
