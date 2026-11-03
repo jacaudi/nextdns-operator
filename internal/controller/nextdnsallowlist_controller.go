@@ -1,4 +1,4 @@
-package controller
+package controller //nolint:dupl // per-CRD list controllers are intentionally parallel; generic extraction deferred
 
 import (
 	"context"

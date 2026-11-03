@@ -36,18 +36,18 @@ func TestNextDNSDenylistReconciler_countActiveDomains(t *testing.T) {
 		{
 			name: "mixed active and inactive domains",
 			domains: []nextdnsv1alpha1.DomainEntry{
-				{Domain: "example.com", Active: boolPtr(true)},
-				{Domain: "test.com", Active: boolPtr(false)},
+				{Domain: "example.com", Active: new(true)},
+				{Domain: "test.com", Active: new(false)},
 				{Domain: "demo.org", Active: nil},
-				{Domain: "inactive.com", Active: boolPtr(false)},
+				{Domain: "inactive.com", Active: new(false)},
 			},
 			expected: 2,
 		},
 		{
 			name: "no active domains",
 			domains: []nextdnsv1alpha1.DomainEntry{
-				{Domain: "example.com", Active: boolPtr(false)},
-				{Domain: "test.com", Active: boolPtr(false)},
+				{Domain: "example.com", Active: new(false)},
+				{Domain: "test.com", Active: new(false)},
 			},
 			expected: 0,
 		},
@@ -224,7 +224,7 @@ func TestNextDNSDenylistReconciler_Reconcile(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSDenylistSpec{
 			Domains: []nextdnsv1alpha1.DomainEntry{
 				{Domain: "example.com"},
-				{Domain: "test.com", Active: boolPtr(false)},
+				{Domain: "test.com", Active: new(false)},
 			},
 		},
 	}

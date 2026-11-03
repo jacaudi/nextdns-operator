@@ -36,18 +36,18 @@ func TestNextDNSTLDListReconciler_countActiveTLDs(t *testing.T) {
 		{
 			name: "mixed active and inactive domains",
 			tlds: []nextdnsv1alpha1.TLDEntry{
-				{TLD: "example.com", Active: boolPtr(true)},
-				{TLD: "test.com", Active: boolPtr(false)},
+				{TLD: "example.com", Active: new(true)},
+				{TLD: "test.com", Active: new(false)},
 				{TLD: "demo.org", Active: nil},
-				{TLD: "inactive.com", Active: boolPtr(false)},
+				{TLD: "inactive.com", Active: new(false)},
 			},
 			expected: 2,
 		},
 		{
 			name: "no active domains",
 			tlds: []nextdnsv1alpha1.TLDEntry{
-				{TLD: "example.com", Active: boolPtr(false)},
-				{TLD: "test.com", Active: boolPtr(false)},
+				{TLD: "example.com", Active: new(false)},
+				{TLD: "test.com", Active: new(false)},
 			},
 			expected: 0,
 		},
@@ -224,7 +224,7 @@ func TestNextDNSTLDListReconciler_Reconcile(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSTLDListSpec{
 			TLDs: []nextdnsv1alpha1.TLDEntry{
 				{TLD: "example.com"},
-				{TLD: "test.com", Active: boolPtr(false)},
+				{TLD: "test.com", Active: new(false)},
 			},
 		},
 	}

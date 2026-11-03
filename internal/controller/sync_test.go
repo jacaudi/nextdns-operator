@@ -35,7 +35,7 @@ func TestCalculateSyncInterval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Run multiple times to verify randomness is within bounds
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				got := CalculateSyncInterval(tt.syncPeriod)
 
 				if got < tt.wantMin || got > tt.wantMax {
@@ -52,7 +52,7 @@ func TestCalculateSyncIntervalDistribution(t *testing.T) {
 	syncPeriod := 1 * time.Hour
 	results := make(map[time.Duration]bool)
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		result := CalculateSyncInterval(syncPeriod)
 		results[result] = true
 	}

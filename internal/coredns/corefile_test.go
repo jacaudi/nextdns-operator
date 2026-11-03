@@ -290,8 +290,8 @@ func TestGenerateCorefile_NoDomainOverrides(t *testing.T) {
 		"Without overrides, corefile should start with catch-all block")
 	assert.Contains(t, corefile, "forward . tls://45.90.28.0")
 
-	catchAllIndex := strings.Index(corefile, ". {")
-	preamble := corefile[:catchAllIndex]
+	before, _, _ := strings.Cut(corefile, ". {")
+	preamble := before
 	assert.Empty(t, strings.TrimSpace(preamble),
 		"Nothing should appear before the catch-all block when there are no overrides")
 }
@@ -740,7 +740,7 @@ func TestGenerateCorefile_DefaultPlugins_Unchanged(t *testing.T) {
 	// The errors directive must appear as a bare keyword, not a block,
 	// when no consolidate rules are configured.
 	hasBareErrors := false
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.TrimSpace(line) == "errors" {
 			hasBareErrors = true
 			break
@@ -808,7 +808,7 @@ func TestGenerateCorefile_DisabledPlugins(t *testing.T) {
 	out := GenerateCorefile(cfg)
 	// Walk line by line so we only match standalone plugin directives,
 	// not substrings (e.g., DNS names containing "ready").
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		trimmed := strings.TrimSpace(line)
 		// Each disabled plugin must not appear as a directive.
 		if strings.HasPrefix(trimmed, "health ") || trimmed == "health" {

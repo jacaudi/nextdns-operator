@@ -1,3 +1,4 @@
+// Package nextdns wraps the NextDNS API client with the operator's sync operations and metrics.
 package nextdns
 
 import (
@@ -307,7 +308,7 @@ func (c *Client) SyncDenylist(ctx context.Context, profileID string, entries []D
 	start := time.Now()
 
 	// Build the desired denylist
-	var denylist []*nextdns.Denylist
+	denylist := make([]*nextdns.Denylist, 0, len(entries))
 	for _, entry := range entries {
 		denylist = append(denylist, &nextdns.Denylist{
 			ID:     entry.Domain,
@@ -334,7 +335,7 @@ func (c *Client) SyncAllowlist(ctx context.Context, profileID string, entries []
 	start := time.Now()
 
 	// Build the desired allowlist
-	var allowlist []*nextdns.Allowlist
+	allowlist := make([]*nextdns.Allowlist, 0, len(entries))
 	for _, entry := range entries {
 		allowlist = append(allowlist, &nextdns.Allowlist{
 			ID:     entry.Domain,
@@ -555,7 +556,7 @@ func (c *Client) SyncSecurityTLDs(ctx context.Context, profileID string, tlds []
 	start := time.Now()
 
 	// Build the desired TLD list
-	var securityTlds []*nextdns.SecurityTlds
+	securityTlds := make([]*nextdns.SecurityTlds, 0, len(tlds))
 	for _, tld := range tlds {
 		securityTlds = append(securityTlds, &nextdns.SecurityTlds{
 			ID: tld,
@@ -643,7 +644,7 @@ func (c *Client) UpdateParentalControl(ctx context.Context, profileID string, co
 // SyncPrivacyBlocklists synchronizes privacy blocklists for a profile
 func (c *Client) SyncPrivacyBlocklists(ctx context.Context, profileID string, blocklists []string) error {
 	start := time.Now()
-	var privacyBlocklists []*nextdns.PrivacyBlocklists
+	var privacyBlocklists []*nextdns.PrivacyBlocklists //nolint:prealloc // nil when blocklists is empty (all inactive) so the PUT body stays JSON null; make() would change it to []
 	for _, blocklist := range blocklists {
 		privacyBlocklists = append(privacyBlocklists, &nextdns.PrivacyBlocklists{
 			ID: blocklist,
@@ -666,7 +667,7 @@ func (c *Client) SyncPrivacyBlocklists(ctx context.Context, profileID string, bl
 // SyncPrivacyNatives synchronizes native tracker blocking for a profile
 func (c *Client) SyncPrivacyNatives(ctx context.Context, profileID string, natives []string) error {
 	start := time.Now()
-	var privacyNatives []*nextdns.PrivacyNatives
+	var privacyNatives []*nextdns.PrivacyNatives //nolint:prealloc // nil when natives is empty (all inactive) so the PUT body stays JSON null; make() would change it to []
 	for _, native := range natives {
 		privacyNatives = append(privacyNatives, &nextdns.PrivacyNatives{
 			ID: native,

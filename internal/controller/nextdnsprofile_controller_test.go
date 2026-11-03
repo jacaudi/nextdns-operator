@@ -53,13 +53,13 @@ func TestBoolValue(t *testing.T) {
 		},
 		{
 			name:         "true pointer returns true",
-			ptr:          boolPtr(true),
+			ptr:          new(true),
 			defaultValue: false,
 			expected:     true,
 		},
 		{
 			name:         "false pointer returns false",
-			ptr:          boolPtr(false),
+			ptr:          new(false),
 			defaultValue: true,
 			expected:     false,
 		},
@@ -308,8 +308,8 @@ func TestResolveListReferences(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSAllowlistSpec{
 			Domains: []nextdnsv1alpha1.DomainEntry{
 				{Domain: "allowed1.com"},
-				{Domain: "allowed2.com", Active: boolPtr(true)},
-				{Domain: "inactive.com", Active: boolPtr(false)},
+				{Domain: "allowed2.com", Active: new(true)},
+				{Domain: "inactive.com", Active: new(false)},
 			},
 		},
 	}
@@ -337,8 +337,8 @@ func TestResolveListReferences(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSTLDListSpec{
 			TLDs: []nextdnsv1alpha1.TLDEntry{
 				{TLD: "xyz"},
-				{TLD: "tk", Active: boolPtr(true)},
-				{TLD: "ml", Active: boolPtr(false)},
+				{TLD: "tk", Active: new(true)},
+				{TLD: "ml", Active: new(false)},
 			},
 		},
 	}
@@ -1193,9 +1193,9 @@ func TestSyncWithNextDNS_WithSecuritySettings(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Security Profile",
 			Security: &nextdnsv1alpha1.SecuritySpec{
-				AIThreatDetection:  boolPtr(true),
-				GoogleSafeBrowsing: boolPtr(true),
-				Cryptojacking:      boolPtr(false),
+				AIThreatDetection:  new(true),
+				GoogleSafeBrowsing: new(true),
+				Cryptojacking:      new(false),
 			},
 		},
 		Status: nextdnsv1alpha1.NextDNSProfileStatus{
@@ -1242,11 +1242,11 @@ func TestSyncWithNextDNS_WithPrivacySettings(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Privacy Profile",
 			Privacy: &nextdnsv1alpha1.PrivacySpec{
-				DisguisedTrackers: boolPtr(true),
-				AllowAffiliate:    boolPtr(false),
+				DisguisedTrackers: new(true),
+				AllowAffiliate:    new(false),
 				Blocklists: []nextdnsv1alpha1.BlocklistEntry{
 					{ID: "blocklist-1"},
-					{ID: "blocklist-2", Active: boolPtr(false)},
+					{ID: "blocklist-2", Active: new(false)},
 				},
 				Natives: []nextdnsv1alpha1.NativeEntry{
 					{ID: "apple"},
@@ -1298,13 +1298,13 @@ func TestSyncWithNextDNS_WithParentalControl(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSProfileSpec{
 			Name: "Parental Profile",
 			ParentalControl: &nextdnsv1alpha1.ParentalControlSpec{
-				SafeSearch:            boolPtr(true),
-				YouTubeRestrictedMode: boolPtr(true),
-				BlockBypass:           boolPtr(true),
+				SafeSearch:            new(true),
+				YouTubeRestrictedMode: new(true),
+				BlockBypass:           new(true),
 				Categories: []nextdnsv1alpha1.CategoryEntry{
 					{ID: "adult"},
-					{ID: "gambling", Active: boolPtr(true)},
-					{ID: "drugs", Active: boolPtr(false)},
+					{ID: "gambling", Active: new(true)},
+					{ID: "drugs", Active: new(false)},
 				},
 				Services: []nextdnsv1alpha1.ServiceEntry{
 					{ID: "tiktok"},
@@ -1359,11 +1359,11 @@ func TestSyncWithNextDNS_WithSettings(t *testing.T) {
 			Name: "Settings Profile",
 			Settings: &nextdnsv1alpha1.SettingsSpec{
 				Logs: &nextdnsv1alpha1.LogsSpec{
-					Enabled:   boolPtr(true),
+					Enabled:   new(true),
 					Retention: "30d",
 				},
 				BlockPage: &nextdnsv1alpha1.BlockPageSpec{
-					Enabled: boolPtr(true),
+					Enabled: new(true),
 				},
 			},
 		},
@@ -1615,10 +1615,10 @@ func TestReconcile_FullFlow_WithMock(t *testing.T) {
 				Name: "nextdns-secret",
 			},
 			Security: &nextdnsv1alpha1.SecuritySpec{
-				AIThreatDetection: boolPtr(true),
+				AIThreatDetection: new(true),
 			},
 			Privacy: &nextdnsv1alpha1.PrivacySpec{
-				DisguisedTrackers: boolPtr(true),
+				DisguisedTrackers: new(true),
 			},
 			Allowlist: []nextdnsv1alpha1.DomainEntry{
 				{Domain: "allowed.com"},
@@ -1782,9 +1782,9 @@ func TestReconcile_FailedListResolution(t *testing.T) {
 
 func TestDefaultClientFactory(t *testing.T) {
 	// Test that DefaultClientFactory returns error for empty API key
-	client, err := DefaultClientFactory("")
+	ndClient, err := DefaultClientFactory("")
 	assert.Error(t, err)
-	assert.Nil(t, client)
+	assert.Nil(t, ndClient)
 }
 
 // mockNextDNSClient is a test mock for the NextDNS client
@@ -2586,29 +2586,29 @@ func TestReconcile_ObserveMode_Success(t *testing.T) {
 	// Verify suggestedSpec parental control has BlockBypass and category Recreation
 	require.NotNil(t, updated.Status.SuggestedSpec)
 	require.NotNil(t, updated.Status.SuggestedSpec.ParentalControl)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.ParentalControl.BlockBypass)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.ParentalControl.BlockBypass)
 	require.Equal(t, 2, len(updated.Status.SuggestedSpec.ParentalControl.Categories))
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.ParentalControl.Categories[0].Recreation)
-	assert.Equal(t, boolPtr(false), updated.Status.SuggestedSpec.ParentalControl.Categories[1].Recreation)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.ParentalControl.Categories[0].Recreation)
+	assert.Equal(t, new(false), updated.Status.SuggestedSpec.ParentalControl.Categories[1].Recreation)
 
 	// Verify suggestedSpec was populated
 	require.NotNil(t, updated.Status.SuggestedSpec)
 	assert.Equal(t, "Remote Profile", updated.Status.SuggestedSpec.Name)
 	require.NotNil(t, updated.Status.SuggestedSpec.Security)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Security.AIThreatDetection)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Security.GoogleSafeBrowsing)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Security.AIThreatDetection)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Security.GoogleSafeBrowsing)
 	require.NotNil(t, updated.Status.SuggestedSpec.Privacy)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Privacy.DisguisedTrackers)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Privacy.DisguisedTrackers)
 	require.Equal(t, 1, len(updated.Status.SuggestedSpec.Denylist))
 	assert.Equal(t, "bad.com", updated.Status.SuggestedSpec.Denylist[0].Domain)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Denylist[0].Active)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Denylist[0].Active)
 	require.Equal(t, 1, len(updated.Status.SuggestedSpec.Allowlist))
 	require.NotNil(t, updated.Status.SuggestedSpec.Settings)
 	require.NotNil(t, updated.Status.SuggestedSpec.Settings.Logs)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.Enabled)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Settings.Logs.Enabled)
 	assert.Equal(t, "7d", updated.Status.SuggestedSpec.Settings.Logs.Retention)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogClientsIPs)
-	assert.Equal(t, boolPtr(true), updated.Status.SuggestedSpec.Settings.Logs.LogDomains)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Settings.Logs.LogClientsIPs)
+	assert.Equal(t, new(true), updated.Status.SuggestedSpec.Settings.Logs.LogDomains)
 	assert.Equal(t, "eu", updated.Status.SuggestedSpec.Settings.Logs.Location)
 
 	// Verify conditions
@@ -3251,80 +3251,80 @@ func TestBuildSuggestedSpec(t *testing.T) {
 
 	// Security: bool -> *bool
 	require.NotNil(t, suggested.Security)
-	assert.Equal(t, boolPtr(true), suggested.Security.AIThreatDetection)
-	assert.Equal(t, boolPtr(true), suggested.Security.GoogleSafeBrowsing)
-	assert.Equal(t, boolPtr(false), suggested.Security.Cryptojacking)
-	assert.Equal(t, boolPtr(true), suggested.Security.DNSRebinding)
-	assert.Equal(t, boolPtr(true), suggested.Security.IDNHomographs)
-	assert.Equal(t, boolPtr(true), suggested.Security.Typosquatting)
-	assert.Equal(t, boolPtr(true), suggested.Security.DGA)
-	assert.Equal(t, boolPtr(false), suggested.Security.NRD)
-	assert.Equal(t, boolPtr(false), suggested.Security.DDNS)
-	assert.Equal(t, boolPtr(true), suggested.Security.Parking)
-	assert.Equal(t, boolPtr(true), suggested.Security.CSAM)
-	assert.Equal(t, boolPtr(true), suggested.Security.ThreatIntelligenceFeeds)
+	assert.Equal(t, new(true), suggested.Security.AIThreatDetection)
+	assert.Equal(t, new(true), suggested.Security.GoogleSafeBrowsing)
+	assert.Equal(t, new(false), suggested.Security.Cryptojacking)
+	assert.Equal(t, new(true), suggested.Security.DNSRebinding)
+	assert.Equal(t, new(true), suggested.Security.IDNHomographs)
+	assert.Equal(t, new(true), suggested.Security.Typosquatting)
+	assert.Equal(t, new(true), suggested.Security.DGA)
+	assert.Equal(t, new(false), suggested.Security.NRD)
+	assert.Equal(t, new(false), suggested.Security.DDNS)
+	assert.Equal(t, new(true), suggested.Security.Parking)
+	assert.Equal(t, new(true), suggested.Security.CSAM)
+	assert.Equal(t, new(true), suggested.Security.ThreatIntelligenceFeeds)
 
 	// Privacy: bool -> *bool, blocklists/natives get Active: true
 	require.NotNil(t, suggested.Privacy)
-	assert.Equal(t, boolPtr(true), suggested.Privacy.DisguisedTrackers)
-	assert.Equal(t, boolPtr(false), suggested.Privacy.AllowAffiliate)
+	assert.Equal(t, new(true), suggested.Privacy.DisguisedTrackers)
+	assert.Equal(t, new(false), suggested.Privacy.AllowAffiliate)
 	require.Equal(t, 2, len(suggested.Privacy.Blocklists))
 	assert.Equal(t, "nextdns-recommended", suggested.Privacy.Blocklists[0].ID)
-	assert.Equal(t, boolPtr(true), suggested.Privacy.Blocklists[0].Active)
+	assert.Equal(t, new(true), suggested.Privacy.Blocklists[0].Active)
 	assert.Equal(t, "oisd", suggested.Privacy.Blocklists[1].ID)
-	assert.Equal(t, boolPtr(true), suggested.Privacy.Blocklists[1].Active)
+	assert.Equal(t, new(true), suggested.Privacy.Blocklists[1].Active)
 	require.Equal(t, 2, len(suggested.Privacy.Natives))
 	assert.Equal(t, "apple", suggested.Privacy.Natives[0].ID)
-	assert.Equal(t, boolPtr(true), suggested.Privacy.Natives[0].Active)
+	assert.Equal(t, new(true), suggested.Privacy.Natives[0].Active)
 
 	// ParentalControl: bool -> *bool, categories/services preserve Active
 	require.NotNil(t, suggested.ParentalControl)
-	assert.Equal(t, boolPtr(true), suggested.ParentalControl.SafeSearch)
-	assert.Equal(t, boolPtr(false), suggested.ParentalControl.YouTubeRestrictedMode)
-	assert.Equal(t, boolPtr(true), suggested.ParentalControl.BlockBypass)
+	assert.Equal(t, new(true), suggested.ParentalControl.SafeSearch)
+	assert.Equal(t, new(false), suggested.ParentalControl.YouTubeRestrictedMode)
+	assert.Equal(t, new(true), suggested.ParentalControl.BlockBypass)
 	require.Equal(t, 2, len(suggested.ParentalControl.Categories))
 	assert.Equal(t, "gambling", suggested.ParentalControl.Categories[0].ID)
-	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Categories[0].Active)
-	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Categories[0].Recreation)
+	assert.Equal(t, new(true), suggested.ParentalControl.Categories[0].Active)
+	assert.Equal(t, new(true), suggested.ParentalControl.Categories[0].Recreation)
 	assert.Equal(t, "adult", suggested.ParentalControl.Categories[1].ID)
-	assert.Equal(t, boolPtr(false), suggested.ParentalControl.Categories[1].Active)
-	assert.Equal(t, boolPtr(false), suggested.ParentalControl.Categories[1].Recreation)
+	assert.Equal(t, new(false), suggested.ParentalControl.Categories[1].Active)
+	assert.Equal(t, new(false), suggested.ParentalControl.Categories[1].Recreation)
 	require.Equal(t, 1, len(suggested.ParentalControl.Services))
 	assert.Equal(t, "tiktok", suggested.ParentalControl.Services[0].ID)
-	assert.Equal(t, boolPtr(true), suggested.ParentalControl.Services[0].Active)
+	assert.Equal(t, new(true), suggested.ParentalControl.Services[0].Active)
 
 	// Denylist/Allowlist: Active preserved as *bool
 	require.Equal(t, 2, len(suggested.Denylist))
 	assert.Equal(t, "bad.com", suggested.Denylist[0].Domain)
-	assert.Equal(t, boolPtr(true), suggested.Denylist[0].Active)
+	assert.Equal(t, new(true), suggested.Denylist[0].Active)
 	assert.Equal(t, "worse.com", suggested.Denylist[1].Domain)
-	assert.Equal(t, boolPtr(false), suggested.Denylist[1].Active)
+	assert.Equal(t, new(false), suggested.Denylist[1].Active)
 	require.Equal(t, 1, len(suggested.Allowlist))
 	assert.Equal(t, "good.com", suggested.Allowlist[0].Domain)
-	assert.Equal(t, boolPtr(true), suggested.Allowlist[0].Active)
+	assert.Equal(t, new(true), suggested.Allowlist[0].Active)
 
 	// Settings: retention int -> string, bool -> *bool
 	require.NotNil(t, suggested.Settings)
 	require.NotNil(t, suggested.Settings.Logs)
-	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.Enabled)
+	assert.Equal(t, new(true), suggested.Settings.Logs.Enabled)
 	assert.Equal(t, "30d", suggested.Settings.Logs.Retention)
-	assert.Equal(t, boolPtr(true), suggested.Settings.Logs.LogClientsIPs)
-	assert.Equal(t, boolPtr(false), suggested.Settings.Logs.LogDomains)
+	assert.Equal(t, new(true), suggested.Settings.Logs.LogClientsIPs)
+	assert.Equal(t, new(false), suggested.Settings.Logs.LogDomains)
 	assert.Equal(t, "eu", suggested.Settings.Logs.Location)
 	require.NotNil(t, suggested.Settings.BlockPage)
-	assert.Equal(t, boolPtr(true), suggested.Settings.BlockPage.Enabled)
+	assert.Equal(t, new(true), suggested.Settings.BlockPage.Enabled)
 	require.NotNil(t, suggested.Settings.Performance)
-	assert.Equal(t, boolPtr(true), suggested.Settings.Performance.ECS)
-	assert.Equal(t, boolPtr(true), suggested.Settings.Performance.CacheBoost)
-	assert.Equal(t, boolPtr(false), suggested.Settings.Performance.CNAMEFlattening)
-	assert.Equal(t, boolPtr(true), suggested.Settings.Web3)
-	assert.Equal(t, boolPtr(true), suggested.Settings.BAV)
+	assert.Equal(t, new(true), suggested.Settings.Performance.ECS)
+	assert.Equal(t, new(true), suggested.Settings.Performance.CacheBoost)
+	assert.Equal(t, new(false), suggested.Settings.Performance.CNAMEFlattening)
+	assert.Equal(t, new(true), suggested.Settings.Web3)
+	assert.Equal(t, new(true), suggested.Settings.BAV)
 
 	// Rewrites: ObservedRewriteEntry (Name/Content) -> RewriteEntry (From/To)
 	require.Equal(t, 1, len(suggested.Rewrites))
 	assert.Equal(t, "app.example.com", suggested.Rewrites[0].From)
 	assert.Equal(t, "192.168.1.1", suggested.Rewrites[0].To)
-	assert.Equal(t, boolPtr(true), suggested.Rewrites[0].Active)
+	assert.Equal(t, new(true), suggested.Rewrites[0].Active)
 
 	// BlockedTLDs
 	assert.Equal(t, []string{"xyz", "tk"}, suggested.BlockedTLDs)
@@ -3370,7 +3370,7 @@ func TestReconcile_TransitionClearsSuggestedSpec(t *testing.T) {
 				Name: "nextdns-secret",
 			},
 			Security: &nextdnsv1alpha1.SecuritySpec{
-				AIThreatDetection: boolPtr(true),
+				AIThreatDetection: new(true),
 			},
 		},
 		Status: nextdnsv1alpha1.NextDNSProfileStatus{
@@ -3442,22 +3442,22 @@ func TestSyncWithNextDNS_FullSettings(t *testing.T) {
 			},
 			Settings: &nextdnsv1alpha1.SettingsSpec{
 				Logs: &nextdnsv1alpha1.LogsSpec{
-					Enabled:       boolPtr(true),
-					LogClientsIPs: boolPtr(true),
-					LogDomains:    boolPtr(false),
+					Enabled:       new(true),
+					LogClientsIPs: new(true),
+					LogDomains:    new(false),
 					Retention:     "30d",
 					Location:      "ch",
 				},
 				BlockPage: &nextdnsv1alpha1.BlockPageSpec{
-					Enabled: boolPtr(true),
+					Enabled: new(true),
 				},
 				Performance: &nextdnsv1alpha1.PerformanceSpec{
-					ECS:             boolPtr(true),
-					CacheBoost:      boolPtr(false),
-					CNAMEFlattening: boolPtr(true),
+					ECS:             new(true),
+					CacheBoost:      new(false),
+					CNAMEFlattening: new(true),
 				},
-				Web3: boolPtr(true),
-				BAV:  boolPtr(true),
+				Web3: new(true),
+				BAV:  new(true),
 			},
 		},
 	}
@@ -3534,7 +3534,7 @@ func TestSyncWithNextDNS_Rewrites(t *testing.T) {
 			Rewrites: []nextdnsv1alpha1.RewriteEntry{
 				{From: "app.example.com", To: "192.168.1.1"},
 				{From: "api.example.com", To: "192.168.1.2"},
-				{From: "inactive.example.com", To: "10.0.0.1", Active: boolPtr(false)},
+				{From: "inactive.example.com", To: "10.0.0.1", Active: new(false)},
 			},
 		},
 	}
@@ -3768,7 +3768,7 @@ func TestReconcile_ManagedMode_SkipsUpdateWhenUnchanged(t *testing.T) {
 				Name: "nextdns-secret",
 			},
 			Security: &nextdnsv1alpha1.SecuritySpec{
-				AIThreatDetection: boolPtr(true),
+				AIThreatDetection: new(true),
 			},
 		},
 	}

@@ -99,7 +99,7 @@ type MockClient struct {
 // MockCall records a method call for verification
 type MockCall struct {
 	Method string
-	Args   []interface{}
+	Args   []any
 }
 
 // NewMockClient creates a new mock client with initialized maps
@@ -126,7 +126,7 @@ func NewMockClient() *MockClient {
 	}
 }
 
-func (m *MockClient) recordCall(method string, args ...interface{}) {
+func (m *MockClient) recordCall(method string, args ...any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Calls = append(m.Calls, MockCall{Method: method, Args: args})

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"sort"
 	"strings"
@@ -41,7 +42,7 @@ const (
 	ConditionTypeProfileResolved = "ProfileResolved"
 
 	// ConditionTypeMultusIPWarning indicates Multus IP configuration issues
-	ConditionTypeMultusIPWarning = "MultusIPWarning"
+	ConditionTypeMultusIPWarning = "MultusIPWarning" //nolint:gosec // G101: condition type name, not a credential
 
 	// ConditionTypeDeviceNameIgnored warns that deviceName has no effect with plain DNS
 	ConditionTypeDeviceNameIgnored = "DeviceNameIgnored"
@@ -92,7 +93,7 @@ type NextDNSCoreDNSReconciler struct {
 // +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyproxies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop
-func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) { //nolint:gocyclo // reconcile loop is a linear sequence of phases
 	logger := log.FromContext(ctx)
 
 	// Fetch the NextDNSCoreDNS instance
@@ -184,7 +185,7 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.Replicas != nil {
 			replicas = *coreDNS.Spec.Deployment.Replicas
 		}
-		if int32(len(coreDNS.Spec.Multus.IPs)) < replicas {
+		if len(coreDNS.Spec.Multus.IPs) < int(replicas) {
 			logger.Info("WARNING: fewer Multus IPs than replicas; some pods may fail IPAM allocation",
 				"multusIPs", len(coreDNS.Spec.Multus.IPs),
 				"replicas", replicas)
@@ -536,7 +537,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileConfigMap(ctx context.Context, coreD
 }
 
 // buildCorefileConfig builds the CorefileConfig from the CR spec
-func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) (*coredns.CorefileConfig, error) {
+func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) (*coredns.CorefileConfig, error) { //nolint:gocyclo // flat mapping of optional CRD plugin fields onto CorefileConfig, each branch an independent nil-check
 	cfg := &coredns.CorefileConfig{
 		ProfileID:       profile.Status.ProfileID,
 		PrimaryProtocol: coredns.ProtocolDoT, // default
@@ -661,7 +662,7 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	// a user setting only Port does not silently disable the plugin.
 	if cf != nil && cf.Health != nil {
 		hpc := &coredns.HealthPluginConfig{
-			Enabled:  boolWithDefault(cf.Health.Enabled, true),
+			Enabled:  boolDefaultTrue(cf.Health.Enabled),
 			Lameduck: cf.Health.Lameduck,
 		}
 		if cf.Health.Port != nil {
@@ -671,7 +672,7 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	}
 	if cf != nil && cf.Ready != nil {
 		rpc := &coredns.ReadyPluginConfig{
-			Enabled: boolWithDefault(cf.Ready.Enabled, true),
+			Enabled: boolDefaultTrue(cf.Ready.Enabled),
 		}
 		if cf.Ready.Port != nil {
 			rpc.Port = *cf.Ready.Port
@@ -680,7 +681,7 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	}
 	if cf != nil && cf.Errors != nil {
 		epc := &coredns.ErrorsPluginConfig{
-			Enabled: boolWithDefault(cf.Errors.Enabled, true),
+			Enabled: boolDefaultTrue(cf.Errors.Enabled),
 		}
 		for _, c := range cf.Errors.Consolidate {
 			epc.Consolidate = append(epc.Consolidate, coredns.ConsolidateRuleConfig{
@@ -702,14 +703,11 @@ func (r *NextDNSCoreDNSReconciler) buildCorefileConfig(coreDNS *nextdnsv1alpha1.
 	return cfg, nil
 }
 
-// boolWithDefault returns *p if p is non-nil, otherwise def. Used to
+// boolDefaultTrue returns *p if p is non-nil, otherwise true. Used to
 // mirror kubebuilder `default=true` semantics for pointer-to-bool API
 // fields that control plugin enablement.
-func boolWithDefault(p *bool, def bool) bool {
-	if p == nil {
-		return def
-	}
-	return *p
+func boolDefaultTrue(p *bool) bool {
+	return p == nil || *p
 }
 
 // defaultLivenessProbePort and defaultReadinessProbePort mirror the
@@ -725,7 +723,7 @@ const (
 // default on CoreDNSHealthConfig.Enabled).
 func healthPluginEnabled(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) bool {
 	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Health != nil {
-		return boolWithDefault(cf.Health.Enabled, true)
+		return boolDefaultTrue(cf.Health.Enabled)
 	}
 	return true
 }
@@ -734,7 +732,7 @@ func healthPluginEnabled(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) bool {
 // the given CoreDNS CR. Returns true by default.
 func readyPluginEnabled(coreDNS *nextdnsv1alpha1.NextDNSCoreDNS) bool {
 	if cf := coreDNS.Spec.Corefile; cf != nil && cf.Ready != nil {
-		return boolWithDefault(cf.Ready.Enabled, true)
+		return boolDefaultTrue(cf.Ready.Enabled)
 	}
 	return true
 }
@@ -824,13 +822,14 @@ func (r *NextDNSCoreDNSReconciler) reconcilePDB(ctx context.Context, coreDNS *ne
 		}
 
 		// Set MinAvailable or MaxUnavailable (mutually exclusive)
-		if pdbConfig.MinAvailable != nil {
+		switch {
+		case pdbConfig.MinAvailable != nil:
 			pdb.Spec.MinAvailable = pdbConfig.MinAvailable
 			pdb.Spec.MaxUnavailable = nil
-		} else if pdbConfig.MaxUnavailable != nil {
+		case pdbConfig.MaxUnavailable != nil:
 			pdb.Spec.MaxUnavailable = pdbConfig.MaxUnavailable
 			pdb.Spec.MinAvailable = nil
-		} else {
+		default:
 			// Default to maxUnavailable: 1 if neither is specified
 			defaultMaxUnavailable := intstr.FromInt32(1)
 			pdb.Spec.MaxUnavailable = &defaultMaxUnavailable
@@ -1124,8 +1123,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 	// Determine service type
 	serviceType := corev1.ServiceTypeClusterIP // default
 	if coreDNS.Spec.Gateway == nil && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.Type != "" {
-		switch coreDNS.Spec.Service.Type {
-		case nextdnsv1alpha1.ServiceTypeLoadBalancer:
+		if coreDNS.Spec.Service.Type == nextdnsv1alpha1.ServiceTypeLoadBalancer {
 			serviceType = corev1.ServiceTypeLoadBalancer
 		}
 	}
@@ -1145,9 +1143,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 			if service.Annotations == nil {
 				service.Annotations = make(map[string]string)
 			}
-			for k, v := range coreDNS.Spec.Service.Annotations {
-				service.Annotations[k] = v
-			}
+			maps.Copy(service.Annotations, coreDNS.Spec.Service.Annotations)
 		}
 
 		service.Spec = corev1.ServiceSpec{
@@ -1179,8 +1175,8 @@ func (r *NextDNSCoreDNSReconciler) reconcileService(ctx context.Context, coreDNS
 		// NOTE: service.Spec.LoadBalancerIP is deprecated since Kubernetes v1.24
 		// but is still honored by most cloud providers. We continue to set it for
 		// backward compatibility.
-		if coreDNS.Spec.Gateway == nil && serviceType == corev1.ServiceTypeLoadBalancer && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.LoadBalancerIP != "" {
-			service.Spec.LoadBalancerIP = coreDNS.Spec.Service.LoadBalancerIP //nolint:staticcheck // deprecated but still functional
+		if coreDNS.Spec.Gateway == nil && serviceType == corev1.ServiceTypeLoadBalancer && coreDNS.Spec.Service != nil && coreDNS.Spec.Service.LoadBalancerIP != "" { //nolint:staticcheck // SA1019: the operator must keep honoring the deprecated field until it is removed
+			service.Spec.LoadBalancerIP = coreDNS.Spec.Service.LoadBalancerIP //nolint:staticcheck // SA1019: same — copying the deprecated field through to the Service
 		}
 
 		return controllerutil.SetControllerReference(coreDNS, service, r.Scheme)
@@ -1215,9 +1211,7 @@ func (r *NextDNSCoreDNSReconciler) buildPodAnnotations(ctx context.Context, core
 	// Copy user-specified podAnnotations
 	if coreDNS.Spec.Deployment != nil && coreDNS.Spec.Deployment.PodAnnotations != nil {
 		annotations = make(map[string]string, len(coreDNS.Spec.Deployment.PodAnnotations))
-		for k, v := range coreDNS.Spec.Deployment.PodAnnotations {
-			annotations[k] = v
-		}
+		maps.Copy(annotations, coreDNS.Spec.Deployment.PodAnnotations)
 	}
 
 	// Generate Multus annotation if configured (takes precedence over manual podAnnotations)
@@ -1340,7 +1334,7 @@ func (r *NextDNSCoreDNSReconciler) getServiceName(coreDNS *nextdnsv1alpha1.NextD
 }
 
 // updateStatus updates the status of the NextDNSCoreDNS resource
-func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error {
+func (r *NextDNSCoreDNSReconciler) updateStatus(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, profile *nextdnsv1alpha1.NextDNSProfile) error { //nolint:gocyclo // status assembly from independent optional-field checks
 	// Get upstream endpoint URL
 	primaryProtocol := coredns.ProtocolDoT
 	deviceName := ""

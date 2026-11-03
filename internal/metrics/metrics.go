@@ -1,3 +1,4 @@
+// Package metrics registers the operator's custom Prometheus metrics.
 package metrics
 
 import (

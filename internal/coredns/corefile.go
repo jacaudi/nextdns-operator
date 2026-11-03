@@ -458,7 +458,7 @@ func writeErrorsBlock(sb *strings.Builder, e *ErrorsPluginConfig) {
 // Collision checks only apply to plugins that are actually enabled — a
 // disabled plugin with a colliding port is allowed (the directive is
 // never emitted).
-func ValidatePluginConfig(health *HealthPluginConfig, ready *ReadyPluginConfig, errors *ErrorsPluginConfig, metricsPort int32) error {
+func ValidatePluginConfig(health *HealthPluginConfig, ready *ReadyPluginConfig, errors *ErrorsPluginConfig, metricsPort int32) error { //nolint:gocyclo // independent port/range/duration checks accumulated into one error list
 	var errs []string
 
 	healthPort := defaultHealthPort

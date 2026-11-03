@@ -15,7 +15,7 @@ func CalculateSyncInterval(syncPeriod time.Duration) time.Duration {
 
 	// Calculate 10% jitter (±10%)
 	jitterRange := float64(syncPeriod) * 0.1
-	jitter := time.Duration(rand.Float64()*2*jitterRange - jitterRange)
+	jitter := time.Duration(rand.Float64()*2*jitterRange - jitterRange) //nolint:gosec // G404: non-cryptographic jitter to spread reconcile requeues; unpredictability is not a security property
 
 	return syncPeriod + jitter
 }
