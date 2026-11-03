@@ -1,3 +1,4 @@
+// Command main is the nextdns-operator manager entry point.
 package main
 
 import (
@@ -62,7 +63,7 @@ func lookupEnvOrString(key, defaultVal string) string {
 	return defaultVal
 }
 
-func main() {
+func main() { //nolint:gocyclo // main is a linear startup sequence (flags, config, manager wiring, health checks, run)
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string

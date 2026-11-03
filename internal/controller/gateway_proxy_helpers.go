@@ -61,17 +61,17 @@ func (s *envoyGatewayStrategy) ReconcileProxyReplicas(ctx context.Context, c cli
 	name := envoyProxyName(coreDNS)
 
 	desired := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": envoyProxyGroup + "/" + envoyProxyVersion,
 			"kind":       envoyProxyKind,
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      name,
 				"namespace": coreDNS.Namespace,
 			},
-			"spec": map[string]interface{}{
-				"provider": map[string]interface{}{
-					"kubernetes": map[string]interface{}{
-						"envoyDeployment": map[string]interface{}{
+			"spec": map[string]any{
+				"provider": map[string]any{
+					"kubernetes": map[string]any{
+						"envoyDeployment": map[string]any{
 							"replicas": int64(replicas),
 						},
 					},

@@ -186,6 +186,7 @@ type CoreDNSServiceConfig struct {
 
 	// LoadBalancerIP specifies the IP address for LoadBalancer type services.
 	// Accepts any valid IPv4 or IPv6 address.
+	//
 	// Deprecated: This field is deprecated since Kubernetes v1.24 but is still
 	// honored by most cloud providers. Future versions may migrate to
 	// Service annotations or a gateway API mechanism.

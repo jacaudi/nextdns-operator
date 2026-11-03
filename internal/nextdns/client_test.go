@@ -459,7 +459,7 @@ func TestMockClient_ThreadSafety(t *testing.T) {
 	// Run concurrent operations
 	done := make(chan bool)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(idx int) {
 			_, _ = mock.CreateProfile(context.Background(), "Test")
 			_ = mock.SyncDenylist(context.Background(), "profile-1", []DomainEntry{{Domain: "bad.com", Active: true}})
@@ -469,7 +469,7 @@ func TestMockClient_ThreadSafety(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

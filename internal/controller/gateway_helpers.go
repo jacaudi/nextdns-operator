@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +19,7 @@ import (
 // reconcileGateway creates or updates the Gateway resource for DNS traffic exposure.
 // proxyParametersRef, when non-nil, overrides spec.gateway.infrastructure.parametersRef
 // with an auto-generated reference from the proxy strategy.
-func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, proxyParametersRef *nextdnsv1alpha1.GatewayParametersReference) error {
+func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, proxyParametersRef *nextdnsv1alpha1.GatewayParametersReference) error { //nolint:gocyclo // sequential Gateway API resource reconcile steps with independent optional-field branches
 	logger := log.FromContext(ctx)
 
 	// Resolve GatewayClass name: CR-level override > operator default
@@ -43,9 +44,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 		// Reset annotations to match spec (removes stale annotations from prior reconciles)
 		gw.Annotations = make(map[string]string)
 		if coreDNS.Spec.Gateway != nil {
-			for k, v := range coreDNS.Spec.Gateway.Annotations {
-				gw.Annotations[k] = v
-			}
+			maps.Copy(gw.Annotations, coreDNS.Spec.Gateway.Annotations)
 		}
 
 		// Build addresses from spec
@@ -154,7 +153,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileGateway(ctx context.Context, coreDNS
 }
 
 // reconcileTCPRoute creates or updates the TCPRoute for DNS TCP traffic.
-func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, serviceName string) error {
+func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, serviceName string) error { //nolint:dupl // TCPRoute and UDPRoute reconcilers are intentionally parallel (different Gateway API kinds); generic extraction deferred
 	logger := log.FromContext(ctx)
 
 	routeName := coreDNS.Name + "-dns-tcp"
@@ -208,7 +207,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDN
 }
 
 // reconcileUDPRoute creates or updates the UDPRoute for DNS UDP traffic.
-func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, serviceName string) error {
+func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDNS *nextdnsv1alpha1.NextDNSCoreDNS, serviceName string) error { //nolint:dupl // TCPRoute and UDPRoute reconcilers are intentionally parallel (different Gateway API kinds); generic extraction deferred
 	logger := log.FromContext(ctx)
 
 	routeName := coreDNS.Name + "-dns-udp"

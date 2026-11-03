@@ -1120,7 +1120,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_LoadBalancerService(t *testing.T) {
 			},
 			Service: &nextdnsv1alpha1.CoreDNSServiceConfig{
 				Type:           nextdnsv1alpha1.ServiceTypeLoadBalancer,
-				LoadBalancerIP: "192.168.1.53",
+				LoadBalancerIP: "192.168.1.53", //nolint:staticcheck // SA1019: the test exercises the deprecated field the operator still honors
 				Annotations: map[string]string{
 					"metallb.universe.tf/address-pool":          "dns-pool",
 					"external-dns.alpha.kubernetes.io/hostname": "dns.example.com",
@@ -1695,7 +1695,7 @@ func TestNextDNSCoreDNSReconciler_BuildPodAnnotations_MultusWithIPs(t *testing.T
 	assert.Contains(t, annotation, "10.10.30.101")
 
 	// Must be valid JSON
-	var parsed []map[string]interface{}
+	var parsed []map[string]any
 	err := json.Unmarshal([]byte(annotation), &parsed)
 	require.NoError(t, err)
 	assert.Len(t, parsed, 1)
@@ -2700,14 +2700,14 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithMultus(t *testing.T) {
 	annotation := deployment.Spec.Template.Annotations["k8s.v1.cni.cncf.io/networks"]
 	require.NotEmpty(t, annotation)
 
-	var parsed []map[string]interface{}
+	var parsed []map[string]any
 	err = json.Unmarshal([]byte(annotation), &parsed)
 	require.NoError(t, err)
 	assert.Len(t, parsed, 1)
 	assert.Equal(t, "vlan30-macvlan", parsed[0]["name"])
 	assert.Equal(t, "default", parsed[0]["namespace"])
 
-	ips, ok := parsed[0]["ips"].([]interface{})
+	ips, ok := parsed[0]["ips"].([]any)
 	require.True(t, ok)
 	assert.Len(t, ips, 2)
 }
@@ -3609,7 +3609,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_ReplicasAndParametersRefConflict(t *
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
 			Gateway: &nextdnsv1alpha1.GatewayConfig{
-				GatewayClassName: stringPtr("envoy-gateway"),
+				GatewayClassName: new("envoy-gateway"),
 				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
 				Replicas:         &replicas,
 				Infrastructure: &nextdnsv1alpha1.GatewayInfrastructure{
@@ -3651,11 +3651,6 @@ func TestNextDNSCoreDNSReconciler_Reconcile_ReplicasAndParametersRefConflict(t *
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	assert.Equal(t, "InvalidConfiguration", cond.Reason)
 	assert.Contains(t, cond.Message, "mutually exclusive")
-}
-
-// stringPtr is a helper to get a pointer to a string literal.
-func stringPtr(s string) *string {
-	return &s
 }
 
 func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
@@ -3700,7 +3695,7 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
 		Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
 			ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "test-profile"},
 			Gateway: &nextdnsv1alpha1.GatewayConfig{
-				GatewayClassName: stringPtr("envoy-gateway"),
+				GatewayClassName: new("envoy-gateway"),
 				Addresses:        []nextdnsv1alpha1.GatewayAddress{{Type: &ipType, Value: "192.168.1.53"}},
 				Replicas:         &replicas,
 			},
@@ -3730,10 +3725,10 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-envoyproxy", Namespace: "default"}, envoyProxy)
 	require.NoError(t, err, "EnvoyProxy CR should have been created")
 
-	spec, _ := envoyProxy.Object["spec"].(map[string]interface{})
-	provider, _ := spec["provider"].(map[string]interface{})
-	k8s, _ := provider["kubernetes"].(map[string]interface{})
-	deployment, _ := k8s["envoyDeployment"].(map[string]interface{})
+	spec, _ := envoyProxy.Object["spec"].(map[string]any)
+	provider, _ := spec["provider"].(map[string]any)
+	k8s, _ := provider["kubernetes"].(map[string]any)
+	deployment, _ := k8s["envoyDeployment"].(map[string]any)
 	assert.Equal(t, int64(3), deployment["replicas"])
 
 	// Verify Gateway has parametersRef pointing at the EnvoyProxy

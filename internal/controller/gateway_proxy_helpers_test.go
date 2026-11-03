@@ -59,10 +59,10 @@ func TestEnvoyGatewayStrategy_ReconcileProxyReplicas(t *testing.T) {
 	require.NoError(t, err)
 
 	// Navigate the unstructured spec to verify replicas
-	spec, _ := created.Object["spec"].(map[string]interface{})
-	provider, _ := spec["provider"].(map[string]interface{})
-	k8s, _ := provider["kubernetes"].(map[string]interface{})
-	deployment, _ := k8s["envoyDeployment"].(map[string]interface{})
+	spec, _ := created.Object["spec"].(map[string]any)
+	provider, _ := spec["provider"].(map[string]any)
+	k8s, _ := provider["kubernetes"].(map[string]any)
+	deployment, _ := k8s["envoyDeployment"].(map[string]any)
 	assert.Equal(t, int64(3), deployment["replicas"])
 }
 
@@ -77,10 +77,10 @@ func TestEnvoyGatewayStrategy_CleanupProxyReplicas(t *testing.T) {
 
 	// Create the CR first
 	existing := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "gateway.envoyproxy.io/v1alpha1",
 			"kind":       "EnvoyProxy",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-coredns-envoyproxy",
 				"namespace": "default",
 			},
@@ -143,9 +143,9 @@ func TestEnvoyGatewayStrategy_ReconcileProxyReplicas_Update(t *testing.T) {
 	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: "test-coredns-envoyproxy", Namespace: "default"}, created)
 	require.NoError(t, err)
 
-	spec, _ := created.Object["spec"].(map[string]interface{})
-	provider, _ := spec["provider"].(map[string]interface{})
-	k8s, _ := provider["kubernetes"].(map[string]interface{})
-	deployment, _ := k8s["envoyDeployment"].(map[string]interface{})
+	spec, _ := created.Object["spec"].(map[string]any)
+	provider, _ := spec["provider"].(map[string]any)
+	k8s, _ := provider["kubernetes"].(map[string]any)
+	deployment, _ := k8s["envoyDeployment"].(map[string]any)
 	assert.Equal(t, int64(5), deployment["replicas"])
 }

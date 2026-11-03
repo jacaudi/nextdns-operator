@@ -1,3 +1,4 @@
+// Package controller contains the reconcilers for the NextDNS operator CRDs.
 package controller
 
 import (
