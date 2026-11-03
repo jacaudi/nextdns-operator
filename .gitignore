@@ -1,43 +1,74 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# --- managed by github-actions-align: regenerated on apply; add your own BELOW the end marker ---
+# Base fragment; language fragments are appended. Rationale: github-actions-align/templates/README.md#ignore-files
+
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Merge/patch leftovers
+*.orig
+*.rej
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.pem
+!**/testdata/**/*.key
+
+# Local tooling
+.worktrees/
+bin/
+dist/
+coverage/
+*.out
+!.gitkeep
+
+# Go
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
+vendor/
+go.work
+go.work.sum
 
-# Code coverage profiles and other test artifacts
-*.out
+# kubebuilder / operator-sdk local state
+*.kubeconfig
+config/**/*.local.yaml
+# --- end managed ---
+# Repo-specific entries below this line are preserved across regeneration.
+
+# chart dependencies — built from Chart.lock by `task repo:chart:deps`
+/chart/charts/
+
+# coverage profiles (task coverage)
 coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
-# env file
-.env
-
-# Editor/IDE
-# .idea/
-# .vscode/
-bin/
-
-# Planning documents
-docs/plans/
-
-# Journals
-.private-journal/**
-
-# Git worktrees
-.worktrees/
+# go-task checksum cache
 .task/
+
+# local planning and journals — not published
+docs/plans/
+.private-journal/
