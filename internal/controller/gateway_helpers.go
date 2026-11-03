@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
@@ -161,7 +160,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDN
 	sectionName := gatewayv1.SectionName("dns-tcp")
 	port := gatewayv1.PortNumber(53)
 
-	route := &gatewayv1alpha2.TCPRoute{
+	route := &gatewayv1.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: coreDNS.Namespace,
@@ -169,7 +168,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDN
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, route, func() error {
-		route.Spec = gatewayv1alpha2.TCPRouteSpec{
+		route.Spec = gatewayv1.TCPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{
 					{
@@ -178,7 +177,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileTCPRoute(ctx context.Context, coreDN
 					},
 				},
 			},
-			Rules: []gatewayv1alpha2.TCPRouteRule{
+			Rules: []gatewayv1.TCPRouteRule{
 				{
 					BackendRefs: []gatewayv1.BackendRef{
 						{
@@ -215,7 +214,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 	sectionName := gatewayv1.SectionName("dns-udp")
 	port := gatewayv1.PortNumber(53)
 
-	route := &gatewayv1alpha2.UDPRoute{
+	route := &gatewayv1.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: coreDNS.Namespace,
@@ -223,7 +222,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, route, func() error {
-		route.Spec = gatewayv1alpha2.UDPRouteSpec{
+		route.Spec = gatewayv1.UDPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{
 					{
@@ -232,7 +231,7 @@ func (r *NextDNSCoreDNSReconciler) reconcileUDPRoute(ctx context.Context, coreDN
 					},
 				},
 			},
-			Rules: []gatewayv1alpha2.UDPRouteRule{
+			Rules: []gatewayv1.UDPRouteRule{
 				{
 					BackendRefs: []gatewayv1.BackendRef{
 						{
@@ -267,7 +266,7 @@ func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, 
 	logger := log.FromContext(ctx)
 
 	// Delete UDPRoute
-	udpRoute := &gatewayv1alpha2.UDPRoute{}
+	udpRoute := &gatewayv1.UDPRoute{}
 	udpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-udp", Namespace: coreDNS.Namespace}
 	if err := r.Get(ctx, udpRouteName, udpRoute); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -281,7 +280,7 @@ func (r *NextDNSCoreDNSReconciler) cleanupGatewayResources(ctx context.Context, 
 	}
 
 	// Delete TCPRoute
-	tcpRoute := &gatewayv1alpha2.TCPRoute{}
+	tcpRoute := &gatewayv1.TCPRoute{}
 	tcpRouteName := types.NamespacedName{Name: coreDNS.Name + "-dns-tcp", Namespace: coreDNS.Namespace}
 	if err := r.Get(ctx, tcpRouteName, tcpRoute); err != nil {
 		if !apierrors.IsNotFound(err) {

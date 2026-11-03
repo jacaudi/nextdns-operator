@@ -14,6 +14,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
@@ -23,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 	"github.com/jacaudi/nextdns-operator/internal/controller"
@@ -52,7 +52,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(nextdnsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 }
 
 // lookupEnvOrString looks up an environment variable or returns a default string
@@ -132,7 +131,6 @@ func main() { //nolint:gocyclo // main is a linear startup sequence (flags, conf
 	}
 
 	// Detect Gateway API CRDs
-	gatewayAPIAvailable := false
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "unable to create discovery client")
@@ -143,24 +141,12 @@ func main() { //nolint:gocyclo // main is a linear startup sequence (flags, conf
 	if err != nil {
 		setupLog.Info("Warning: could not fully discover API resources", "error", err)
 	}
-	for _, resourceList := range apiResourceList {
-		if resourceList.GroupVersion == "gateway.networking.k8s.io/v1" {
-			for _, resource := range resourceList.APIResources {
-				if resource.Kind == "GatewayClass" {
-					gatewayAPIAvailable = true
-					break
-				}
-			}
-		}
-		if gatewayAPIAvailable {
-			break
-		}
-	}
-
+	gatewayAPIAvailable, missingGatewayKinds := detectGatewayAPI(apiResourceList)
 	if gatewayAPIAvailable {
 		setupLog.Info("Gateway API CRDs detected, enabling gateway support")
 	} else {
-		setupLog.Info("Gateway API CRDs not detected, gateway support disabled")
+		setupLog.Info("Gateway API support disabled: Gateway API CRDs v1.6+ with v1 TCPRoute/UDPRoute are required",
+			"group", gatewayGroupVersion, "missingKinds", missingGatewayKinds)
 	}
 
 	if err = (&controller.NextDNSProfileReconciler{
@@ -224,6 +210,32 @@ func main() { //nolint:gocyclo // main is a linear startup sequence (flags, conf
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// gatewayGroupVersion is the Gateway API version the operator's routes use.
+// TCPRoute and UDPRoute are served at v1 from Gateway API v1.6.
+const gatewayGroupVersion = "gateway.networking.k8s.io/v1"
+
+// detectGatewayAPI reports whether gatewayGroupVersion serves every kind the
+// operator needs (GatewayClass, TCPRoute, UDPRoute). When it does not, missing
+// lists the absent kinds in a fixed order. Routes served only in v1alpha2 do
+// not count: the operator no longer registers that version.
+func detectGatewayAPI(lists []*metav1.APIResourceList) (available bool, missing []string) {
+	served := map[string]bool{}
+	for _, list := range lists {
+		if list.GroupVersion != gatewayGroupVersion {
+			continue
+		}
+		for _, resource := range list.APIResources {
+			served[resource.Kind] = true
+		}
+	}
+	for _, kind := range []string{"GatewayClass", "TCPRoute", "UDPRoute"} {
+		if !served[kind] {
+			missing = append(missing, kind)
+		}
+	}
+	return len(missing) == 0, missing
 }
 
 // setupLogger creates a slog.Logger with the specified level and format.

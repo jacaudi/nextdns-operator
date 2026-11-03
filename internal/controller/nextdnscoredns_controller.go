@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 	"github.com/jacaudi/nextdns-operator/internal/coredns"
@@ -1519,8 +1518,8 @@ func (r *NextDNSCoreDNSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.GatewayAPIAvailable {
 		builder = builder.
 			Owns(&gatewayv1.Gateway{}).
-			Owns(&gatewayv1alpha2.TCPRoute{}).
-			Owns(&gatewayv1alpha2.UDPRoute{})
+			Owns(&gatewayv1.TCPRoute{}).
+			Owns(&gatewayv1.UDPRoute{})
 	}
 
 	return builder.Complete(r)

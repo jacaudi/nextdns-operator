@@ -14,7 +14,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 )
@@ -24,7 +23,6 @@ func newGatewayTestScheme() *runtime.Scheme {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(nextdnsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	return scheme
 }
 
@@ -601,7 +599,7 @@ func TestReconcileTCPRoute(t *testing.T) {
 	require.NoError(t, err)
 
 	// Fetch the created TCPRoute
-	route := &gatewayv1alpha2.TCPRoute{}
+	route := &gatewayv1.TCPRoute{}
 	err = fakeClient.Get(ctx, types.NamespacedName{
 		Name:      "test-coredns-dns-tcp",
 		Namespace: "default",
@@ -761,7 +759,7 @@ func TestReconcileUDPRoute(t *testing.T) {
 	require.NoError(t, err)
 
 	// Fetch the created UDPRoute
-	route := &gatewayv1alpha2.UDPRoute{}
+	route := &gatewayv1.UDPRoute{}
 	err = fakeClient.Get(ctx, types.NamespacedName{
 		Name:      "test-coredns-dns-udp",
 		Namespace: "default",
@@ -814,13 +812,13 @@ func TestCleanupGatewayResources(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	tcpRoute := &gatewayv1alpha2.TCPRoute{
+	tcpRoute := &gatewayv1.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-coredns-dns-tcp",
 			Namespace: "default",
 		},
 	}
-	udpRoute := &gatewayv1alpha2.UDPRoute{
+	udpRoute := &gatewayv1.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-coredns-dns-udp",
 			Namespace: "default",
@@ -843,10 +841,10 @@ func TestCleanupGatewayResources(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns", Namespace: "default"}, &gatewayv1.Gateway{})
 	assert.True(t, apierrors.IsNotFound(err), "Gateway should be deleted")
 
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-tcp", Namespace: "default"}, &gatewayv1alpha2.TCPRoute{})
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-tcp", Namespace: "default"}, &gatewayv1.TCPRoute{})
 	assert.True(t, apierrors.IsNotFound(err), "TCPRoute should be deleted")
 
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-udp", Namespace: "default"}, &gatewayv1alpha2.UDPRoute{})
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-udp", Namespace: "default"}, &gatewayv1.UDPRoute{})
 	assert.True(t, apierrors.IsNotFound(err), "UDPRoute should be deleted")
 }
 
