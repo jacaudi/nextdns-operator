@@ -6,6 +6,9 @@
     "github>jacaudi/renovate-config:kubernetes",
     "github>jacaudi/renovate-config:automerge"
   ],
+  "semanticCommitType": "deps",
+  "semanticCommitScope": null,
+  "commitMessagePrefix": "deps:",
   "customManagers": [
     {
       "customType": "regex",
@@ -17,6 +20,33 @@
       ],
       "depNameTemplate": "sigs.k8s.io/controller-tools",
       "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "description": "Tool pins annotated `# renovate: datasource=<ds> depName=<name>` (setup action: actionlint, golangci-lint, govulncheck, hadolint; ci-chart.yml: helm). Any number of `#` lines may sit between the annotation and the `KEY: value` line. From jacaudi/stormglass#295.",
+      "managerFilePatterns": [
+        "/\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n(?:\\s*#[^\\n]*\\n)*\\s*\\w+: ['\"]?(?:[\\w-]+@)?(?<currentValue>[^\\s'\"]+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Default CoreDNS image (used when spec.deployment.image is omitted): Go const, kubebuilder default, both generated CRDs, the tests that assert it, and the reference doc move together in one PR. Looked up on Docker Hub because mirror.gcr.io's tags/list returns no tags.",
+      "managerFilePatterns": [
+        "/^internal/coredns/corefile(_test)?\\.go$/",
+        "/^internal/controller/nextdnscoredns_controller_test\\.go$/",
+        "/^api/v1alpha1/nextdnscoredns_types\\.go$/",
+        "/^(config/crd/bases|chart/crds)/nextdns\\.io_nextdnscorednses\\.yaml$/",
+        "/^docs/reference\\.md$/"
+      ],
+      "matchStrings": [
+        "mirror\\.gcr\\.io/coredns/coredns:(?<currentValue>[0-9][\\w.-]*)"
+      ],
+      "depNameTemplate": "mirror.gcr.io/coredns/coredns",
+      "packageNameTemplate": "coredns/coredns",
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
@@ -36,6 +66,14 @@
         ],
         "executionMode": "branch"
       }
+    },
+    {
+      "description": "golangci-lint and govulncheck must lead every Go toolchain bump (newer toolchains emit export data older lint builds cannot read); one PR moves all three. Mirrors jacaudi/stormglass.",
+      "matchDepNames": [
+        "golangci/golangci-lint",
+        "golang.org/x/vuln"
+      ],
+      "groupName": "go-toolchain"
     }
   ]
 }
