@@ -28,7 +28,6 @@ import (
 	nextdnsv1alpha1 "github.com/jacaudi/nextdns-operator/api/v1alpha1"
 	"github.com/jacaudi/nextdns-operator/internal/coredns"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // newCoreDNSTestScheme creates a scheme for CoreDNS controller tests
@@ -3326,7 +3325,6 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayCRDsMissing(t *testing.T) {
 func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	ctx := context.Background()
 
 	profile := &nextdnsv1alpha1.NextDNSProfile{
@@ -3393,14 +3391,14 @@ func TestNextDNSCoreDNSReconciler_Reconcile_WithGateway(t *testing.T) {
 	assert.Equal(t, gatewayv1.ObjectName("envoy-gateway"), gw.Spec.GatewayClassName)
 
 	// Verify TCPRoute was created
-	tcpRoute := &gatewayv1alpha2.TCPRoute{}
+	tcpRoute := &gatewayv1.TCPRoute{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-tcp", Namespace: "default"}, tcpRoute)
 	require.NoError(t, err)
 	require.Len(t, tcpRoute.Spec.Rules[0].BackendRefs, 1)
 	assert.Equal(t, gatewayv1.ObjectName(resourceName), tcpRoute.Spec.Rules[0].BackendRefs[0].Name)
 
 	// Verify UDPRoute was created
-	udpRoute := &gatewayv1alpha2.UDPRoute{}
+	udpRoute := &gatewayv1.UDPRoute{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-coredns-dns-udp", Namespace: "default"}, udpRoute)
 	require.NoError(t, err)
 	require.Len(t, udpRoute.Spec.Rules[0].BackendRefs, 1)
@@ -3656,7 +3654,6 @@ func TestNextDNSCoreDNSReconciler_Reconcile_ReplicasAndParametersRefConflict(t *
 func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
 	scheme := newCoreDNSTestScheme()
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	ctx := context.Background()
 
 	profile := &nextdnsv1alpha1.NextDNSProfile{
