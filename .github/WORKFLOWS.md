@@ -44,7 +44,7 @@ Renovate commits use the `deps:` prefix so dependency bumps cut a patch release.
 
 | Secret | Used by | Why |
 |---|---|---|
-| `APP_ID`, `APP_PRIVATE_KEY` | release, build, chart | A GitHub App token. `GITHUB_TOKEN` cannot trigger workflows, so without the App token the release PR never gets a `ci` run and can never merge |
+| `APP_ID`, `APP_PRIVATE_KEY` | release | A GitHub App token. `GITHUB_TOKEN` cannot trigger workflows, so without the App token the release PR never gets a `ci` run and can never merge. Not passed to build, smoke or chart: GHCR rejects App installation tokens, so registry pushes use `GITHUB_TOKEN` |
 
 ## Local
 
