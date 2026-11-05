@@ -114,7 +114,7 @@ tasks:
     desc: Generate ClusterRole and CRD manifests, and copy the CRDs into the chart
     deps: [controller-gen]
     cmds:
-      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd:omitToolVersion=true webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
       - cp config/crd/bases/*.yaml chart/crds/
 
   generate-helm-rbac:
