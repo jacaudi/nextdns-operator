@@ -1314,7 +1314,7 @@ spec:
                         type: object
                     type: object
                   image:
-                    default: mirror.gcr.io/coredns/coredns:1.13.1
+                    default: mirror.gcr.io/coredns/coredns:1.15.0
                     description: Image specifies the CoreDNS container image
                     type: string
                   mode:

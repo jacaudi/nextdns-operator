@@ -195,7 +195,7 @@ func TestGetUpstreamEndpoint_UnknownProtocol(t *testing.T) {
 }
 
 func TestDefaultCoreDNSImage(t *testing.T) {
-	assert.Equal(t, "mirror.gcr.io/coredns/coredns:1.13.1", DefaultCoreDNSImage)
+	assert.Equal(t, "mirror.gcr.io/coredns/coredns:1.15.0", DefaultCoreDNSImage)
 }
 
 func TestCorefileConfig_Defaults(t *testing.T) {
