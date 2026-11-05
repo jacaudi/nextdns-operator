@@ -11,7 +11,7 @@ import (
 )
 
 // DefaultCoreDNSImage is the default CoreDNS container image to use.
-const DefaultCoreDNSImage = "mirror.gcr.io/coredns/coredns:1.13.1"
+const DefaultCoreDNSImage = "mirror.gcr.io/coredns/coredns:1.15.0"
 
 // Protocol constants for DNS resolution methods.
 const (

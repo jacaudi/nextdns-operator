@@ -236,7 +236,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 | `corefile.upstream.forward.maxFails` | *int32 | No | `2` (CoreDNS default) | Failed health checks before marking upstream down |
 | `deployment.mode` | DeploymentMode | No | `Deployment` | `Deployment` or `DaemonSet` |
 | `deployment.replicas` | *int32 | No | `2` | Replicas (Deployment mode only, min: 1) |
-| `deployment.image` | string | No | `mirror.gcr.io/coredns/coredns:1.13.1` | CoreDNS container image |
+| `deployment.image` | string | No | `mirror.gcr.io/coredns/coredns:1.15.0` | CoreDNS container image |
 | `deployment.nodeSelector` | map[string]string | No | | Node label selector |
 | `deployment.affinity` | Affinity | No | | Pod scheduling constraints |
 | `deployment.tolerations` | Toleration[] | No | | Pod tolerations |
