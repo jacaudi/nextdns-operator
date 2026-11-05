@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.0.0](https://github.com/jacaudi/nextdns-operator/compare/v0.20.9...v1.0.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **coredns:** `spec.corefile.upstream.primary: DoH` is no longer valid for NextDNSCoreDNS. Set it to `DoT` (same encryption, port 853 instead of 443). Existing DoH objects are reported Ready=False with reason UnsupportedProtocol and their running CoreDNS is left as is until the spec is changed. Helm does not upgrade chart/crds/, so apply the updated CRDs manually with `kubectl apply -f chart/crds/`.
+* **gateway:** clusters with Gateway API CRDs older than v1.6 (routes served only at v1alpha2) now have gateway support disabled and report GatewayAPICRDsMissing on NextDNSCoreDNS resources that set spec.gateway. Upgrade the Gateway API CRDs to v1.6+ and restart the operator.
+
+### Features
+
+* **coredns:** remove DoH upstream protocol from NextDNSCoreDNS ([c60f2ec](https://github.com/jacaudi/nextdns-operator/commit/c60f2ecf58e29687bb6cf73762c6caebbd4e5152))
+* **gateway:** migrate TCPRoute/UDPRoute to Gateway API v1 ([ddfa40a](https://github.com/jacaudi/nextdns-operator/commit/ddfa40a640f83a3c44d45ede2393907e008baa6f))
+
+
+### Bug Fixes
+
+* **build:** bump Go toolchain to 1.26.10 and x/net to v0.62.0 for security fixes ([847bde0](https://github.com/jacaudi/nextdns-operator/commit/847bde022977ba855f696533ce0da9e45fc71053))
+* **chart:** seed namespace values for bjw-s common 5.3.0 ([feeda16](https://github.com/jacaudi/nextdns-operator/commit/feeda16699fb3390b1daa9c9d877da5de03b9e5a))
+* **ci:** pass the App token only to release, as towonel-operator does ([33d0e95](https://github.com/jacaudi/nextdns-operator/commit/33d0e95e36ef6049f7336578c482ffa9148cc10c))
+* **ci:** republish pushes to GHCR with GITHUB_TOKEN, not the App ([67bc607](https://github.com/jacaudi/nextdns-operator/commit/67bc607b013eab2b0c90beff0ec2ea12808ace9f))
+
+
+### Refactors
+
+* **cmd:** drop the now-unused gocyclo nolint on main ([88e9621](https://github.com/jacaudi/nextdns-operator/commit/88e96216cf7e8affeb398c95fd1701c1a1ab4b96))
+
+
+### Dependencies
+
+* Update dependency helm/helm to v4 ([593a71b](https://github.com/jacaudi/nextdns-operator/commit/593a71b01015d5b65d33d173e0768b0c2f1ec5e0))
+* Update go-toolchain to v1.27.3 ([5cbb4d7](https://github.com/jacaudi/nextdns-operator/commit/5cbb4d7d88c97347f7b91071590e9d11ecfdbbf1))
+* Update Helm release common to v5.3.0 ([87fbb64](https://github.com/jacaudi/nextdns-operator/commit/87fbb647d351befc5f56f550108cf42e6061ed0a))
+* Update kubernetes-client-libraries ([0954be3](https://github.com/jacaudi/nextdns-operator/commit/0954be3b629c6ad80b42cc2800afa9d71dfaa9ee))
+* Update mirror.gcr.io/coredns/coredns Docker tag to v1.15.0 ([ced801d](https://github.com/jacaudi/nextdns-operator/commit/ced801d239fcc5d3c153be8fbabf5b3f2c194614))
+* Update module github.com/prometheus/client_golang to v1.25.0 ([50703b4](https://github.com/jacaudi/nextdns-operator/commit/50703b4519aeac8c4c728046ede13a699484b1ab))
+* Update module sigs.k8s.io/controller-tools to v0.23.0 ([1bceaa4](https://github.com/jacaudi/nextdns-operator/commit/1bceaa4d5095bdfd80e3687a2507ab16c17c624c))
+* Update module sigs.k8s.io/gateway-api to v1.7.0 ([7b714eb](https://github.com/jacaudi/nextdns-operator/commit/7b714eb044ef82f0dae1e33919268ed4c6f27452))
+
 ## [0.20.9](https://github.com/jacaudi/nextdns-operator/compare/v0.20.8...v0.20.9) (2026-08-23)
 
 ## [0.20.8](https://github.com/jacaudi/nextdns-operator/compare/v0.20.7...v0.20.8) (2026-08-16)
