@@ -327,9 +327,9 @@ spec:
                         description: |-
                           DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
                           The name is embedded in the upstream endpoint: prepended to the DoT SNI
-                          hostname or appended to the DoH URL path.
+                          hostname.
                           Only alphanumeric characters, hyphens, and spaces are allowed.
-                          Spaces are converted to -- for DoT and URL-encoded for DoH.
+                          Spaces are converted to -- in the SNI hostname.
                           Ignored when using plain DNS protocol.
                         maxLength: 63
                         pattern: ^[-a-zA-Z0-9 ]+$
@@ -382,7 +382,6 @@ spec:
                           queries
                         enum:
                         - DoT
-                        - DoH
                         - DNS
                         type: string
                     required:

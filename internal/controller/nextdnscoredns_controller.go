@@ -121,6 +121,25 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	// Reject an upstream protocol the operator no longer supports (DoH). The CRD enum
+	// blocks it on new writes, but a stored object, or a Helm install whose crds/ were
+	// never upgraded, can still carry it. The check is an allowlist so an
+	// unknown value is rejected too. Report it and leave the data plane alone.
+	if coreDNS.Spec.Corefile != nil &&
+		coreDNS.Spec.Corefile.Upstream != nil &&
+		coreDNS.Spec.Corefile.Upstream.Primary != nextdnsv1alpha1.DNSProtocolDoT &&
+		coreDNS.Spec.Corefile.Upstream.Primary != nextdnsv1alpha1.DNSProtocolDNS {
+		protocol := coreDNS.Spec.Corefile.Upstream.Primary
+		logger.Info("Unsupported upstream protocol; leaving existing resources untouched", "protocol", protocol)
+		r.setCondition(coreDNS, ConditionTypeReady, metav1.ConditionFalse, "UnsupportedProtocol",
+			fmt.Sprintf("upstream protocol %q is not supported (use DoT or DNS): DoH was removed because CoreDNS cannot address a NextDNS profile over it; set spec.corefile.upstream.primary to DoT", protocol))
+		coreDNS.Status.Ready = false
+		if updateErr := r.Status().Update(ctx, coreDNS); updateErr != nil {
+			logger.Error(updateErr, "Failed to update status")
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// Resolve the referenced NextDNSProfile
 	profile, err := r.resolveProfile(ctx, coreDNS)
 	if err != nil {
@@ -207,9 +226,9 @@ func (r *NextDNSCoreDNSReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		coreDNS.Spec.Corefile.Upstream != nil &&
 		coreDNS.Spec.Corefile.Upstream.Primary == nextdnsv1alpha1.DNSProtocolDNS &&
 		coreDNS.Spec.Corefile.Upstream.DeviceName != "" {
-		logger.Info("WARNING: deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+		logger.Info("WARNING: deviceName is ignored with plain DNS protocol; use DoT for device identification")
 		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionTrue, "ProtocolLimitation",
-			"deviceName is ignored with plain DNS protocol; use DoT or DoH for device identification")
+			"deviceName is ignored with plain DNS protocol; use DoT for device identification")
 	} else {
 		// Clear stale warning when not applicable
 		r.setCondition(coreDNS, ConditionTypeDeviceNameIgnored, metav1.ConditionFalse, "NotApplicable",
@@ -502,7 +521,10 @@ func (r *NextDNSCoreDNSReconciler) reconcileConfigMap(ctx context.Context, coreD
 	if err != nil {
 		return fmt.Errorf("invalid Corefile configuration: %w", err)
 	}
-	corefileContent := coredns.GenerateCorefile(cfg)
+	corefileContent, err := coredns.GenerateCorefile(cfg)
+	if err != nil {
+		return fmt.Errorf("invalid Corefile configuration: %w", err)
+	}
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

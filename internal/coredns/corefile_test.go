@@ -1,8 +1,6 @@
 package coredns
 
 import (
-	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -18,7 +16,10 @@ func TestGenerateCorefile_DoTPrimary(t *testing.T) {
 		MetricsEnabled:  true,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// Should contain forward with tls:// IPs and tls_servername with profile ID
 	assert.Contains(t, corefile, "forward . tls://45.90.28.0 tls://45.90.30.0")
@@ -52,45 +53,6 @@ func TestGenerateCorefile_DoTPrimary(t *testing.T) {
 	assert.Contains(t, corefile, "errors")
 }
 
-func TestGenerateCorefile_DoHPrimary(t *testing.T) {
-	cfg := &CorefileConfig{
-		ProfileID:       "def456",
-		PrimaryProtocol: ProtocolDoH,
-		CacheTTL:        1800,
-		LoggingEnabled:  true,
-		MetricsEnabled:  true,
-	}
-
-	corefile := GenerateCorefile(cfg)
-
-	// Should contain forward with https:// URL including profile ID
-	assert.Contains(t, corefile, "forward . https://dns.nextdns.io/def456")
-
-	// Should NOT contain tls_servername (not needed for DoH)
-	assert.NotContains(t, corefile, "tls_servername")
-
-	// Should contain cache with TTL
-	assert.Contains(t, corefile, "cache 1800")
-
-	// Should contain log (logging enabled)
-	lines := strings.Split(corefile, "\n")
-	hasLogPlugin := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "log" {
-			hasLogPlugin = true
-			break
-		}
-	}
-	assert.True(t, hasLogPlugin, "log plugin should be present when logging is enabled")
-
-	// Should contain prometheus
-	assert.Contains(t, corefile, "prometheus :9153")
-
-	// Should always contain errors plugin
-	assert.Contains(t, corefile, "errors")
-}
-
 func TestGenerateCorefile_DNSPrimary(t *testing.T) {
 	cfg := &CorefileConfig{
 		ProfileID:       "ghi789",
@@ -100,7 +62,10 @@ func TestGenerateCorefile_DNSPrimary(t *testing.T) {
 		MetricsEnabled:  true,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// Should contain forward with NextDNS anycast IPs
 	assert.Contains(t, corefile, "forward . 45.90.28.0 45.90.30.0")
@@ -132,7 +97,10 @@ func TestGenerateCorefile_MetricsDisabled(t *testing.T) {
 		MetricsEnabled:  false,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// Should NOT contain prometheus plugin
 	assert.NotContains(t, corefile, "prometheus")
@@ -166,7 +134,10 @@ func TestGenerateCorefile_ZeroCacheTTL(t *testing.T) {
 		MetricsEnabled:  true,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// With zero TTL, cache should still be present but with 0
 	// or could be omitted - let's test that cache 0 is present
@@ -176,11 +147,6 @@ func TestGenerateCorefile_ZeroCacheTTL(t *testing.T) {
 func TestGetUpstreamEndpoint_DoT(t *testing.T) {
 	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "", nil)
 	assert.Equal(t, "tls://45.90.28.0, tls://45.90.30.0 (SNI: abc123.dns.nextdns.io)", endpoint)
-}
-
-func TestGetUpstreamEndpoint_DoH(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("def456", ProtocolDoH, "", nil)
-	assert.Equal(t, "https://dns.nextdns.io/def456", endpoint)
 }
 
 func TestGetUpstreamEndpoint_DNS(t *testing.T) {
@@ -205,7 +171,10 @@ func TestCorefileConfig_Defaults(t *testing.T) {
 		PrimaryProtocol: ProtocolDoT,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	assert.NotEmpty(t, corefile)
 	assert.Contains(t, corefile, "forward")
 }
@@ -226,7 +195,10 @@ func TestGenerateCorefile_WithDomainOverrides(t *testing.T) {
 		},
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.Contains(t, corefile, "corp.example.com {")
 	assert.Contains(t, corefile, "forward . 10.0.0.1 10.0.0.2")
@@ -259,7 +231,10 @@ func TestGenerateCorefile_MultipleDomainOverrides(t *testing.T) {
 		},
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.Contains(t, corefile, "internal.local {")
 	assert.Contains(t, corefile, "corp.example.com {")
@@ -284,7 +259,10 @@ func TestGenerateCorefile_NoDomainOverrides(t *testing.T) {
 		DomainOverrides: nil,
 	}
 
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.True(t, strings.HasPrefix(strings.TrimSpace(corefile), ". {"),
 		"Without overrides, corefile should start with catch-all block")
@@ -330,21 +308,11 @@ func TestGenerateCorefile_DoTWithDeviceName(t *testing.T) {
 		CacheTTL:        3600,
 		MetricsEnabled:  true,
 	}
-	corefile := GenerateCorefile(cfg)
-	assert.Contains(t, corefile, "tls_servername Home--Router-abc123.dns.nextdns.io")
-}
-
-func TestGenerateCorefile_DoHWithDeviceName(t *testing.T) {
-	cfg := &CorefileConfig{
-		ProfileID:       "abc123",
-		PrimaryProtocol: ProtocolDoH,
-		DeviceName:      "Home Router",
-		CacheTTL:        3600,
-		MetricsEnabled:  true,
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
 	}
-	corefile := GenerateCorefile(cfg)
-	expected := fmt.Sprintf("https://dns.nextdns.io/abc123/%s", url.PathEscape("Home Router"))
-	assert.Contains(t, corefile, expected)
+	assert.Contains(t, corefile, "tls_servername Home--Router-abc123.dns.nextdns.io")
 }
 
 func TestGenerateCorefile_DNSWithDeviceName(t *testing.T) {
@@ -355,7 +323,10 @@ func TestGenerateCorefile_DNSWithDeviceName(t *testing.T) {
 		CacheTTL:        3600,
 		MetricsEnabled:  true,
 	}
-	corefile := GenerateCorefile(cfg)
+	corefile, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	// Plain DNS should NOT contain device name — no mechanism for it
 	assert.NotContains(t, corefile, "Home")
 	assert.Contains(t, corefile, "45.90.28.0")
@@ -364,11 +335,6 @@ func TestGenerateCorefile_DNSWithDeviceName(t *testing.T) {
 func TestGetUpstreamEndpoint_DoTWithDeviceName(t *testing.T) {
 	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoT, "Home Router", nil)
 	assert.Contains(t, endpoint, "Home--Router-abc123.dns.nextdns.io")
-}
-
-func TestGetUpstreamEndpoint_DoHWithDeviceName(t *testing.T) {
-	endpoint := GetUpstreamEndpoint("abc123", ProtocolDoH, "Home Router", nil)
-	assert.Contains(t, endpoint, "/abc123/Home%20Router")
 }
 
 func TestGetUpstreamEndpoint_DNSWithDeviceName(t *testing.T) {
@@ -398,25 +364,6 @@ func TestBuildDoTSNIHost(t *testing.T) {
 	}
 }
 
-func TestBuildDoHPath(t *testing.T) {
-	tests := []struct {
-		name       string
-		profileID  string
-		deviceName string
-		expected   string
-	}{
-		{"no device name", "abc123", "", "abc123"},
-		{"simple name", "abc123", "router", "abc123/router"},
-		{"name with spaces", "abc123", "Home Router", "abc123/Home%20Router"},
-		{"name with hyphens", "abc123", "my-device", "abc123/my-device"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, buildDoHPath(tt.profileID, tt.deviceName))
-		})
-	}
-}
-
 func TestGenerateCorefile_DoT_ProfileSpecificIPs(t *testing.T) {
 	cfg := &CorefileConfig{
 		ProfileID:       "abc123",
@@ -425,7 +372,10 @@ func TestGenerateCorefile_DoT_ProfileSpecificIPs(t *testing.T) {
 		UpstreamIPv4:    []string{"45.90.28.198", "45.90.30.198"},
 	}
 
-	result := GenerateCorefile(cfg)
+	result, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.Contains(t, result, "tls://45.90.28.198 tls://45.90.30.198")
 	assert.NotContains(t, result, "tls://45.90.28.0")
@@ -439,7 +389,10 @@ func TestGenerateCorefile_DNS_ProfileSpecificIPs(t *testing.T) {
 		UpstreamIPv4:    []string{"45.90.28.198", "45.90.30.198"},
 	}
 
-	result := GenerateCorefile(cfg)
+	result, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.Contains(t, result, "forward . 45.90.28.198 45.90.30.198")
 	assert.NotContains(t, result, "45.90.28.0")
@@ -452,7 +405,10 @@ func TestGenerateCorefile_DoT_FallbackToAnycast(t *testing.T) {
 		CacheTTL:        3600,
 	}
 
-	result := GenerateCorefile(cfg)
+	result, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	assert.Contains(t, result, "tls://45.90.28.0 tls://45.90.30.0")
 }
@@ -475,7 +431,10 @@ func TestGenerateCorefile_WithRewriteRules(t *testing.T) {
 		},
 	}
 
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	if !strings.Contains(out, "rewrite name service.example.com ingress.cluster.local") {
 		t.Errorf("expected rewrite directive for service.example.com; got:\n%s", out)
@@ -532,7 +491,10 @@ func TestGenerateCorefile_WithForwardTuning(t *testing.T) {
 		},
 	}
 
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// Each tuning directive must appear inside the forward block
 	if !strings.Contains(out, "policy round_robin") {
@@ -561,42 +523,14 @@ func TestGenerateCorefile_WithoutForwardTuning_Unchanged(t *testing.T) {
 		CacheTTL:        3600,
 		MetricsEnabled:  true,
 	}
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	for _, forbidden := range []string{"policy ", "max_concurrent", "health_check", "expire", "max_fails"} {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("unexpected %q in default forward block:\n%s", forbidden, out)
 		}
-	}
-}
-
-func TestGenerateCorefile_WithForwardTuning_DoH(t *testing.T) {
-	maxConcurrent := int32(500)
-	cfg := &CorefileConfig{
-		ProfileID:       "abc123",
-		PrimaryProtocol: ProtocolDoH,
-		CacheTTL:        3600,
-		MetricsEnabled:  true,
-		ForwardTuning: &ForwardTuningConfig{
-			Policy:        "sequential",
-			MaxConcurrent: &maxConcurrent,
-			HealthCheck:   "10s",
-		},
-	}
-
-	out := GenerateCorefile(cfg)
-
-	if !strings.Contains(out, "policy sequential") {
-		t.Errorf("expected policy directive for DoH; got:\n%s", out)
-	}
-	if !strings.Contains(out, "max_concurrent 500") {
-		t.Errorf("expected max_concurrent directive for DoH; got:\n%s", out)
-	}
-	if !strings.Contains(out, "health_check 10s") {
-		t.Errorf("expected health_check directive for DoH; got:\n%s", out)
-	}
-	// Must still have the DoH upstream URL
-	if !strings.Contains(out, "https://dns.nextdns.io/abc123") {
-		t.Errorf("expected DoH upstream URL; got:\n%s", out)
 	}
 }
 
@@ -613,7 +547,10 @@ func TestGenerateCorefile_WithForwardTuning_DNS(t *testing.T) {
 		},
 	}
 
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	if !strings.Contains(out, "max_fails 3") {
 		t.Errorf("expected max_fails directive for DNS; got:\n%s", out)
@@ -670,7 +607,10 @@ func TestGenerateCorefile_WithHostsBlock(t *testing.T) {
 		},
 	}
 
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 
 	// Hosts block must exist and contain entries
 	if !strings.Contains(out, "hosts {") {
@@ -731,7 +671,10 @@ func TestGenerateCorefile_DefaultPlugins_Unchanged(t *testing.T) {
 		CacheTTL:        3600,
 		MetricsEnabled:  true,
 	}
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	for _, want := range []string{"health :8080", "ready :8181", "prometheus :9153", "errors"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected default %q in output:\n%s", want, out)
@@ -777,7 +720,10 @@ func TestGenerateCorefile_ConfigurablePlugins(t *testing.T) {
 			},
 		},
 	}
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	if !strings.Contains(out, "health :9090 {") {
 		t.Errorf("expected configured health port; got:\n%s", out)
 	}
@@ -805,7 +751,10 @@ func TestGenerateCorefile_DisabledPlugins(t *testing.T) {
 		Ready:           &ReadyPluginConfig{Enabled: false},
 		Errors:          &ErrorsPluginConfig{Enabled: false},
 	}
-	out := GenerateCorefile(cfg)
+	out, err := GenerateCorefile(cfg)
+	if err != nil {
+		t.Fatalf("GenerateCorefile() error = %v", err)
+	}
 	// Walk line by line so we only match standalone plugin directives,
 	// not substrings (e.g., DNS names containing "ready").
 	for line := range strings.SplitSeq(out, "\n") {
@@ -875,16 +824,6 @@ func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 			},
 		},
 		{
-			name: "DoH only",
-			cfg: &CorefileConfig{
-				ProfileID:       "test2",
-				PrimaryProtocol: ProtocolDoH,
-				CacheTTL:        1800,
-				LoggingEnabled:  false,
-				MetricsEnabled:  true,
-			},
-		},
-		{
 			name: "DNS only",
 			cfg: &CorefileConfig{
 				ProfileID:       "test3",
@@ -910,7 +849,10 @@ func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			corefile := GenerateCorefile(tt.cfg)
+			corefile, err := GenerateCorefile(tt.cfg)
+			if err != nil {
+				t.Fatalf("GenerateCorefile() error = %v", err)
+			}
 
 			assert.Contains(t, corefile, ". {", "Corefile should contain catch-all block")
 			assert.True(t, strings.HasSuffix(strings.TrimSpace(corefile), "}"), "Corefile should end with '}'")
@@ -918,6 +860,30 @@ func TestGenerateCorefile_ValidCorefileSyntax(t *testing.T) {
 			openBraces := strings.Count(corefile, "{")
 			closeBraces := strings.Count(corefile, "}")
 			assert.Equal(t, openBraces, closeBraces, "Braces should be balanced")
+		})
+	}
+}
+
+func TestGenerateCorefile_UnsupportedProtocol(t *testing.T) {
+	for _, protocol := range []string{"DoH", "", "bogus"} {
+		t.Run(protocol, func(t *testing.T) {
+			cfg := &CorefileConfig{
+				ProfileID:       "abc123",
+				PrimaryProtocol: protocol,
+				CacheTTL:        3600,
+				MetricsEnabled:  true,
+			}
+
+			got, err := GenerateCorefile(cfg)
+			if err == nil {
+				t.Fatalf("GenerateCorefile(%q) error = nil, want an unsupported protocol error; output:\n%s", protocol, got)
+			}
+			if !strings.Contains(err.Error(), "unsupported") {
+				t.Errorf("GenerateCorefile(%q) error = %v, want it to mention unsupported", protocol, err)
+			}
+			if got != "" {
+				t.Errorf("GenerateCorefile(%q) returned %q alongside an error, want empty", protocol, got)
+			}
 		})
 	}
 }

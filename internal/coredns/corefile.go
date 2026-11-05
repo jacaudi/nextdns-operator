@@ -5,7 +5,6 @@ package coredns
 import (
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -16,14 +15,12 @@ const DefaultCoreDNSImage = "mirror.gcr.io/coredns/coredns:1.15.0"
 // Protocol constants for DNS resolution methods.
 const (
 	ProtocolDoT = "DoT" // DNS-over-TLS
-	ProtocolDoH = "DoH" // DNS-over-HTTPS
 	ProtocolDNS = "DNS" // Plain DNS (UDP/TCP)
 )
 
 // NextDNS server endpoints.
 const (
 	nextDNSDoTServer  = "dns.nextdns.io"
-	nextDNSDoHServer  = "dns.nextdns.io"
 	nextDNSAnycastIP1 = "45.90.28.0"
 	nextDNSAnycastIP2 = "45.90.30.0"
 )
@@ -196,7 +193,7 @@ type CorefileConfig struct {
 	// ProfileID is the NextDNS profile ID to use for DNS resolution.
 	ProfileID string
 
-	// PrimaryProtocol specifies the primary DNS protocol (DoT, DoH, or DNS).
+	// PrimaryProtocol specifies the primary DNS protocol (DoT or DNS).
 	PrimaryProtocol string
 
 	// DeviceName is an optional device identifier for NextDNS analytics.
@@ -271,8 +268,9 @@ func ValidateDomainOverrides(overrides []DomainOverrideConfig) error {
 }
 
 // GenerateCorefile generates a CoreDNS Corefile configuration string
-// based on the provided configuration.
-func GenerateCorefile(cfg *CorefileConfig) string {
+// based on the provided configuration. It returns an error if the primary
+// protocol is not supported.
+func GenerateCorefile(cfg *CorefileConfig) (string, error) {
 	var sb strings.Builder
 
 	// Generate domain override blocks first (order matters in CoreDNS)
@@ -291,7 +289,9 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 	writeHostsBlock(&sb, cfg.Hosts)
 
 	// Generate forward plugin configuration
-	writeForwardPlugin(&sb, cfg)
+	if err := writeForwardPlugin(&sb, cfg); err != nil {
+		return "", err
+	}
 
 	// Cache plugin
 	fmt.Fprintf(&sb, "    cache %d\n", cfg.CacheTTL)
@@ -321,7 +321,7 @@ func GenerateCorefile(cfg *CorefileConfig) string {
 
 	sb.WriteString("}")
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // writeRewriteRules writes rewrite directives to the string builder.
@@ -541,14 +541,6 @@ func buildDoTSNIHost(profileID, deviceName string) string {
 	return profileID
 }
 
-// buildDoHPath returns the URL path segment for DoH, with optional device name suffix.
-func buildDoHPath(profileID, deviceName string) string {
-	if deviceName != "" {
-		return profileID + "/" + url.PathEscape(deviceName)
-	}
-	return profileID
-}
-
 // writeForwardTuning writes forward plugin tuning directives inside a forward block.
 // It is a no-op when t is nil.
 func writeForwardTuning(sb *strings.Builder, t *ForwardTuningConfig) {
@@ -573,9 +565,9 @@ func writeForwardTuning(sb *strings.Builder, t *ForwardTuningConfig) {
 }
 
 // writeForwardPlugin writes the forward plugin configuration to the string builder.
-// Note: Cross-protocol fallback (e.g., DoT→DoH) is not supported because CoreDNS's
-// forward plugin cannot mix tls:// and https:// upstreams with a single tls_servername.
-func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
+// It returns an error for an unsupported protocol rather than emit a Corefile
+// with no forward block, which CoreDNS would start and then fail every query on.
+func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) error {
 	ip1, ip2 := resolveUpstreamIPs(cfg.UpstreamIPv4)
 
 	switch cfg.PrimaryProtocol {
@@ -587,17 +579,6 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 		writeForwardTuning(sb, cfg.ForwardTuning)
 		sb.WriteString("    }\n")
 
-	case ProtocolDoH:
-		// DoH uses https:// URL directly
-		upstream := fmt.Sprintf("https://%s/%s", nextDNSDoHServer, buildDoHPath(cfg.ProfileID, cfg.DeviceName))
-		if cfg.ForwardTuning != nil {
-			fmt.Fprintf(sb, "    forward . %s {\n", upstream)
-			writeForwardTuning(sb, cfg.ForwardTuning)
-			sb.WriteString("    }\n")
-		} else {
-			fmt.Fprintf(sb, "    forward . %s\n", upstream)
-		}
-
 	case ProtocolDNS:
 		// Plain DNS uses upstream IPs
 		if cfg.ForwardTuning != nil {
@@ -607,7 +588,11 @@ func writeForwardPlugin(sb *strings.Builder, cfg *CorefileConfig) {
 		} else {
 			fmt.Fprintf(sb, "    forward . %s %s\n", ip1, ip2)
 		}
+
+	default:
+		return fmt.Errorf("unsupported upstream protocol %q (want %s or %s)", cfg.PrimaryProtocol, ProtocolDoT, ProtocolDNS)
 	}
+	return nil
 }
 
 // resolveUpstreamIPs returns two upstream IPs. Uses profile-specific IPs if
@@ -627,8 +612,6 @@ func GetUpstreamEndpoint(profileID, protocol, deviceName string, upstreamIPv4 []
 	switch protocol {
 	case ProtocolDoT:
 		return fmt.Sprintf("tls://%s, tls://%s (SNI: %s.%s)", ip1, ip2, buildDoTSNIHost(profileID, deviceName), nextDNSDoTServer)
-	case ProtocolDoH:
-		return fmt.Sprintf("https://%s/%s", nextDNSDoHServer, buildDoHPath(profileID, deviceName))
 	case ProtocolDNS:
 		return fmt.Sprintf("%s, %s", ip1, ip2)
 	default:
