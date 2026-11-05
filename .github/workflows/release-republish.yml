@@ -35,7 +35,6 @@ jobs:
     outputs:
       image: ${{ steps.out.outputs.image }}
     env:
-      APP_ID: ${{ secrets.APP_ID }}
       IMAGE: ghcr.io/${{ github.repository }}
     steps:
       - name: Resolve the tag to its commit
@@ -54,22 +53,12 @@ jobs:
           echo "short=sha-${sha:0:7}" >> "$GITHUB_OUTPUT"
           echo "${TAG} -> ${sha} (${sha:0:7})"
 
-      - name: Generate a GitHub App token
-        id: app-token
-        if: ${{ env.APP_ID != '' }}
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          # Scoped to what this job does with it (registry retag); zizmor github-app.
-          permission-packages: write
-
       - name: Log in to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
-          username: ${{ steps.app-token.outputs.token && 'x-access-token' || github.actor }}
-          password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify the source image was built from the tagged commit
         env:
@@ -120,9 +109,6 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/ci-build.yml
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     with:
       version: ${{ inputs.tag }}
       ref: ${{ inputs.tag }}
@@ -134,8 +120,5 @@ jobs:
       contents: read
       packages: read
     uses: ./.github/workflows/ci-smoke.yml
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     with:
       image: ${{ needs.retag.outputs.image || needs.rebuild.outputs.image }}
