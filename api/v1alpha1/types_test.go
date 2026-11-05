@@ -680,7 +680,7 @@ func TestUpstreamConfig_DeviceName(t *testing.T) {
 	assert.Equal(t, "Home Router", config.DeviceName)
 
 	// Zero value — no device name
-	empty := UpstreamConfig{Primary: DNSProtocolDoH}
+	empty := UpstreamConfig{Primary: DNSProtocolDNS}
 	assert.Equal(t, "", empty.DeviceName)
 }
 

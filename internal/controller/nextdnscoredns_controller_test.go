@@ -2076,7 +2076,8 @@ func TestNextDNSCoreDNSReconciler_BuildCorefileConfig_WithPluginConfig(t *testin
 	assert.Equal(t, int32(9292), cfg.MetricsPort, "MetricsPort should be copied")
 
 	// Verify the resulting config is actually used by the generator.
-	out := coredns.GenerateCorefile(cfg)
+	out, err := coredns.GenerateCorefile(cfg)
+	require.NoError(t, err)
 	assert.Contains(t, out, "health :9090 {")
 	assert.Contains(t, out, "lameduck 10s")
 	assert.Contains(t, out, "ready :9191")
@@ -3737,4 +3738,142 @@ func TestNextDNSCoreDNSReconciler_Reconcile_GatewayReplicas(t *testing.T) {
 	assert.Equal(t, gatewayv1.Group("gateway.envoyproxy.io"), gw.Spec.Infrastructure.ParametersRef.Group)
 	assert.Equal(t, gatewayv1.Kind("EnvoyProxy"), gw.Spec.Infrastructure.ParametersRef.Kind)
 	assert.Equal(t, "test-coredns-envoyproxy", gw.Spec.Infrastructure.ParametersRef.Name)
+}
+
+// A stored object can still carry a protocol the CRD no longer accepts (DoH),
+// for example on a Helm install whose crds/ were never upgraded. The
+// reconciler must report it and leave the running data plane alone.
+func TestNextDNSCoreDNSReconciler_Reconcile_UnsupportedUpstreamProtocol(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol nextdnsv1alpha1.DNSProtocol
+	}{
+		{name: "DoH", protocol: nextdnsv1alpha1.DNSProtocol("DoH")},
+		{name: "empty", protocol: nextdnsv1alpha1.DNSProtocol("")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newCoreDNSTestScheme()
+			ctx := t.Context()
+
+			profile := &nextdnsv1alpha1.NextDNSProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-profile", Namespace: "default"},
+				Status: nextdnsv1alpha1.NextDNSProfileStatus{
+					ProfileID:   "abc123",
+					Fingerprint: "fp-abc123",
+					Conditions: []metav1.Condition{
+						{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready", LastTransitionTime: metav1.Now()},
+					},
+				},
+			}
+
+			coreDNS := &nextdnsv1alpha1.NextDNSCoreDNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "home-dns",
+					Namespace:  "default",
+					Finalizers: []string{CoreDNSFinalizerName},
+				},
+				Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+					ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+					Corefile: &nextdnsv1alpha1.CorefileSpec{
+						Upstream: &nextdnsv1alpha1.UpstreamConfig{Primary: tt.protocol},
+					},
+				},
+			}
+
+			// The data plane a previous reconcile left behind.
+			const resourceName = "home-dns-abc123-coredns"
+			existingConfigMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Data:       map[string]string{CorefileKey: ". {\n    forward . 45.90.28.0\n}\n"},
+			}
+			existingDeployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec:       appsv1.DeploymentSpec{Replicas: new(int32(3))},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(profile, coreDNS, existingConfigMap, existingDeployment).
+				WithStatusSubresource(coreDNS, profile).
+				Build()
+
+			r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"}}
+
+			result, err := r.Reconcile(ctx, req)
+			require.NoError(t, err)
+			assert.Equal(t, ctrl.Result{}, result, "an invalid spec must not requeue")
+
+			updated := &nextdnsv1alpha1.NextDNSCoreDNS{}
+			require.NoError(t, fakeClient.Get(ctx, req.NamespacedName, updated))
+			ready := meta.FindStatusCondition(updated.Status.Conditions, ConditionTypeReady)
+			require.NotNil(t, ready, "Ready condition should exist")
+			assert.Equal(t, metav1.ConditionFalse, ready.Status)
+			assert.Equal(t, "UnsupportedProtocol", ready.Reason)
+			assert.Contains(t, ready.Message, "set spec.corefile.upstream.primary to DoT")
+			assert.False(t, updated.Status.Ready)
+
+			// The existing ConfigMap and Deployment are untouched.
+			gotConfigMap := &corev1.ConfigMap{}
+			require.NoError(t, fakeClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: "default"}, gotConfigMap))
+			assert.Equal(t, existingConfigMap.Data, gotConfigMap.Data)
+			assert.Empty(t, gotConfigMap.OwnerReferences)
+			gotDeployment := &appsv1.Deployment{}
+			require.NoError(t, fakeClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: "default"}, gotDeployment))
+			assert.Equal(t, int32(3), *gotDeployment.Spec.Replicas)
+			assert.Empty(t, gotDeployment.OwnerReferences)
+
+			// No other data-plane object appears.
+			svcs := &corev1.ServiceList{}
+			require.NoError(t, fakeClient.List(ctx, svcs))
+			assert.Empty(t, svcs.Items)
+		})
+	}
+}
+
+// The unsupported-protocol gate must not block finalizer handling or deletion.
+func TestNextDNSCoreDNSReconciler_Reconcile_UnsupportedUpstreamProtocol_Lifecycle(t *testing.T) {
+	scheme := newCoreDNSTestScheme()
+	ctx := t.Context()
+
+	newCoreDNS := func(finalizers ...string) *nextdnsv1alpha1.NextDNSCoreDNS {
+		return &nextdnsv1alpha1.NextDNSCoreDNS{
+			ObjectMeta: metav1.ObjectMeta{Name: "home-dns", Namespace: "default", Finalizers: finalizers},
+			Spec: nextdnsv1alpha1.NextDNSCoreDNSSpec{
+				ProfileRef: nextdnsv1alpha1.ResourceReference{Name: "my-profile"},
+				Corefile: &nextdnsv1alpha1.CorefileSpec{
+					Upstream: &nextdnsv1alpha1.UpstreamConfig{Primary: nextdnsv1alpha1.DNSProtocol("DoH")},
+				},
+			},
+		}
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "home-dns", Namespace: "default"}}
+
+	t.Run("adds the finalizer", func(t *testing.T) {
+		coreDNS := newCoreDNS()
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(coreDNS).WithStatusSubresource(coreDNS).Build()
+		r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+		_, err := r.Reconcile(ctx, req)
+		require.NoError(t, err)
+
+		got := &nextdnsv1alpha1.NextDNSCoreDNS{}
+		require.NoError(t, fakeClient.Get(ctx, req.NamespacedName, got))
+		assert.Contains(t, got.Finalizers, CoreDNSFinalizerName)
+	})
+
+	t.Run("removes the finalizer on deletion", func(t *testing.T) {
+		coreDNS := newCoreDNS(CoreDNSFinalizerName)
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(coreDNS).WithStatusSubresource(coreDNS).Build()
+		r := &NextDNSCoreDNSReconciler{Client: fakeClient, Scheme: scheme}
+
+		require.NoError(t, fakeClient.Delete(ctx, coreDNS))
+		_, err := r.Reconcile(ctx, req)
+		require.NoError(t, err)
+
+		err = fakeClient.Get(ctx, req.NamespacedName, &nextdnsv1alpha1.NextDNSCoreDNS{})
+		assert.True(t, apierrors.IsNotFound(err), "object should be gone once the finalizer is removed, got %v", err)
+	})
 }

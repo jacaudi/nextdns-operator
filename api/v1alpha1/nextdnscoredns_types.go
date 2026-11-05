@@ -7,20 +7,17 @@ import (
 )
 
 // DNSProtocol specifies the DNS protocol to use for upstream queries
-// +kubebuilder:validation:Enum=DoT;DoH;DNS
+// +kubebuilder:validation:Enum=DoT;DNS
 type DNSProtocol string
 
 const (
 	// DNSProtocolDoT uses DNS over TLS (port 853)
 	// Recommended for privacy - encrypts DNS queries
 	DNSProtocolDoT DNSProtocol = "DoT"
-	// DNSProtocolDoH uses DNS over HTTPS
-	// Recommended for privacy - encrypts DNS queries
-	DNSProtocolDoH DNSProtocol = "DoH"
 	// DNSProtocolDNS uses plain DNS (port 53)
 	// WARNING: Plain DNS traffic is unencrypted. Your NextDNS profile ID
-	// and DNS queries may be visible to network observers. Use DoT or DoH
-	// for privacy in untrusted networks.
+	// and DNS queries may be visible to network observers. Use DoT for
+	// privacy in untrusted networks.
 	DNSProtocolDNS DNSProtocol = "DNS"
 )
 
@@ -104,9 +101,9 @@ type UpstreamConfig struct {
 
 	// DeviceName identifies this CoreDNS instance in NextDNS Analytics and Logs.
 	// The name is embedded in the upstream endpoint: prepended to the DoT SNI
-	// hostname or appended to the DoH URL path.
+	// hostname.
 	// Only alphanumeric characters, hyphens, and spaces are allowed.
-	// Spaces are converted to -- for DoT and URL-encoded for DoH.
+	// Spaces are converted to -- in the SNI hostname.
 	// Ignored when using plain DNS protocol.
 	// +optional
 	// +kubebuilder:validation:MaxLength=63
