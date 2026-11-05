@@ -4,36 +4,37 @@ Thanks for helping improve the NextDNS Kubernetes Operator! This guide consolida
 
 ## Prerequisites
 
-- Go 1.26+ (see [`go.mod`](go.mod))
-- [Task](https://taskfile.dev) (`brew install go-task`) — all workflows are wired into [`Taskfile.yml`](Taskfile.yml); run `task --list` to see every target
+- Go 1.27+ (see [`go.mod`](go.mod))
+- [Task](https://taskfile.dev) (`brew install go-task`). Every workflow is wired into [`taskfile.yml`](taskfile.yml) and [`.taskfiles/`](.taskfiles/); run `task --list` to see every target
+- The linters `task ci` runs: [golangci-lint](https://golangci-lint.run) v2.15+, [actionlint](https://github.com/rhysd/actionlint), [yamllint](https://github.com/adrienverge/yamllint), [hadolint](https://github.com/hadolint/hadolint), and [Helm](https://helm.sh)
 - Docker (for container builds) and a Kubernetes cluster + `kubectl` (for install/deploy)
 
-`controller-gen` is installed automatically into `bin/` the first time a codegen task runs.
+`controller-gen` is installed automatically into `bin/` the first time a codegen task runs. It is not reinstalled when `CONTROLLER_TOOLS_VERSION` changes, so after switching to a branch that pins a different version, delete `bin/controller-gen` first.
 
 ## Development flow
 
 ```bash
-task test            # manifests + generate + fmt + vet, then go test ./... -coverprofile cover.out
+task ci              # everything CI runs: lint, tests + coverage floor, generated-artifact check. Run before pushing.
+task test            # tests only (race detector)
+task lint            # static checks only (golangci-lint, actionlint, yamllint, hadolint, helm lint + template)
+task go:fmt          # format Go sources
 task build           # build the operator binary into bin/manager
 task run             # run the controller locally against your kubeconfig
-task fmt             # go fmt ./...
-task vet             # go vet ./...
 ```
 
-`test`, `build`, and `run` all depend on `manifests`, `generate`, `fmt`, and `vet`, so generated code and manifests are kept in sync automatically when you run them.
+CI runs exactly `task ci`, so a green local run is the best predictor of a green PR.
 
 ## Regenerating CRDs and RBAC (important)
 
-Changes to the API types (`api/**`) or controller RBAC markers (`internal/**`) require regenerating derived artifacts, and **CI fails if the committed files are out of sync**. Run the relevant task and commit the results:
+Changes to the API types (`api/**`) or controller RBAC markers (`internal/**`) require regenerating derived artifacts, and **`task ci` fails if the committed files are out of sync** (`task verify-generated`). Regenerate and commit the results:
 
 ```bash
 task generate            # DeepCopy methods (api/v1alpha1/zz_generated.deepcopy.go)
-task manifests           # CRDs + ClusterRole -> config/crd/bases, config/rbac/role.yaml, chart/crds/
-task sync-helm-crds      # copy generated CRDs into the Helm chart (chart/crds/)
+task manifests           # CRDs + ClusterRole -> config/crd/bases, config/rbac/role.yaml, and copies the CRDs into chart/crds/
 task generate-helm-rbac  # regenerate the Helm RBAC template from the kubebuilder role
 ```
 
-If you touched API types or RBAC markers, run `task manifests`, `task sync-helm-crds`, and `task generate-helm-rbac`, then commit every changed file under `config/`, `chart/`, and `api/`. CI runs a diff check and will fail the PR if anything is stale.
+If you touched API types or RBAC markers, run `task generate manifests generate-helm-rbac`, then commit every changed file under `api/`, `config/`, and `chart/`.
 
 ## Deploying to a cluster
 
@@ -48,19 +49,21 @@ See [Local Development](README.md#local-development) in the README for the same 
 
 ## Commit messages
 
-Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release), so commits must follow [Conventional Commits](https://www.conventionalcommits.org/):
+Releases are automated with [release-please](https://github.com/googleapis/release-please), so commits must follow [Conventional Commits](https://www.conventionalcommits.org/) with a scope, e.g. `fix(chart): ...`:
 
 | Type | Effect |
 |------|--------|
-| `fix: ...` | Patch release |
-| `feat: ...` | Minor release |
-| `feat!: ...` / `BREAKING CHANGE:` | Major release |
-| `chore(deps): ...`, `fix(deps): ...` | Patch release |
-| `chore:`, `docs:`, `ci:`, `test:` | No release |
+| `fix(scope): ...` | Patch release |
+| `feat(scope): ...` | Minor release |
+| `feat(scope)!: ...` / `BREAKING CHANGE:` footer | Major release |
+| `deps`, `perf`, `refactor`, `revert` | Listed in the changelog |
+| `docs`, `chore`, `ci`, `build`, `test`, `style` | Hidden from the changelog |
+
+The changelog sections are defined in [`release-please-config.json`](release-please-config.json).
 
 ## Pull requests
 
 - Open PRs against `main` from a topic branch.
-- Run `task test` locally and make sure it passes.
-- If you changed API types or RBAC, regenerate and commit CRDs/RBAC (see above) so the CI sync checks pass.
+- Run `task ci` locally and make sure it passes.
+- If you changed API types or RBAC, regenerate and commit CRDs/RBAC (see above).
 - Include tests for behavior changes and update the relevant page under `docs/` when behavior or configuration changes.
