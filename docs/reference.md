@@ -227,7 +227,7 @@ Deploys a CoreDNS instance configured to forward DNS queries to a NextDNS profil
 |-------|------|----------|---------|-------------|
 | `profileRef.name` | string | Yes | | Name of the NextDNSProfile to use |
 | `profileRef.namespace` | string | No | | Namespace (defaults to same namespace) |
-| `corefile.upstream.primary` | DNSProtocol | Yes (if `upstream` set) | `DoT` | Upstream protocol: `DoT`, `DoH`, or `DNS` |
+| `corefile.upstream.primary` | DNSProtocol | Yes (if `upstream` set) | `DoT` | Upstream protocol: `DoT` or `DNS` |
 | `corefile.upstream.deviceName` | string | No | | Device name for NextDNS Analytics (max 63 chars, alphanumeric/hyphens/spaces) |
 | `corefile.upstream.forward.policy` | ForwardPolicy | No | `random` (CoreDNS default) | Failover policy: `random`, `round_robin`, or `sequential` |
 | `corefile.upstream.forward.maxConcurrent` | *int32 | No | unlimited | Cap on concurrent upstream queries (min 1) |

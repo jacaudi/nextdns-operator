@@ -4,6 +4,14 @@ Deploy a dedicated CoreDNS instance that forwards DNS queries to NextDNS using t
 
 > For the full documentation index, see the [main docs page](README.md).
 
+> **Breaking change: DoH is no longer an upstream protocol.** `corefile.upstream.primary` accepts only `DoT` or `DNS`. CoreDNS's `forward` plugin rejects an HTTPS upstream that has a path, and NextDNS attributes a profile or device over DoH only through the URL path, so CoreDNS cannot send queries to a NextDNS profile over DoH. DoT gives the same encryption and carries the profile in the TLS SNI.
+>
+> **Migrate:** set `corefile.upstream.primary: DoT`. Egress moves from port 443 to port 853, so allow outbound TCP 853 to NextDNS. The operator does not convert `DoH` to `DoT` for you.
+>
+> - An existing `DoH` object is reported `Ready=False` with reason `UnsupportedProtocol`. The operator does not touch its running ConfigMap, workload, or Service until you change the spec.
+> - **Helm users:** Helm does not upgrade `crds/`, so apply the updated CRDs yourself with `kubectl apply -f chart/crds/`.
+> - **Kubernetes older than 1.30** has no CRD validation ratcheting, so the API server rejects any update to a stored `DoH` object, including unrelated ones, until `primary` is changed to `DoT`. Fix the protocol first, in the same edit.
+
 > **Breaking change in v0.18.0:** Plugin-level fields (`upstream`, `cache`, `metrics`, `logging`, `domainOverrides`) are now grouped under `spec.corefile`. Manifests using the old top-level form will be rejected by CRD validation. See [#122](https://github.com/jacaudi/nextdns-operator/issues/122) for the migration.
 >
 > <details>
@@ -80,26 +88,23 @@ kubectl get nextdnscoredns home-dns
 
 ## Upstream Protocols
 
-The `corefile.upstream.primary` field controls how CoreDNS connects to NextDNS. Three protocols are supported:
+The `corefile.upstream.primary` field controls how CoreDNS connects to NextDNS. Two protocols are supported:
 
 | Protocol | Port | Encrypted | Recommended |
 |----------|------|-----------|-------------|
 | `DoT` | 853 | Yes (TLS) | Yes (default) |
-| `DoH` | 443 | Yes (HTTPS) | Yes |
 | `DNS` | 53 | No | No |
 
 **DNS over TLS (DoT)** is the default and recommended protocol. It encrypts DNS queries using TLS on port 853, providing privacy without the overhead of HTTPS.
 
-**DNS over HTTPS (DoH)** encrypts DNS queries inside HTTPS requests. This can be useful in environments where port 853 is blocked, since DoH uses the standard HTTPS port 443.
-
 **Plain DNS** sends queries unencrypted on port 53. This offers the lowest latency but provides no privacy.
 
-> **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Your DNS queries and the profile ID are visible to anyone observing network traffic. Use DoT or DoH for privacy in untrusted networks.
+> **Security Note:** Using plain DNS (`DNS` protocol) exposes your NextDNS profile ID in unencrypted traffic. Your DNS queries and the profile ID are visible to anyone observing network traffic. Use DoT for privacy in untrusted networks.
 
 ```yaml
 corefile:
   upstream:
-    primary: DoT  # DoT, DoH, or DNS
+    primary: DoT  # DoT or DNS
 ```
 
 ---
@@ -304,7 +309,7 @@ deployment:
 
 Identify your CoreDNS instance in NextDNS Analytics and Logs using the optional `corefile.upstream.deviceName` field. When set, the device name is embedded in the upstream DNS endpoint so NextDNS can attribute queries to a specific deployment.
 
-> **Note:** Device identification only works with DoT (via SNI) and DoH (via URL path). When using plain DNS protocol, `deviceName` is ignored and a `DeviceNameIgnored` warning condition is set on the CR.
+> **Note:** Device identification only works with DoT (via SNI). When using plain DNS protocol, `deviceName` is ignored and a `DeviceNameIgnored` warning condition is set on the CR.
 
 ```yaml
 corefile:
@@ -318,13 +323,12 @@ corefile:
 | Protocol | Behavior | Example endpoint |
 |----------|----------|-----------------|
 | DoT | Device name prepended to SNI hostname; spaces converted to `--` | `home-router-abc123.dns.nextdns.io` |
-| DoH | Device name URL-encoded and appended to path | `https://dns.nextdns.io/abc123/home-router` |
 | DNS | Ignored (plain DNS has no mechanism for device identification) | `45.90.28.0` |
 
 **Naming rules:**
 - Only alphanumeric characters, hyphens, and spaces are allowed
 - Maximum 63 characters
-- Spaces are converted to `--` for DoT (SNI hostname) and URL-encoded (`%20`) for DoH
+- Spaces are converted to `--` (SNI hostname)
 - The same device name is used for all pods in the deployment
 
 ---
