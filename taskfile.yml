@@ -10,7 +10,7 @@ includes:
 vars:
   IMG: '{{.IMG | default "nextdns-operator:latest"}}'
   LOCALBIN: '{{.ROOT_DIR}}/bin'
-  CONTROLLER_TOOLS_VERSION: v0.21.0
+  CONTROLLER_TOOLS_VERSION: v0.23.0
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
   # Packages held to the coverage floor (carried over from the old CI's
   # component-test call: threshold 70 over these three).
