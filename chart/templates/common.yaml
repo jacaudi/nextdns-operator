@@ -2,7 +2,8 @@
 This template builds the full values structure from modular helpers
 and passes it to the bjw-s common library loader
 */}}
-{{- $bjwsValues := dict "global" .Values.global -}}
+{{- /* bjw-s common >= 5.3.0 renders a Namespace from .Values.namespace; this dict bypasses the library defaults, so seed it. Helm owns the release namespace. */ -}}
+{{- $bjwsValues := dict "global" .Values.global "namespace" (dict "create" false) -}}
 
 {{/* Security/Pod Options */}}
 {{- $security := include "nextdns-operator.values.security" . | fromYaml -}}
