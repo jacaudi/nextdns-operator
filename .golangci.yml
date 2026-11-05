@@ -52,6 +52,12 @@ linters:
     gosec:
       excludes:
         - G104  # errcheck covers unhandled errors, and better
+    modernize:
+      disable:
+        # Repo deviation from the fleet baseline. Under `go 1.27` embedlit
+        # flattens ObjectMeta fields into Kubernetes object literals; keep the
+        # `ObjectMeta: metav1.ObjectMeta{...}` form kubebuilder and client-go use.
+        - embedlit
 
   exclusions:
     generated: lax
