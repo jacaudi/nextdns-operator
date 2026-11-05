@@ -62,7 +62,7 @@ func lookupEnvOrString(key, defaultVal string) string {
 	return defaultVal
 }
 
-func main() { //nolint:gocyclo // main is a linear startup sequence (flags, config, manager wiring, health checks, run)
+func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
