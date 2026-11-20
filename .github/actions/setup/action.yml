@@ -109,7 +109,7 @@ runs:
       shell: bash
       env:
         # renovate: datasource=go depName=golang.org/x/vuln
-        VERSION: v1.9.0
+        VERSION: v1.10.0
       run: go install "golang.org/x/vuln/cmd/govulncheck@${VERSION}"
 
     - name: Install hadolint
